@@ -146,7 +146,7 @@ defmodule Stem.CLI do
 
   defp expression_uses_assigns?(expr) do
     case String.split(expr) do
-      [""] ->
+      [] ->
         false
 
       [token | rest] ->
@@ -207,9 +207,7 @@ defmodule Stem.CLI do
     created
   end
 
-  defp read_template!("-") do
-    IO.read(:stdio, :all) |> IO.iodata_to_binary()
-  end
+  defp read_template!("-"), do: read_stdin()
 
   defp read_template!(path) do
     path
@@ -219,11 +217,13 @@ defmodule Stem.CLI do
 
   defp read_assigns!(nil), do: %{}
 
-  defp read_assigns!("-") do
-    :stdio
-    |> IO.read(:all)
-    |> IO.iodata_to_binary()
-    |> decode_assigns!()
+  defp read_assigns!("-"), do: read_stdin() |> decode_assigns!()
+
+  defp read_stdin do
+    case IO.read(:stdio, :eof) do
+      :eof -> ""
+      data -> IO.iodata_to_binary(data)
+    end
   end
 
   defp read_assigns!(data_source) do
@@ -257,9 +257,8 @@ defmodule Stem.CLI do
 
   defp atomize_keys(value), do: value
 
-  defp atomize_key(key) when is_atom(key), do: key
+  # JSON object keys are always strings, so only the binary case can occur.
   defp atomize_key(key) when is_binary(key), do: String.to_atom(key)
-  defp atomize_key(key), do: raise(ArgumentError, "unsupported JSON key: #{inspect(key)}")
 
   defp file_source?(source) when is_binary(source) do
     source != "-" and File.exists?(resolve_path(source))

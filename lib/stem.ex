@@ -21,125 +21,98 @@ end
 
 defmodule Stem do
   @moduledoc ~S"""
-  Stem is the structural backbone for Handlebars templates in Elixir.
+  Stem is a native Handlebars-style template compiler for Elixir.
 
-  Stem provides a robust DSL for generating dynamic content by allowing
-  developers to embed Elixir logic securely using a familiar double-curly-brace
-  syntax. By leveraging Elixir's powerful macro system, Stem translates
-  Handlebars-compliant templates into efficient, compiled Elixir code.
+  Stem compiles double-curly-brace templates straight into Elixir's abstract
+  syntax tree through its own tokenizer, parser, and compiler — there is no
+  intermediate template language. Templates become efficient compiled
+  functions, and template source is never evaluated at runtime.
 
-      iex> Stem.eval_string("foo {{bar}}", assigns: [bar: "baz"])
-      "foo baz"
+  This module provides two compile-time APIs:
 
-  This module provides three main APIs for you to use:
+    1. Define a function from a string (`function_from_string/5`) or a file
+       (`function_from_file/5`). The template is compiled into a function
+       inside the surrounding module. This is the primary API.
 
-    1. Evaluate a string (`eval_string/3`) or a file (`eval_file/3`)
-       directly. This is the simplest API to use but also the
-       slowest, since the code is evaluated at runtime and not precompiled.
+    2. Compile a string (`compile_string/2`) or a file (`compile_file/2`)
+       into an Elixir abstract syntax tree.
 
-    2. Define a function from a string (`function_from_string/5`)
-       or a file (`function_from_file/5`). This allows you to embed
-       the template as a function inside a module which will then
-       be compiled. This is the preferred API if you have access
-       to the template at compilation time.
+  For security, the runtime entry points (`eval_string/3`, `eval_file/3`,
+  `compile_string/2`, and `compile_file/2`) raise `Stem.SecurityError`: Stem
+  never compiles untrusted template source at runtime. Use the compile-time
+  macros instead.
 
-    3. Compile a string (`compile_string/2`) or a file (`compile_file/2`)
-       into Elixir syntax tree. This is the API used by both functions
-       above and is available to you if you want to provide your own
-       ways of handling the compiled template.
+  ## Pipeline
 
-  The APIs above support several options, documented below. You may
-  also pass an engine which customizes how the Stem code is compiled.
+  Compilation flows through four stages:
+
+      source -> Stem.Tokenizer -> Stem.Parser -> Stem.AST -> Stem.Compiler -> quoted Elixir
+
+  `Stem.Expression` translates the contents of each tag into Elixir as part of
+  the compiler stage.
 
   ## Options
 
-  All functions in this module, unless otherwise noted, accept Stem-related
-  options. They are:
+  All functions in this module, unless otherwise noted, accept these options:
 
-    * `:file` - the file to be used in the template. Defaults to the given
-      file the template is read from or to `"nofile"` when compiling from a string.
+    * `:file` - the file used in the template, for error reporting. Defaults to
+      the file the template is read from, or `"nofile"` when compiling from a
+      string.
 
-    * `:line` - the line to be used as the template start. Defaults to `1`.
+    * `:line` - the line used as the template start. Defaults to `1`.
 
-    * `:indentation` - (since v1.11.0) an integer added to the column after every
-      new line. Defaults to `0`.
+    * `:column` - the column used as the template start. Defaults to `1`.
 
-    * `:engine` - the Stem engine to be used for compilation. Defaults to `Stem.SmartEngine`.
+    * `:partials` - a map or keyword list of named partial templates that
+      `{{> name}}` expands inline. Defaults to `%{}`.
 
-    * `:trim` - if `true`, trims whitespace left and right of quotation as
-      long as at least one newline is present. All subsequent newlines and
-      spaces are removed but one newline is retained. Defaults to `false`.
-
-    * `:parser_options` - (since: 1.13.0) allow customizing the parsed code
-      that is generated. See `Code.string_to_quoted/2` for available options.
-      Note that the options `:file`, `:line` and `:column` are ignored if
-      passed in. Defaults to `Code.get_compiler_option(:parser_options)`
-      (which defaults to `[]` if not set).
-
-    * `:warn_on_missing_assigns` - when `true`, missing assigns print a
-      warning instead of returning `nil` silently. Defaults to `false`.
+    * `:warn_on_missing_assigns` - when `true`, missing assigns print a warning
+      instead of returning `nil` silently. Defaults to `false`.
 
   ## Syntax
 
-  Stem supports multiple tags, declared below:
+  Stem supports the following tags:
 
-      {{expression}}: executes Elixir logic and prints result
-      {{{{quotation}}}}: returns the contents inside the tag as is
-      {{! comments }}: they are discarded from source
+    * `{{expression}}` - evaluates the expression and prints the
+      HTML-escaped result.
+    * `{{{expression}}}` - evaluates the expression and prints the raw,
+      unescaped result.
+    * `{{! comment }}` and `{{!-- comment --}}` - discarded from the output.
+    * `{{{{ literal }}}}` - emits the literal contents verbatim.
+    * `{{> partial}}` - expands a named partial.
+    * `{{#if}}`, `{{#unless}}`, `{{#each}}`, `{{#with}}` with matching
+      `{{/...}}` closing tags and an optional `{{else}}`.
 
-  Block conditionals follow Elixir truthiness. Only `false` and `nil` are
-  treated as falsey; values such as `0`, "", and [] are truthy. For compound
-  checks that should treat `0` as false, use `&&`, `||`, and parentheses in
-  expressions such as `{{#if (render && render != 0) || fallback}}`.
+  Bare identifiers resolve to assigns: `{{name}}` reads the `:name` assign.
+  Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the
+  zero-based index, and `{{@key}}` the key when iterating a map. `{{../name}}`
+  reaches the parent (top-level assign) scope.
 
-  ## Engine
+      iex> defmodule Greeting do
+      ...>   require Stem
+      ...>   Stem.function_from_string(:def, :render, "Hello {{name}}", [:assigns])
+      ...> end
+      iex> Greeting.render(name: "Nina")
+      "Hello Nina"
 
-  Stem has the concept of engines which allows you to modify or
-  transform the code extracted from the given string or file.
+  Block conditionals follow Elixir truthiness: only `false` and `nil` are
+  falsey, while `0`, `""`, and `[]` are truthy. For checks that should treat
+  `0` as false, use `&&`, `||`, and parentheses, as in
+  `{{#if (render && render != 0) || fallback}}`.
 
-  By default, `Stem` uses the `Stem.SmartEngine` that provides some
-  conveniences on top of the simple `Stem.Engine`.
-
-  ### `Stem.SmartEngine`
-
-  The smart engine uses Stem default rules and adds the `@` construct
-  for reading template assigns:
-
-      iex> Stem.eval_string("{{foo}}", assigns: [foo: 1])
-      "1"
-
-  In other words, `{{@foo}}` translates to:
-
-      {{ {:ok, v} = Access.fetch(assigns, :foo); v }}
-
-  The `assigns` extension is useful when the number of variables
-  required by the template is not specified at compilation time.
-
-  Missing assigns return `nil` by default. Pass `warn_on_missing_assigns: true`
-  to print a warning for missing values.
+  Missing assigns render as an empty string. Pass `warn_on_missing_assigns:
+  true` to print a warning for missing values.
   """
 
   @type line :: non_neg_integer
   @type column :: non_neg_integer
-  @type marker :: [?=] | [?/] | [?|] | []
-  @type metadata :: %{column: column, line: line}
-  @type token ::
-          {:comment, charlist, metadata}
-          | {:text, charlist, metadata}
-          | {:expr | :start_expr | :middle_expr | :end_expr, marker, charlist, metadata}
-          | {:eof, metadata}
 
-  @type tokenize_opt ::
+  @type compile_opt ::
           {:file, binary()}
           | {:line, line}
           | {:column, column}
-          | {:indentation, non_neg_integer}
-          | {:trim, boolean()}
-
-  @type compile_opt ::
-          tokenize_opt
-          | {:engine, module()}
-          | {:parser_options, Code.parser_opts()}
+          | {:partials, map() | keyword()}
+          | {:warn_on_missing_assigns, boolean()}
           | {atom(), term()}
 
   @doc """
@@ -175,6 +148,9 @@ defmodule Stem do
 
       noops =
         if :assigns in original_args, do: [quote(do: _ = var!(assigns)) | noops], else: noops
+
+      noops =
+        if :helpers in original_args, do: [quote(do: _ = var!(helpers)) | noops], else: noops
 
       case kind do
         :def ->
@@ -236,6 +212,9 @@ defmodule Stem do
       noops =
         if :assigns in original_args, do: [quote(do: _ = var!(assigns)) | noops], else: noops
 
+      noops =
+        if :helpers in original_args, do: [quote(do: _ = var!(helpers)) | noops], else: noops
+
       @external_resource file
       @file file
       case kind do
@@ -257,27 +236,10 @@ defmodule Stem do
   end
 
   @doc """
-  Gets a string `source` and generates a quoted expression
-  that can be evaluated by Elixir or compiled to a function.
+  Disabled: raises `Stem.SecurityError`.
 
-  This is useful if you want to compile a Stem template into code and inject
-  that code somewhere or evaluate it at runtime.
-
-  The generated quoted code will use variables defined in the template that
-  will be taken from the context where the code is evaluated. If you
-  have a template such as `{{a}}`, then the returned quoted code
-  will use the `a` and `b` variables in the context where it's evaluated. See
-  examples below.
-
-  The supported `options` are described [in the module docs](#module-options).
-
-  ## Examples
-
-      iex> quoted = Stem.compile_string("{{a}}")
-      iex> {result, _bindings} = Code.eval_quoted(quoted, assigns: [a: 1])
-      iex> result
-      "1"
-
+  Stem does not compile template source at runtime. Use the compile-time
+  macros `function_from_string/5` and `function_from_file/5` instead.
   """
   @spec compile_string(String.t(), [compile_opt]) :: Macro.t()
   def compile_string(source, options \\ []) when is_binary(source) and is_list(options) do
@@ -286,31 +248,10 @@ defmodule Stem do
   end
 
   @doc """
-  Gets a `filename` and generates a quoted expression
-  that can be evaluated by Elixir or compiled to a function.
+  Disabled: raises `Stem.SecurityError`.
 
-  This is useful if you want to compile a Stem template into code and inject
-  that code somewhere or evaluate it at runtime.
-
-  The generated quoted code will use variables defined in the template that
-  will be taken from the context where the code is evaluated. If you
-  have a template such as `{{a}}`, then the returned quoted code
-  will use the `a` and `b` variables in the context where it's evaluated. See
-  examples below.
-
-  The supported `options` are described [in the module docs](#module-options).
-
-  ## Examples
-
-      # sample.stem
-      {{a}}
-
-      # In code:
-      quoted = Stem.compile_file("sample.stem")
-      {result, _bindings} = Code.eval_quoted(quoted, assigns: [a: 1])
-      result
-      #=> "1"
-
+  Stem does not compile template source at runtime. Use the compile-time
+  macros `function_from_string/5` and `function_from_file/5` instead.
   """
   @spec compile_file(Path.t(), [compile_opt]) :: Macro.t()
   def compile_file(filename, options \\ []) when is_list(options) do
@@ -319,15 +260,10 @@ defmodule Stem do
   end
 
   @doc """
-  Gets a string `source` and evaluate the values using the `bindings`.
+  Disabled: raises `Stem.SecurityError`.
 
-  The supported `options` are described [in the module docs](#module-options).
-
-  ## Examples
-
-      iex> Stem.eval_string("foo {{bar}}", assigns: [bar: "baz"])
-      "foo baz"
-
+  Stem does not evaluate template source at runtime. Use the compile-time
+  macros `function_from_string/5` and `function_from_file/5` instead.
   """
   @spec eval_string(String.t(), keyword, [compile_opt]) :: term()
   def eval_string(source, bindings \\ [], options \\ [])
@@ -337,62 +273,16 @@ defmodule Stem do
   end
 
   @doc """
-  Gets a `filename` and evaluate the values using the `bindings`.
+  Disabled: raises `Stem.SecurityError`.
 
-  The supported `options` are described [in the module docs](#module-options).
-
-  ## Examples
-
-      # sample.stem
-      foo {{bar}}
-
-      # IEx
-      Stem.eval_file("sample.stem", assigns: [bar: "baz"])
-      #=> "foo baz"
-
+  Stem does not evaluate template source at runtime. Use the compile-time
+  macros `function_from_string/5` and `function_from_file/5` instead.
   """
   @spec eval_file(Path.t(), keyword, [compile_opt]) :: String.t()
   def eval_file(filename, bindings \\ [], options \\ [])
       when is_list(bindings) and is_list(options) do
     _ = {filename, bindings, options}
     raise Stem.SecurityError
-  end
-
-  @doc """
-  Tokenize the given contents according to the given options.
-
-  ## Options
-
-    * `:line` - An integer to start as line. Default is 1.
-    * `:column` - An integer to start as column. Default is 1.
-    * `:indentation` - An integer that indicates the indentation. Default is 0.
-    * `:trim` - Tells the tokenizer to either trim the content or not. Default is false.
-    * `:file` - Can be either a file or a string "nofile".
-
-  ## Examples
-
-      iex> Stem.tokenize(~c"foo", line: 1, column: 1)
-      {:ok, [{:text, ~c"foo", %{column: 1, line: 1}}, {:eof, %{column: 4, line: 1}}]}
-
-  ## Result
-
-  It returns `{:ok, [token]}` where a token is one of:
-
-    * `{:text, content, %{column: column, line: line}}`
-    * `{:expr, marker, content, %{column: column, line: line}}`
-    * `{:start_expr, marker, content, %{column: column, line: line}}`
-    * `{:middle_expr, marker, content, %{column: column, line: line}}`
-    * `{:end_expr, marker, content, %{column: column, line: line}}`
-    * `{:eof, %{column: column, line: line}}`
-
-  Or `{:error, message, %{column: column, line: line}}` in case of errors.
-  Note new tokens may be added in the future.
-  """
-  @doc since: "1.14.0"
-  @spec tokenize([char()] | String.t(), [tokenize_opt]) ::
-          {:ok, [token()]} | {:error, String.t(), metadata()}
-  def tokenize(contents, opts \\ []) do
-    Stem.Compiler.tokenize(contents, opts)
   end
 
   ### Helpers
@@ -421,20 +311,17 @@ defmodule Stem do
   defp compile_string_internal(source, options) do
     file = options[:file] || "nofile"
 
-    with {:ok, preprocessed} <- Stem.Preprocessor.preprocess(source, options) do
-      tokenize_opts = Keyword.take(options, [:file, :line, :column, :indentation, :trim])
+    case Stem.Parser.parse(source, options) do
+      {:ok, ast} ->
+        Stem.Compiler.compile(ast, options)
 
-      case tokenize(preprocessed, tokenize_opts) do
-        {:ok, tokens} ->
-          validate_unsupported_parent_traversal!(tokens, file)
-          Stem.Compiler.compile(tokens, preprocessed, options)
-
-        {:error, message, %{column: column, line: line}} ->
-          raise Stem.SyntaxError, file: file, line: line, column: column, message: message
-      end
-    else
-      {:error, message, %{column: column, line: line}} ->
-        raise Stem.SyntaxError, file: file, line: line, column: column, message: message
+      {:error, message, %{line: line, column: column}} ->
+        raise Stem.SyntaxError,
+          file: file,
+          line: line,
+          column: column,
+          message: message,
+          snippet: code_snippet(source, line, column)
     end
   end
 
@@ -443,19 +330,25 @@ defmodule Stem do
     compile_string_internal(File.read!(filename), options)
   end
 
-  defp validate_unsupported_parent_traversal!(tokens, file) do
-    Enum.each(tokens, fn
-      {token_kind, _marker, expr, %{line: line}}
-      when token_kind in [:expr, :start_expr, :middle_expr, :end_expr] ->
-        if String.contains?(List.to_string(expr), "../") do
-          raise CompileError,
-            file: file,
-            line: line,
-            description: "unsupported parent path traversal (`../`) in Stem expression"
-        end
+  defp code_snippet(source, line, column) do
+    line_start = max(line - 2, 1)
+    digits = line |> Integer.to_string() |> byte_size()
+    padding = String.duplicate(" ", digits)
 
-      _ ->
-        :ok
+    source
+    |> String.split(["\r\n", "\n"])
+    |> Enum.slice((line_start - 1)..(line - 1))
+    |> Enum.map_reduce(line_start, fn
+      text, number when number == line ->
+        arrow = String.duplicate(" ", max(column - 1, 0)) <> "^"
+        {"#{number} | #{text}\n #{padding}| #{arrow}", number + 1}
+
+      text, number ->
+        {"#{String.pad_leading("#{number}", digits)} | #{text}", number + 1}
     end)
+    |> case do
+      {[], _} -> ""
+      {lines, _} -> Enum.join(["\n #{padding}|" | lines], "\n")
+    end
   end
 end

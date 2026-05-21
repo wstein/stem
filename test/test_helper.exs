@@ -5,9 +5,13 @@
 {line_exclude, line_include} =
   if line = System.get_env("LINE"), do: {[:test], [line: line]}, else: {[], []}
 
-if Code.ensure_loaded?(:cover) do
-  Code.require_file("../../elixir/scripts/cover_record.exs", __DIR__)
-  # Keep the monorepo coverage key stable even after Stem rebranding.
+# The Elixir monorepo records coverage through a shared script. When Stem is
+# checked out standalone that script is absent, so guard on its presence to keep
+# `mix test --cover` working in both layouts.
+cover_record = Path.expand("../../elixir/scripts/cover_record.exs", __DIR__)
+
+if Code.ensure_loaded?(:cover) and File.exists?(cover_record) do
+  Code.require_file(cover_record)
   CoverageRecorder.maybe_record("stem")
 end
 
@@ -88,29 +92,33 @@ defmodule Stem.TestTemplate do
   defp build_string_module(template, args, options) do
     module = Module.concat(@namespace, "S" <> digest({template, args, options}))
     compiled = Stem.__compile_string__(template, options)
-    params = Enum.map(args, &Macro.var(&1, nil))
 
-    quoted =
-      quote do
-        @compile {:nowarn_unused_vars, true}
-        def render(unquote_splicing(params)), do: unquote(compiled)
-      end
-
-    create_or_get(module, quoted, options[:file] || "nofile", options[:line] || 1)
+    create_or_get(
+      module,
+      render_quoted(args, compiled),
+      options[:file] || "nofile",
+      options[:line] || 1
+    )
   end
 
   defp build_file_module(filename, args, options) do
     module = Module.concat(@namespace, "F" <> digest({filename, args, options}))
     compiled = Stem.__compile_file__(filename, options)
+    create_or_get(module, render_quoted(args, compiled), filename, 1)
+  end
+
+  # The helper-usage heuristic can add a `:helpers` arg the compiled body never
+  # references, so mark every parameter used to keep compilation warning-free.
+  defp render_quoted(args, compiled) do
     params = Enum.map(args, &Macro.var(&1, nil))
+    noops = Enum.map(params, fn param -> quote(do: _ = unquote(param)) end)
 
-    quoted =
-      quote do
-        @compile {:nowarn_unused_vars, true}
-        def render(unquote_splicing(params)), do: unquote(compiled)
+    quote do
+      def render(unquote_splicing(params)) do
+        unquote_splicing(noops)
+        unquote(compiled)
       end
-
-    create_or_get(module, quoted, filename, 1)
+    end
   end
 
   defp create_or_get(module, quoted, file, line) do

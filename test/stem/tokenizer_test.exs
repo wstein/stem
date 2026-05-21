@@ -83,6 +83,19 @@ defmodule Stem.TokenizerTest do
            ] = tokens("a\n{{b}}")
   end
 
+  test "block open with no arguments" do
+    assert [{:block_open, :if, "", _}, {:block_close, :if, _}, {:eof, _}] =
+             tokens("{{#if}}{{/if}}")
+  end
+
+  test "tracks lines across CRLF newlines" do
+    assert [
+             {:text, "a\r\n", %{line: 1, column: 1}},
+             {:expr, "b", %{line: 2, column: 1}},
+             {:eof, _}
+           ] = tokens("a\r\n{{b}}")
+  end
+
   test "empty tag is skipped and surrounding text merges" do
     assert tokens("a{{}}b") == [
              {:text, "ab", %{line: 1, column: 1}},

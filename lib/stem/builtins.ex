@@ -16,7 +16,7 @@ defmodule Stem.Builtins do
 
   def each_entries(value), do: List.wrap(value) |> Enum.map(&{&1, nil})
 
-  @spec each(list(), ((term(), non_neg_integer()) -> term()), (() -> term()) | nil) :: term()
+  @spec each(list(), (term(), non_neg_integer() -> term()), (-> term()) | nil) :: term()
   def each(entries, do_fun, else_fun \\ nil)
       when is_list(entries) and is_function(do_fun, 2) do
     case entries do
@@ -34,9 +34,4 @@ defmodule Stem.Builtins do
         end)
     end
   end
-
-  @spec to_enumerable(term()) :: list()
-  def to_enumerable(nil), do: []
-  def to_enumerable(value) when is_list(value), do: value
-  def to_enumerable(value), do: List.wrap(value)
 end

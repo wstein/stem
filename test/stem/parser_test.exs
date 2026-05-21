@@ -109,5 +109,29 @@ defmodule Stem.ParserTest do
     test "tokenizer errors propagate" do
       assert {:error, "expected closing '}}' for Stem expression", _} = Parser.parse("{{oops")
     end
+
+    test "errors inside a block body propagate" do
+      assert {:error, "unknown partial 'missing'", _} =
+               Parser.parse("{{#if a}}{{> missing}}{{/if}}")
+    end
+
+    test "mismatched closing tag after else" do
+      assert {:error, "unexpected closing tag '{{/each}}'; expected '{{/if}}'", _} =
+               Parser.parse("{{#if a}}x{{else}}y{{/each}}")
+    end
+
+    test "unclosed block after else" do
+      assert {:error, "expected a closing '{{/if}}' for block expression in Stem", _} =
+               Parser.parse("{{#if a}}x{{else}}y")
+    end
+
+    test "errors inside an else body propagate" do
+      assert {:error, "unknown partial 'missing'", _} =
+               Parser.parse("{{#if a}}x{{else}}{{> missing}}{{/if}}")
+    end
+  end
+
+  test "accepts partials given as a keyword list" do
+    assert ast("{{> g}}", partials: [g: "hi"]) == [{:text, "hi"}]
   end
 end

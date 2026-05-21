@@ -1,17 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: 2021 The Elixir Team
-# SPDX-FileCopyrightText: 2012 Plataformatec
 
 Code.require_file("test_helper.exs", __DIR__)
 
 require Stem
 
 defmodule StemTest.Compiled do
-  def before_compile do
-    {__ENV__.line, hd(tl(get_stacktrace()))}
-  end
+  require Stem
 
-  Stem.function_from_string(:def, :string_sample, "<%= a + b %>", [:a, :b])
+  def before_compile, do: {__ENV__.line, hd(tl(get_stacktrace()))}
+
+  Stem.function_from_string(:def, :string_sample, "{{a}}", [:assigns])
 
   filename = Path.join(__DIR__, "fixtures/stem_template_with_bindings.stem")
   Stem.function_from_file(:defp, :private_file_sample, filename, [:assigns])
@@ -21,14 +19,10 @@ defmodule StemTest.Compiled do
 
   def file_sample(arg), do: private_file_sample(arg)
 
-  def after_compile do
-    {__ENV__.line, hd(tl(get_stacktrace()))}
-  end
+  def after_compile, do: {__ENV__.line, hd(tl(get_stacktrace()))}
 
   @file "unknown"
-  def unknown do
-    {__ENV__.line, hd(tl(get_stacktrace()))}
-  end
+  def unknown, do: {__ENV__.line, hd(tl(get_stacktrace()))}
 
   defp get_stacktrace do
     try do
@@ -39,1003 +33,269 @@ defmodule StemTest.Compiled do
   end
 end
 
-defmodule Clause do
-  defmacro defclause(expr, block) do
-    quote do
-      def unquote(expr), unquote(block)
-    end
-  end
-end
-
 defmodule StemTest do
   use ExUnit.Case, async: true
 
-  doctest Stem.Engine
+  import ExUnit.CaptureIO
 
-  describe "evaluates" do
-    test "simple string" do
-      assert_eval("foo bar", "foo bar")
+  doctest Stem
+
+  setup do
+    Stem.Helpers.clear()
+    :ok
+  end
+
+  defp eval(template, bindings \\ [], opts \\ []) do
+    Stem.TestTemplate.eval_string(template, bindings, Keyword.put_new(opts, :file, __ENV__.file))
+  end
+
+  describe "text and expressions" do
+    test "plain text passes through" do
+      assert eval("foo bar") == "foo bar"
     end
 
-    test "Unicode" do
-      template = """
-        • <%= "•" %> •
-        <%= "Jößé Vâlìm" %> Jößé Vâlìm
-      """
-
-      assert_eval("  • • •\n  Jößé Vâlìm Jößé Vâlìm\n", template)
+    test "expressions HTML-escape by default" do
+      assert eval("{{x}}", assigns: [x: ~s(<b>&"')]) == "&lt;b&gt;&amp;&quot;&#39;"
     end
 
-    test "no spaces" do
-      string = """
-      <%=cond do%>
-      <%false ->%>
-        this
-      <%true ->%>
-        that
-      <%end%>
-      """
-
-      expected = "\n  that\n\n"
-      assert_eval(expected, string, [])
+    test "triple braces emit raw output" do
+      assert eval("{{{x}}}", assigns: [x: "<b>World</b>"]) == "<b>World</b>"
     end
 
-    test "trim mode" do
-      string = "<%= 123 %> \n  \n  <%= 789 %>"
-      expected = "123\n789"
-      assert_eval(expected, string, [], trim: true)
-
-      string = "<%= 123 %> \n456\n  <%= 789 %>"
-      expected = "123\n456\n789"
-      assert_eval(expected, string, [], trim: true)
-
-      string = "<%= 123 %> \n\n456\n\n  <%= 789 %>"
-      expected = "123\n456\n789"
-      assert_eval(expected, string, [], trim: true)
-
-      string = "<%= 123 %> \n  \n456\n  \n  <%= 789 %>"
-      expected = "123\n456\n789"
-      assert_eval(expected, string, [], trim: true)
-
-      string = "\n  <%= 123 %> \n  <%= 456 %>  \n  <%= 789 %>  \n"
-      expected = "123\n456\n789"
-      assert_eval(expected, string, [], trim: true)
-
-      string = "\r\n  <%= 123 %> \r\n  <%= 456 %>  \r\n  <%= 789 %>  \r\n"
-      expected = "123\n456\n789"
-      assert_eval(expected, string, [], trim: true)
+    test "missing assigns render as empty string" do
+      assert eval("x{{missing}}y", assigns: []) == "xy"
     end
 
-    test "trim mode with middle expression" do
-      string = """
-      <%= cond do %>
-      <% false -> %>
-        this
-      <% true -> %>
-        that
-      <% end %>
-      """
-
-      expected = "\n  that\n"
-      assert_eval(expected, string, [], trim: true)
+    test "short and block comments are discarded" do
+      assert eval("a{{! note }}b{{!-- block --}}c") == "abc"
     end
 
-    test "trim mode with multiple lines" do
-      string = """
-      <%= "First line" %>
-      <%= "Second line" %>
-      <%= "Third line" %>
-      <%= "Fourth line" %>
-      """
-
-      expected = "First line\nSecond line\nThird line\nFourth line"
-      assert_eval(expected, string, [], trim: true)
+    test "raw quotation emits its contents literally" do
+      assert eval("{{{{ {{name}} }}}}") == " {{name}} "
     end
 
-    test "trim mode with no spaces" do
-      string = """
-      <%=if true do%>
-        this
-      <%else%>
-        that
-      <%end%>
-      """
-
-      expected = "\n  this\n"
-      assert_eval(expected, string, [], trim: true)
-
-      string = """
-      <%=cond do%>
-      <%false ->%>
-        this
-      <%true ->%>
-        that
-      <%end%>
-      """
-
-      expected = "\n  that\n"
-      assert_eval(expected, string, [], trim: true)
+    test "compound Elixir expressions resolve assigns" do
+      assert eval("{{a + b}}", assigns: [a: 1, b: 2]) == "3"
     end
 
-    test "embedded code" do
-      assert_eval("foo bar", "foo <%= :bar %>")
+    test "dotted paths read nested values" do
+      assert eval("{{user.name}}", assigns: [user: %{name: "Nina"}]) == "Nina"
     end
 
-    test "embedded code with binding" do
-      assert Stem.TestTemplate.eval_string("foo <%= bar %>", bar: 1) == "foo 1"
-    end
-
-    test "handlebars expression with binding" do
-      assert Stem.TestTemplate.eval_string("foo {{bar}}", assigns: [bar: 1]) == "foo 1"
-    end
-
-    test "embedded code with do end when true" do
-      assert_eval("foo bar", "foo <%= if true do %>bar<% end %>")
-    end
-
-    test "embedded code with do end when false" do
-      assert_eval("foo ", "foo <%= if false do %>bar<% end %>")
-    end
-
-    test "embedded code with do preceded by bracket" do
-      assert_eval("foo bar", "foo <%= if {true}do %>bar<% end %>")
-      assert_eval("foo bar", "foo <%= if (true)do %>bar<% end %>")
-      assert_eval("foo bar", "foo <%= if [true]do %>bar<% end %>")
-    end
-
-    test "embedded code with do end and expression" do
-      assert_eval("foo bar", "foo <%= if true do %><%= :bar %><% end %>")
-    end
-
-    test "embedded code with do end and multiple expressions" do
-      assert_eval(
-        "foo bar baz",
-        "foo <%= if true do %>bar <% Process.put(:stem_text, 1) %><%= :baz %><% end %>"
-      )
-
-      assert Process.get(:stem_text) == 1
-    end
-
-    test "embedded code with middle expression" do
-      assert_eval("foo bar", "foo <%= if true do %>bar<% else %>baz<% end %>")
-    end
-
-    test "embedded code with evaluated middle expression" do
-      assert_eval("foo baz", "foo <%= if false do %>bar<% else %>baz<% end %>")
-    end
-
-    test "embedded code with multi-line comments in do end" do
-      assert_eval("foo bar", "foo <%= case true do %><%!-- comment --%><% true -> %>bar<% end %>")
-
-      assert_eval(
-        "foo\n\nbar\n",
-        "foo\n<%= case true do %>\n<%!-- comment --%>\n<% true -> %>\nbar\n<% end %>"
-      )
-    end
-
-    test "embedded code with nested do end" do
-      assert_eval("foo bar", "foo <%= if true do %><%= if true do %>bar<% end %><% end %>")
-    end
-
-    test "embedded code with nested do end with middle expression" do
-      assert_eval(
-        "foo baz",
-        "foo <%= if true do %><%= if false do %>bar<% else %>baz<% end %><% end %>"
-      )
-    end
-
-    test "embedded code with end followed by bracket" do
-      assert_eval(
-        " 101  102  103 ",
-        "<%= Enum.map([1, 2, 3], fn x -> %> <%= 100 + x %> <% end) %>"
-      )
-
-      assert_eval(
-        " 101  102  103 ",
-        "<%= Enum.map([1, 2, 3], fn x ->\n%> <%= 100 + x %> <% end) %>"
-      )
-
-      assert_eval(
-        " 101  102  103 ",
-        "<%= apply Enum, :map, [[1, 2, 3], fn x -> %> <%= 100 + x %> <% end] %>"
-      )
-
-      assert_eval(
-        " 101  102  103 ",
-        "<%= #{__MODULE__}.tuple_map {[1, 2, 3], fn x -> %> <%= 100 + x %> <% end} %>"
-      )
-
-      assert_eval(
-        " 101  102  103 ",
-        "<%= apply(Enum, :map, [[1, 2, 3], fn x -> %> <%= 100 + x %> <% end]) %>"
-      )
-
-      assert_eval(
-        " 101  102  103 ",
-        "<%= Enum.map([1, 2, 3], (fn x -> %> <%= 100 + x %> <% end) ) %>"
-      )
-    end
-
-    test "embedded code with variable definition" do
-      assert_eval("foo 1", "foo <% bar = 1 %><%= bar %>")
-    end
-
-    test "embedded code with require" do
-      assert_eval("foo 1,2,3", "foo <% alias Enum, as: E %><%= E.join [1, 2, 3], \",\" %>")
-    end
-
-    test "with end of token" do
-      assert_eval("foo bar %>", "foo bar %>")
+    test "booleans and nil pass through" do
+      assert eval("{{true}} {{nil}}") == "true "
     end
   end
 
-  describe "raises syntax errors" do
-    test "with relative file information" do
-      message = """
-      foobar.stem:1:5: expected closing '%>' for Stem expression
-        |
-      1 | foo <%= bar
-        |     ^\
-      """
-
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__("foo <%= bar", file: Path.join(File.cwd!(), "foobar.stem"))
-      end
+  describe "blocks" do
+    test "if/else" do
+      assert eval("{{#if ok}}yes{{else}}no{{/if}}", assigns: [ok: true]) == "yes"
+      assert eval("{{#if ok}}yes{{else}}no{{/if}}", assigns: [ok: false]) == "no"
     end
 
-    test "when <%!-- is not closed" do
-      message = """
-      my_file.stem:1:5: expected closing '--%>' for Stem expression
-        |
-      1 | foo <%!-- bar
-        |     ^\
-      """
-
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__("foo <%!-- bar", file: "my_file.stem")
-      end
+    test "unless" do
+      assert eval("{{#unless ok}}no{{/unless}}", assigns: [ok: false]) == "no"
+      assert eval("{{#unless ok}}no{{/unless}}", assigns: [ok: true]) == ""
     end
 
-    test "when the token is invalid" do
-      message = """
-      nofile:1:5: expected closing '%>' for Stem expression
-        |
-      1 | foo <%= bar
-        |     ^\
-      """
-
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__("foo <%= bar")
-      end
+    test "blocks follow Elixir truthiness" do
+      assert eval("{{#if v}}t{{else}}f{{/if}}", assigns: [v: 0]) == "t"
+      assert eval("{{#if v}}t{{else}}f{{/if}}", assigns: [v: nil]) == "f"
     end
 
-    test "when middle expression is found without a start expression" do
-      message = """
-      nofile:5:1: unexpected middle of expression <% else %>
-        |
-      2 | <%= "content" %>
-      3 | <%= if true %>
-      4 |   <%= "foo" %>
-      5 | <% else %>
-        | ^\
-      """
+    test "each iterates with this, @index, and @key" do
+      assert eval("{{#each xs}}{{@index}}:{{this}};{{/each}}", assigns: [xs: ["a", "b"]]) ==
+               "0:a;1:b;"
 
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__(
-          ~s(<h1>Hi!</h1>\n<%= "content" %>\n<%= if true %>\n  <%= "foo" %>\n<% else %>\n  bar<% end %>)
-        )
-      end
+      assert eval("{{#each m}}{{@key}}={{this}}{{/each}}", assigns: [m: %{a: 1}]) == "a=1"
     end
 
-    test "proper format line number of code snippet" do
-      message = """
-      nofile:11:1: unexpected middle of expression <% else %>
-         |
-       8 | <%= "content" %>
-       9 | <%= if true %>
-      10 |   <%= "foo" %>
-      11 | <% else %>
-         | ^\
-      """
-
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__(
-          ~s(\n\n\n\n\n\n<h1>Hi!</h1>\n<%= "content" %>\n<%= if true %>\n  <%= "foo" %>\n<% else %>\n  bar<% end %>)
-        )
-      end
+    test "each else renders for empty collections" do
+      assert eval("{{#each xs}}{{this}}{{else}}empty{{/each}}", assigns: [xs: []]) == "empty"
     end
 
-    test "when there is only middle expression" do
-      message = """
-      nofile:1:1: unexpected middle of expression <% else %>
-        |
-      1 | <% else %>
-        | ^\
-      """
+    test "with binds this" do
+      assigns = [story: %{title: "T", author: "A"}]
 
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__(~s(<% else %>))
-      end
+      assert eval("{{#with story}}{{this.title}} by {{this.author}}{{/with}}", assigns: assigns) ==
+               "T by A"
     end
 
-    test "when it is missing a `do` in case expr" do
-      message = """
-      nofile:3:3: unexpected middle of expression <% :something -> %>
-        |
-      1 | content
-      2 | <%= case @var %>
-      3 |   <% :something -> %>
-        |   ^\
-      """
-
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__(
-          "content\n<%= case @var %>\n  <% :something -> %>\n    bar<% end %>"
-        )
-      end
+    test "nested blocks" do
+      template = "{{#each rows}}{{#if this}}[{{this}}]{{/if}}{{/each}}"
+      assert eval(template, assigns: [rows: [1, false, 2]]) == "[1][2]"
     end
 
-    test "when it is a `do` in cond expr" do
-      message = """
-      nofile:3:3: unexpected middle of expression <% true -> %>
-        |
-      1 | content
-      2 | <%= cond %>
-      3 |   <% true -> %>
-        |   ^\
-      """
+    test "parent traversal reaches top-level assigns inside each" do
+      assigns = [prefix: "Mr.", people: [%{firstname: "Nina"}]]
 
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__("content\n<%= cond %>\n  <% true -> %>\n    bar<% end %>")
-      end
-    end
-
-    test "when end expression is found without a start expression" do
-      message = """
-      nofile:1:5: unexpected end of expression <% end %>
-        |
-      1 | foo <% end %>
-        |     ^\
-      """
-
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__("foo <% end %>")
-      end
-    end
-
-    test "when start expression is found without an end expression" do
-      message = """
-      nofile:2:5: expected a closing '<% end %>' for block expression in Stem
-        |
-      1 | foo
-      2 | <%= if true do %>
-        |     ^\
-      """
-
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__("foo\n<%= if true do %>\nfoo\n")
-      end
-
-      message = """
-      nofile:3:3: expected a closing '<% end %>' for block expression in Stem
-        |
-      1 | foo
-      2 | <%=
-      3 |   if true do %>
-        |   ^\
-      """
-
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__("foo\n<%=\n  if true do %>\nfoo\n", indentation: 0)
-      end
-
-      message = """
-      nofile:3:6: expected a closing '<% end %>' for block expression in Stem
-        |
-      1 |    foo
-      2 |    <%=
-      3 |      if true do %>
-        |      ^\
-      """
-
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__("foo\n<%=\n  if true do %>\nfoo\n", indentation: 3)
-      end
-    end
-
-    test "when start expression with middle expression is found without an end expression" do
-      message = """
-      nofile:2:5: expected a closing '<% end %>' for block expression in Stem
-        |
-      1 | foo
-      2 | <%= if true do %>
-        |     ^\
-      """
-
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__("foo\n<%= if true do %>\nfoo\n<% else %>\n")
-      end
-    end
-
-    test "when multiple start expressions is found without an end expression" do
-      message = """
-      nofile:5:5: expected a closing '<% end %>' for block expression in Stem
-        |
-      2 | <%= if true do %>
-      3 |   <%= @something %>
-      4 |\s
-      5 | <%= if @var do %>
-        |     ^\
-      """
-
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__(
-          "foo\n<%= if true do %>\n  <%= @something %>\n\n<%= if @var do %>\nfoo\n"
-        )
-      end
-    end
-
-    test "when nested end expression is found without a start expression" do
-      message = """
-      nofile:1:31: unexpected end of expression <% end %>
-        |
-      1 | foo <%= if true do %><% end %><% end %>
-        |                               ^\
-      """
-
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__("foo <%= if true do %><% end %><% end %>")
-      end
-    end
-
-    test "marker '|' escapes output" do
-      assert Stem.TestTemplate.eval_string(~s(<%| "<" %>)) == "&lt;"
-    end
-
-    test "when trying to use marker '/' without implementation" do
-      msg =
-        ~r/unsupported Stem syntax <%\/ %> \(the syntax is valid but not supported by the current Stem engine\)/
-
-      assert_raise Stem.SyntaxError, msg, fn ->
-        Stem.__compile_string__("<%/ true %>")
-      end
-    end
-
-    test "from Elixir parser" do
-      line = __ENV__.line + 6
-
-      message =
-        assert_raise TokenMissingError, fn ->
-          Stem.__compile_string__(
-            """
-            <li>
-              <strong>Some:</strong>
-              <%= true && @some[ %>
-            </li>
-            """,
-            file: __ENV__.file,
-            line: line,
-            indentation: 12
-          )
-        end
-
-      normalized = message |> Exception.message() |> strip_ansi()
-      assert normalized =~ "true && @some["
-      assert normalized =~ "missing closing delimiter (expected \"]\")"
-      assert normalized =~ "unclosed delimiter"
-    end
-
-    test "from Elixir parser with line breaks" do
-      line = __ENV__.line + 6
-
-      message =
-        assert_raise TokenMissingError, fn ->
-          Stem.__compile_string__(
-            """
-            <li>
-              <strong>Some:</strong>
-              <%= true &&
-                @some[ %>
-            </li>
-            """,
-            file: __ENV__.file,
-            line: line,
-            indentation: 12
-          )
-        end
-
-      assert message |> Exception.message() |> strip_ansi() =~ """
-                  │
-              #{line + 3} │                 @some[\s
-                  │                      │ └ missing closing delimiter (expected "]")
-                  │                      └ unclosed delimiter
-             """
-    end
-
-    test "honor line numbers" do
-      assert_raise Stem.SyntaxError,
-                   "nofile:100:6: expected closing '%>' for Stem expression",
-                   fn ->
-                     Stem.__compile_string__("foo\n bar <%= baz", line: 99)
-                   end
-    end
-
-    test "honor file names" do
-      message = """
-      my_file.stem:1:5: expected closing '%>' for Stem expression
-        |
-      1 | foo <%= bar
-        |     ^\
-      """
-
-      assert_raise Stem.SyntaxError, message, fn ->
-        Stem.__compile_string__("foo <%= bar", file: "my_file.stem")
-      end
+      assert eval("{{#each people}}{{../prefix}} {{firstname}}{{/each}}", assigns: assigns) ==
+               "Mr. Nina"
     end
   end
 
-  describe "warnings" do
-    test "when middle expression has a modifier" do
-      assert ExUnit.CaptureIO.capture_io(:stderr, fn ->
-               Stem.__compile_string__("foo <%= if true do %>true<%= else %>false<% end %>")
-             end) =~ ~s[unexpected beginning of Stem tag \"<%=\" on \"<%= else %>\"]
+  describe "helpers" do
+    test "registered helper" do
+      Stem.Helpers.register(:upcase, fn [v], _ctx -> String.upcase(to_string(v)) end)
+      assert eval("{{upcase name}}", assigns: [name: "nina"]) == "NINA"
     end
 
-    test "when end expression has a modifier" do
-      assert ExUnit.CaptureIO.capture_io(:stderr, fn ->
-               Stem.__compile_string__("foo <%= if true do %>true<% else %>false<%= end %>")
-             end) =~
-               ~s[unexpected beginning of Stem tag \"<%=\" on \"<%= end %>\"]
+    test "builtin lookup helper" do
+      assert eval(~s({{lookup m "k"}}), assigns: [m: %{"k" => "v"}]) == "v"
     end
 
-    test "unused \"do\" block without \"<%=\" modifier" do
-      assert ExUnit.CaptureIO.capture_io(:stderr, fn ->
-               Stem.__compile_string__("<% if true do %>I'm invisible!<% end %>")
-             end) =~ "the contents of this expression won't be output"
+    test "helper with positional and keyword arguments" do
+      helpers = [tag: fn [label, href: href], _ctx -> "#{label}@#{href}" end]
 
-      # These are fine though
-      Stem.__compile_string__("<% foo = fn -> %>Hello<% end %>")
-      Stem.__compile_string__("<% foo = if true do %>Hello<% end %>")
-    end
-
-    test "from tokenizer" do
-      warning =
-        ExUnit.CaptureIO.capture_io(:stderr, fn ->
-          Stem.__compile_string__(~s'<%= :"foo" %>', file: "tokenizer.ex")
-        end)
-
-      assert warning =~ "found quoted atom \"foo\" but the quotes are not required"
-      assert warning =~ "tokenizer.ex:1:5"
+      assert eval(~s({{tag name href=url}}), [assigns: [name: "x", url: "u"]], helpers: helpers) ==
+               "x@u"
     end
   end
 
-  describe "environment" do
-    test "respects line numbers" do
-      expected = """
-      foo
-      2
-      """
-
-      string = """
-      foo
-      <%= __ENV__.line %>
-      """
-
-      assert_eval(expected, string)
-    end
-
-    test "respects line numbers inside nested expressions" do
-      expected = """
-      foo
-
-      3
-
-      5
-      """
-
-      string = """
-      foo
-      <%= if true do %>
-      <%= __ENV__.line %>
-      <% end %>
-      <%= __ENV__.line %>
-      """
-
-      assert_eval(expected, string)
-    end
-
-    test "respects line numbers inside start expression" do
-      expected = """
-      foo
-
-      true
-
-      5
-      """
-
-      string = """
-      foo
-      <%= if __ENV__.line == 2 do %>
-      <%= true %>
-      <% end %>
-      <%= __ENV__.line %>
-      """
-
-      assert_eval(expected, string)
-    end
-
-    test "respects line numbers inside middle expression with ->" do
-      expected = """
-      foo
-
-      true
-
-      7
-      """
-
-      string = """
-      foo
-      <%= cond do %>
-      <% false -> %> false
-      <% __ENV__.line == 4 -> %>
-      <%= true %>
-      <% end %>
-      <%= __ENV__.line %>
-      """
-
-      assert_eval(expected, string)
-    end
-
-    test "respects line number inside middle expressions with keywords" do
-      expected = """
-      foo
-
-      5
-
-      7
-      """
-
-      string = """
-      foo
-      <%= if false do %>
-      <%= __ENV__.line %>
-      <% else %>
-      <%= __ENV__.line %>
-      <% end %>
-      <%= __ENV__.line %>
-      """
-
-      assert_eval(expected, string)
-    end
-
-    test "respects files" do
-      assert_eval("sample.ex", "<%= __ENV__.file %>", [], file: "sample.ex")
+  describe "partials" do
+    test "expands partials from options" do
+      assert eval("a {{> g}} b", [assigns: [name: "Nina"]], partials: %{g: "Hi {{name}}"}) ==
+               "a Hi Nina b"
     end
   end
 
-  describe "clauses" do
-    test "inside functions" do
-      expected = """
-
-      Number 1
-
-      Number 2
-
-      Number 3
-
-      """
-
-      string = """
-      <%= Enum.map [1, 2, 3], fn x -> %>
-      Number <%= x %>
-      <% end %>
-      """
-
-      assert_eval(expected, string)
+  describe "precompiled functions" do
+    test "function_from_string" do
+      assert StemTest.Compiled.string_sample(a: 3) == "3"
     end
 
-    test "inside multiple functions" do
-      expected = """
-
-      A 1
-
-      B 2
-
-      A 3
-
-      """
-
-      string = """
-      <%= #{__MODULE__}.switching_map [1, 2, 3], fn x -> %>
-      A <%= x %>
-      <% end, fn x -> %>
-      B <%= x %>
-      <% end %>
-      """
-
-      assert_eval(expected, string)
+    test "function_from_file (public and private)" do
+      assert normalize(StemTest.Compiled.file_sample(bar: 1)) == "foo 1\n"
+      assert normalize(StemTest.Compiled.public_file_sample(bar: 1)) == "foo 1\n"
     end
 
-    test "inside callback and do block" do
-      expected = """
-
-
-      A 1
-
-      B 2
-
-      A 3
-
-      """
-
-      string = """
-      <% require #{__MODULE__} %>
-      <%= #{__MODULE__}.switching_macro [1, 2, 3], fn x -> %>
-      A <%= x %>
-      <% end do %>
-      B <%= x %>
-      <% end %>
-      """
-
-      assert_eval(expected, string)
-    end
-
-    test "inside cond" do
-      expected = """
-      foo
-
-      true
-
-      """
-
-      string = """
-      foo
-      <%= cond do %>
-      <% false -> %> false
-      <% fn -> 1 end -> %>
-      <%= true %>
-      <% end %>
-      """
-
-      assert_eval(expected, string)
-    end
-
-    test "inside cond with do end" do
-      string = """
-      <% y = ["a", "b", "c"] %>
-      <%= cond do %>
-       <% "a" in y -> %>
-        Good
-       <% true -> %>
-        <%= if true do %>true<% else %>false<% end %>
-        Bad
-      <% end %>
-      """
-
-      assert_eval("\n\n  Good\n \n", string)
-    end
-
-    test "line and column meta" do
-      indentation = 12
-
-      ast =
-        Stem.__compile_string__(
-          """
-          <%= f() %> <% f() %>
-            <%= f fn -> %>
-              <%= f() %>
-            <% end %>
-          """,
-          indentation: indentation
-        )
-
-      {_, calls} =
-        Macro.prewalk(ast, [], fn
-          {:f, meta, _args} = expr, acc -> {expr, [meta | acc]}
-          other, acc -> {other, acc}
-        end)
-
-      assert Enum.reverse(calls) == [
-               [line: 1, column: indentation + 5],
-               [line: 1, column: indentation + 15],
-               [line: 2, column: indentation + 7],
-               [line: 3, column: indentation + 9]
-             ]
-    end
-  end
-
-  describe "buffers" do
-    test "inside comprehensions" do
-      string = """
-      <%= for _name <- packages || [] do %>
-      <% end %>
-      <%= all || :done %>
-      """
-
-      assert_eval("\ndone\n", string, packages: nil, all: nil)
-    end
-  end
-
-  describe "from file" do
-    test "evaluates the source" do
-      filename = Path.join(__DIR__, "fixtures/stem_template.stem")
-      result = Stem.TestTemplate.eval_file(filename)
-      assert_normalized_newline_equal("foo bar.\n", result)
-    end
-
-    test "evaluates the source with bindings" do
-      filename = Path.join(__DIR__, "fixtures/stem_template_with_bindings.stem")
-      result = Stem.TestTemplate.eval_file(filename, assigns: [bar: 1])
-      assert_normalized_newline_equal("foo 1\n", result)
-    end
-
-    test "raises an Exception when file is missing" do
-      msg = "could not read file \"non-existent.stem\": no such file or directory"
-
-      assert_raise File.Error, msg, fn ->
-        filename = "non-existent.stem"
-        Stem.__compile_file__(filename)
-      end
-    end
-
-    test "sets external resource attribute" do
+    test "sets the external resource attribute" do
       assert StemTest.Compiled.__info__(:attributes)[:external_resource] ==
                [Path.join(__DIR__, "fixtures/stem_template_with_bindings.stem")]
     end
 
-    test "supports t:Path.t() paths" do
-      filename = to_charlist(Path.join(__DIR__, "fixtures/stem_template_with_bindings.stem"))
-      result = Stem.TestTemplate.eval_file(filename, assigns: [bar: 1])
-      assert_normalized_newline_equal("foo 1\n", result)
-    end
-
-    test "supports overriding file and line through options" do
-      filename = Path.join(__DIR__, "fixtures/stem_template_with_syntax_error.stem")
-
-      assert_raise Stem.SyntaxError,
-                   "my_file.stem:1:5: expected closing '}}' for Stem expression",
-                   fn ->
-                     Stem.TestTemplate.eval_file(filename, _bindings = [],
-                       file: "my_file.stem",
-                       line: 10
-                     )
-                   end
-    end
-  end
-
-  describe "precompiled" do
-    test "from string" do
-      assert StemTest.Compiled.string_sample(1, 2) == "3"
-    end
-
-    test "from file" do
-      assert_normalized_newline_equal("foo 1\n", StemTest.Compiled.file_sample(bar: 1))
-      assert_normalized_newline_equal("foo 1\n", StemTest.Compiled.public_file_sample(bar: 1))
-    end
-
-    test "from file does not affect backtrace" do
+    test "compiled template functions keep accurate stack metadata" do
       file = to_charlist(Path.relative_to_cwd(__ENV__.file))
 
-      assert StemTest.Compiled.before_compile() ==
-               {11, {StemTest.Compiled, :before_compile, 0, [file: file, line: 11]}}
+      {line, frame} = StemTest.Compiled.before_compile()
+      assert frame == {StemTest.Compiled, :before_compile, 0, [file: file, line: line]}
 
-      assert StemTest.Compiled.after_compile() ==
-               {25, {StemTest.Compiled, :after_compile, 0, [file: file, line: 25]}}
+      {line, frame} = StemTest.Compiled.after_compile()
+      assert frame == {StemTest.Compiled, :after_compile, 0, [file: file, line: line]}
 
-      assert StemTest.Compiled.unknown() ==
-               {30, {StemTest.Compiled, :unknown, 0, [file: ~c"unknown", line: 30]}}
+      {line, frame} = StemTest.Compiled.unknown()
+      assert frame == {StemTest.Compiled, :unknown, 0, [file: ~c"unknown", line: line]}
     end
   end
 
-  defmodule TestEngine do
-    @behaviour Stem.Engine
+  describe "assigns" do
+    test "warns on missing assigns when requested" do
+      stderr =
+        capture_io(:stderr, fn ->
+          assert Stem.TestTemplate.eval_string("{{foo}}", [assigns: []],
+                   file: __ENV__.file,
+                   warn_on_missing_assigns: true
+                 ) == ""
+        end)
 
-    def init(_opts) do
-      "INIT"
+      assert stderr =~ "assign @foo not available in Stem template"
     end
 
-    def handle_body(body) do
-      "BODY(#{body})"
-    end
+    test "preserves line numbers in assign lookups" do
+      ast = Stem.__compile_string__("foo\n{{hello}}")
 
-    def handle_begin(_) do
-      "BEGIN"
-    end
+      {_ast, line} =
+        Macro.prewalk(ast, nil, fn
+          {{:., _, [{:__aliases__, _, [:Stem, :Runtime]}, :fetch_assign!]}, meta, _args} = node,
+          _acc ->
+            {node, meta[:line]}
 
-    def handle_end(buffer) do
-      buffer <> ":END"
-    end
+          node, acc ->
+            {node, acc}
+        end)
 
-    def handle_text(buffer, meta, text) do
-      buffer <> ":TEXT-#{meta[:line]}-#{meta[:column]}(#{String.trim(text)})"
-    end
-
-    def handle_expr(buffer, "/", expr) do
-      buffer <> ":DIV(#{Macro.to_string(expr)})"
-    end
-
-    def handle_expr(buffer, "=", expr) do
-      buffer <> ":EQUAL(#{Macro.to_string(expr)})"
-    end
-
-    def handle_expr(buffer, mark, expr) do
-      Stem.Engine.handle_expr(buffer, mark, expr)
+      assert line == 2
     end
   end
 
-  describe "custom engines" do
-    test "text" do
-      assert_eval("BODY(INIT:TEXT-1-1(foo))", "foo", [], engine: TestEngine)
+  describe "syntax errors" do
+    test "unterminated expression includes a snippet" do
+      message = """
+      nofile:1:5: expected closing '}}' for Stem expression
+        |
+      1 | foo {{bar
+        |     ^\
+      """
+
+      assert_raise Stem.SyntaxError, message, fn ->
+        Stem.__compile_string__("foo {{bar")
+      end
     end
 
-    test "custom marker" do
-      assert_eval("BODY(INIT:TEXT-1-1(foo):DIV(:bar))", "foo <%/ :bar %>", [], engine: TestEngine)
+    test "honors file names" do
+      assert_raise Stem.SyntaxError, ~r{^my_file\.stem:1:5:}, fn ->
+        Stem.__compile_string__("foo {{bar", file: "my_file.stem")
+      end
     end
 
-    test "begin/end" do
-      assert_eval(
-        ~s[BODY(INIT:TEXT-1-1(foo):EQUAL(if do\n  "BEGIN:TEXT-1-17(this):END"\nelse\n  "BEGIN:TEXT-1-31(that):END"\nend))],
-        "foo <%= if do %>this<% else %>that<% end %>",
-        [],
-        engine: TestEngine
-      )
+    test "unclosed block" do
+      assert_raise Stem.SyntaxError, ~r/expected a closing '\{\{\/if\}\}'/, fn ->
+        Stem.__compile_string__("{{#if a}}yes")
+      end
     end
 
-    test "custom engine does not support inherited '|' escape behavior" do
-      assert_raise RuntimeError, ~r/unexpected Stem.Engine state/, fn ->
-        assert_eval("BODY(INIT:TEXT-1-1(foo):TEXT-1-9(&lt;))", ~s(foo <%| "<" %>), [],
-          engine: TestEngine
-        )
+    test "mismatched closing tag" do
+      assert_raise Stem.SyntaxError, ~r/unexpected closing tag '\{\{\/each\}\}'; expected/, fn ->
+        Stem.__compile_string__("{{#if a}}{{/each}}")
+      end
+    end
+
+    test "stray else" do
+      assert_raise Stem.SyntaxError, ~r/unexpected '\{\{else\}\}' outside of a block/, fn ->
+        Stem.__compile_string__("{{else}}")
+      end
+    end
+
+    test "invalid Elixir expression" do
+      assert_raise TokenMissingError, fn ->
+        Stem.__compile_string__("{{a + }}")
+      end
+    end
+
+    test "complex parent traversal is rejected at compile time" do
+      assert_raise CompileError, ~r/unsupported parent path traversal/, fn ->
+        Stem.__compile_string__("{{#each xs}}{{../a.b}}{{/each}}")
+      end
+    end
+
+    test "snippet includes preceding lines" do
+      message = """
+      nofile:3:1: expected closing '}}' for Stem expression
+        |
+      1 | a
+      2 | b
+      3 | {{oops
+        | ^\
+      """
+
+      assert_raise Stem.SyntaxError, message, fn ->
+        Stem.__compile_string__("a\nb\n{{oops")
       end
     end
   end
 
-  describe "parser options" do
-    test "customizes parsed code" do
-      atoms_encoder = fn "not_jose", _ -> {:ok, :jose} end
+  describe "disabled runtime entry points" do
+    test "eval_string, eval_file, compile_string and compile_file raise" do
+      assert_raise Stem.SecurityError, fn -> Stem.eval_string("{{x}}", assigns: [x: 1]) end
+      assert_raise Stem.SecurityError, fn -> Stem.eval_file("x.stem") end
+      assert_raise Stem.SecurityError, fn -> Stem.compile_string("{{x}}") end
+      assert_raise Stem.SecurityError, fn -> Stem.compile_file("x.stem") end
+    end
 
-      assert_eval("valid", "<%= not_jose %>", [jose: "valid"],
-        parser_options: [static_atoms_encoder: atoms_encoder]
-      )
+    test "compiling a missing file raises" do
+      assert_raise File.Error, fn -> Stem.__compile_file__("does-not-exist.stem") end
     end
   end
 
-  @strip_ansi [IO.ANSI.green(), IO.ANSI.red(), IO.ANSI.reset()]
-
-  defp strip_ansi(doc) do
-    String.replace(doc, @strip_ansi, "")
-  end
-
-  defp assert_eval(expected, actual, binding \\ [], opts \\ []) do
-    opts = Keyword.merge([file: __ENV__.file, engine: opts[:engine] || Stem.Engine], opts)
-    result = Stem.TestTemplate.eval_string(actual, binding, opts)
-    assert result == expected
-  end
-
-  defp assert_normalized_newline_equal(expected, actual) do
-    assert String.replace(expected, "\r\n", "\n") == String.replace(actual, "\r\n", "\n")
-  end
-
-  def tuple_map({list, callback}) do
-    Enum.map(list, callback)
-  end
-
-  def switching_map(list, a, b) do
-    list
-    |> Enum.with_index()
-    |> Enum.map(fn
-      {element, index} when rem(index, 2) == 0 -> a.(element)
-      {element, index} when rem(index, 2) == 1 -> b.(element)
-    end)
-  end
-
-  defmacro switching_macro(list, a, do: block) do
-    quote do
-      b = fn var!(x) ->
-        unquote(block)
-      end
-
-      unquote(__MODULE__).switching_map(unquote(list), unquote(a), b)
-    end
-  end
+  defp normalize(string), do: String.replace(string, "\r\n", "\n")
 end
