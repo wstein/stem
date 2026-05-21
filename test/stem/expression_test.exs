@@ -8,6 +8,7 @@ defmodule Stem.ExpressionTest do
   alias Stem.Expression
 
   defp t(raw, in_each \\ false), do: Expression.translate(raw, %{in_each: in_each})
+  defp p(raw), do: Expression.parse(raw)
 
   test "empty expression" do
     assert t("") == "\"\""
@@ -55,6 +56,16 @@ defmodule Stem.ExpressionTest do
   test "helper invocation with keyword args and identifiers" do
     assert t(~s|link label href=url class="c"|) ==
              ~s|Stem.Helpers.invoke(:link, [@label, href: @url, class: "c"], [assigns: assigns, helpers: helpers])|
+  end
+
+  test "subexpressions compose helper calls" do
+    assert t("format (uppercase name)") ==
+             "Stem.Helpers.invoke(:format, [Stem.Helpers.invoke(:uppercase, [@name], [assigns: assigns, helpers: helpers])], [assigns: assigns, helpers: helpers])"
+  end
+
+  test "parse returns structured helper AST" do
+    assert {:ok, {:helper, "format", [{:helper, "uppercase", [{:identifier, "name"}]}]}} =
+             p("format (uppercase name)")
   end
 
   test "helper invocation inside each adds this/key context and resolves args" do

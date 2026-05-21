@@ -67,6 +67,9 @@ defmodule Stem.Tokenizer do
     case take_until(rest, "}}") do
       {:ok, inner, tail} ->
         {line, column} = advance(["{{", inner, "}}"], line, column)
+        {inner, trim_left, trim_right} = extract_trim_markers(inner)
+        {buffer, buffer_meta} = maybe_trim_buffer(buffer, buffer_meta, trim_left)
+        {tail, line, column} = maybe_trim_leading_tail(tail, line, column, trim_right)
 
         case classify(inner, meta) do
           {:ok, token} ->
@@ -152,6 +155,47 @@ defmodule Stem.Tokenizer do
       [word] -> {word, ""}
       [word, rest] -> {word, String.trim(rest)}
     end
+  end
+
+  defp extract_trim_markers(inner) do
+    trimmed = String.trim(inner)
+    trim_left = String.starts_with?(trimmed, "~")
+    trim_right = String.ends_with?(trimmed, "~")
+
+    normalized =
+      trimmed
+      |> maybe_trim_leading_marker(trim_left)
+      |> maybe_trim_trailing_marker(trim_right)
+      |> String.trim()
+
+    {normalized, trim_left, trim_right}
+  end
+
+  defp maybe_trim_leading_marker(inner, true), do: String.trim_leading(inner, "~")
+  defp maybe_trim_leading_marker(inner, false), do: inner
+
+  defp maybe_trim_trailing_marker(inner, true), do: String.trim_trailing(inner, "~")
+  defp maybe_trim_trailing_marker(inner, false), do: inner
+
+  defp maybe_trim_buffer(buffer, buffer_meta, false), do: {buffer, buffer_meta}
+
+  defp maybe_trim_buffer(buffer, buffer_meta, true) do
+    trimmed = buffer |> IO.iodata_to_binary() |> String.replace(~r/[\s]+$/u, "")
+
+    case trimmed do
+      "" -> {[], nil}
+      _ -> {[trimmed], buffer_meta}
+    end
+  end
+
+  defp maybe_trim_leading_tail(tail, line, column, false), do: {tail, line, column}
+
+  defp maybe_trim_leading_tail(tail, line, column, true) do
+    trimmed_tail = String.replace(tail, ~r/^[\s]+/u, "")
+    removed_size = byte_size(tail) - byte_size(trimmed_tail)
+    <<removed::binary-size(removed_size), _::binary>> = tail
+    {line, column} = advance(removed, line, column)
+    {trimmed_tail, line, column}
   end
 
   defp flush([], _buffer_meta, acc), do: acc

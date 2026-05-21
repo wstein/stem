@@ -15,35 +15,53 @@ defmodule Stem.ParserTest do
   test "text and expressions" do
     assert ast("Hi {{name}}!") == [
              {:text, "Hi "},
-             {:expr, "name", %{line: 1, column: 4}},
+             {:expr, {:identifier, "name"}, %{line: 1, column: 4}},
              {:text, "!"}
            ]
   end
 
   test "if block without else" do
-    assert [{:if, "show", [{:text, "yes"}], [], %{line: 1, column: 1}}] =
+    assert [{:if, {:identifier, "show"}, [{:text, "yes"}], [], %{line: 1, column: 1}}] =
              ast("{{#if show}}yes{{/if}}")
   end
 
   test "if block with else" do
-    assert [{:if, "show", [{:text, "yes"}], [{:text, "no"}], _}] =
+    assert [{:if, {:identifier, "show"}, [{:text, "yes"}], [{:text, "no"}], _}] =
              ast("{{#if show}}yes{{else}}no{{/if}}")
   end
 
   test "each, unless, with blocks" do
-    assert [{:each, "items", [{:expr, "this", _}], [], _}] =
+    assert [{:each, {:identifier, "items"}, [], [{:expr, {:special, :this}, _}], [], _}] =
              ast("{{#each items}}{{this}}{{/each}}")
 
-    assert [{:unless, "flag", [{:text, "x"}], [], _}] = ast("{{#unless flag}}x{{/unless}}")
+    assert [{:unless, {:identifier, "flag"}, [{:text, "x"}], [], _}] =
+             ast("{{#unless flag}}x{{/unless}}")
 
-    assert [{:with, "story", [{:expr, "this.title", _}], [], _}] =
+    assert [{:with, {:identifier, "story"}, [], [{:expr, {:path, :this, ["title"]}, _}], [], _}] =
              ast("{{#with story}}{{this.title}}{{/with}}")
   end
 
   test "nested blocks" do
     assert [
-             {:each, "rows", [{:if, "ok", [{:text, "y"}], [], _}], [], _}
+             {:each, {:identifier, "rows"}, [],
+              [{:if, {:identifier, "ok"}, [{:text, "y"}], [], _}], [], _}
            ] = ast("{{#each rows}}{{#if ok}}y{{/if}}{{/each}}")
+  end
+
+  test "each and with block params are stored on block nodes" do
+    assert [{:each, {:identifier, "items"}, ["item", "idx"], _, _, _}] =
+             ast("{{#each items as |item idx|}}{{item}}:{{idx}}{{/each}}")
+
+    assert [{:with, {:identifier, "story"}, ["article"], _, _, _}] =
+             ast("{{#with story as |article|}}{{article.title}}{{/with}}")
+  end
+
+  test "invalid block param shapes are rejected" do
+    assert {:error, "{{#with}} accepts at most one block parameter", _} =
+             Parser.parse("{{#with story as |a b|}}{{a}}{{/with}}")
+
+    assert {:error, "block parameters must be unique", _} =
+             Parser.parse("{{#each items as |item item|}}{{item}}{{/each}}")
   end
 
   test "partials are expanded inline" do
@@ -52,9 +70,14 @@ defmodule Stem.ParserTest do
     assert nodes == [
              {:text, "a "},
              {:text, "Hi "},
-             {:expr, "name", %{line: 1, column: 4}},
+             {:expr, {:identifier, "name"}, %{line: 1, column: 4}},
              {:text, " b"}
            ]
+  end
+
+  test "subexpressions are stored as expression AST" do
+    assert [{:expr, {:helper, "format", [{:helper, "uppercase", [{:identifier, "name"}]}]}, _}] =
+             ast("{{format (uppercase name)}}")
   end
 
   test "partials may reference other partials" do

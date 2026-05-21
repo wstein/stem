@@ -31,4 +31,16 @@ defmodule Stem.CompilerTest do
     assert render(template, v: nil) == "none"
     assert render(template, v: 7) == "7"
   end
+
+  test "block params resolve inside each and with bodies" do
+    assert render("{{#each rows as |row idx|}}{{idx}}={{row.name}};{{/each}}",
+             rows: [%{name: "a"}]
+           ) ==
+             "0=a;"
+
+    assert render("{{#with story as |article|}}{{article.title}}{{/with}}",
+             story: %{title: "Stem"}
+           ) ==
+             "Stem"
+  end
 end

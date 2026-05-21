@@ -65,6 +65,17 @@ defmodule Stem do
     * `:warn_on_missing_assigns` - when `true`, missing assigns print a warning
       instead of returning `nil` silently. Defaults to `false`.
 
+    * `:warn_on_diagnostics` - when `true`, Stem emits compiler warnings for
+      constant block conditions and unused block parameters. Defaults to
+      `false`.
+
+    * `:contract` - a keyword list like `[required: [:title], optional:
+      [:subtitle]]` used to validate required assigns before rendering.
+
+    * `:mode` - `:permissive` (default) keeps the current fallback to
+      arbitrary Elixir expressions. `:safe` only allows structured Stem
+      expressions, helpers, literals, and paths.
+
   ## Syntax
 
   Stem supports the following tags:
@@ -75,6 +86,10 @@ defmodule Stem do
     * `{{> partial}}` - expands a named partial.
     * `{{#if}}`, `{{#unless}}`, `{{#each}}`, `{{#with}}` with matching
       `{{/...}}` closing tags and an optional `{{else}}`.
+    * `{{format (uppercase name)}}` style helper subexpressions.
+    * `{{#each items as |item idx|}}` / `{{#with story as |article|}}`
+      block parameters.
+    * `{{~ ... ~}}` whitespace control around any tag.
 
   Bare identifiers resolve to assigns: `{{name}}` reads the `:name` assign.
   Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the
@@ -112,6 +127,8 @@ defmodule Stem do
           | {:column, column}
           | {:partials, map() | keyword()}
           | {:warn_on_missing_assigns, boolean()}
+          | {:contract, keyword()}
+          | {:mode, :permissive | :safe}
           | {atom(), term()}
 
   @doc """
@@ -139,6 +156,11 @@ defmodule Stem do
   defmacro function_from_string(kind, name, template, args \\ [], options \\ []) do
     quote bind_quoted: binding() do
       original_args = args
+
+      if options[:contract] && :assigns not in original_args do
+        raise ArgumentError, "Stem contracts require an :assigns argument"
+      end
+
       info = Keyword.merge([file: __ENV__.file, line: __ENV__.line], options)
       args = Enum.map(original_args, fn arg -> {arg, [line: info[:line]], nil} end)
       compiled = Stem.__compile_string__(template, info)
@@ -202,6 +224,11 @@ defmodule Stem do
   defmacro function_from_file(kind, name, file, args \\ [], options \\ []) do
     quote bind_quoted: binding() do
       original_args = args
+
+      if options[:contract] && :assigns not in original_args do
+        raise ArgumentError, "Stem contracts require an :assigns argument"
+      end
+
       info = Keyword.merge([file: IO.chardata_to_string(file), line: 1], options)
       args = Enum.map(original_args, fn arg -> {arg, [line: 1], nil} end)
       compiled = Stem.__compile_file__(file, info)
@@ -302,7 +329,9 @@ defmodule Stem do
 
     case Stem.Parser.parse(source, options) do
       {:ok, ast} ->
-        Stem.Compiler.compile(ast, options)
+        ast
+        |> Stem.Compiler.compile(options)
+        |> maybe_apply_contract(options)
 
       {:error, message, %{line: line, column: column}} ->
         raise Stem.SyntaxError,
@@ -323,6 +352,23 @@ defmodule Stem do
     bindings
     |> Keyword.put_new(:assigns, [])
     |> Keyword.put_new(:helpers, [])
+  end
+
+  defp maybe_apply_contract(quoted, options) do
+    case Stem.Contract.normalize(options[:contract]) do
+      nil ->
+        quoted
+
+      contract ->
+        quote do
+          Stem.Contract.validate!(
+            Keyword.get(binding(), :assigns, []),
+            unquote(Macro.escape(contract))
+          )
+
+          unquote(quoted)
+        end
+    end
   end
 
   defp code_snippet(source, line, column) do

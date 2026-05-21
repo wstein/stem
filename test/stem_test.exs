@@ -78,6 +78,10 @@ defmodule StemTest do
       assert eval("{{a + b}}", assigns: [a: 1, b: 2]) == "3"
     end
 
+    test "whitespace control trims adjacent literal whitespace" do
+      assert eval("a {{~name~}} b", assigns: [name: "Nina"]) == "aNinab"
+    end
+
     test "dotted paths read nested values" do
       assert eval("{{user.name}}", assigns: [user: %{name: "Nina"}]) == "Nina"
     end
@@ -132,6 +136,26 @@ defmodule StemTest do
       assert eval("{{#each people}}{{../prefix}} {{firstname}}{{/each}}", assigns: assigns) ==
                "Mr. Nina"
     end
+
+    test "whitespace control works around block tags" do
+      assert eval(" {{~#if ok~}} yes {{~/if~}} ", assigns: [ok: true]) == "yes"
+    end
+
+    test "each block params bind item and index" do
+      assert eval("{{#each xs as |item idx|}}{{idx}}:{{item}};{{/each}}",
+               assigns: [xs: ["a", "b"]]
+             ) ==
+               "0:a;1:b;"
+    end
+
+    test "with block params bind the subject" do
+      assigns = [story: %{title: "Deep Work", author: "N"}]
+
+      assert eval("{{#with story as |article|}}{{article.title}} by {{article.author}}{{/with}}",
+               assigns: assigns
+             ) ==
+               "Deep Work by N"
+    end
   end
 
   describe "helpers" do
@@ -149,6 +173,16 @@ defmodule StemTest do
 
       assert eval(~s({{tag name href=url}}), [assigns: [name: "x", url: "u"]], helpers: helpers) ==
                "x@u"
+    end
+
+    test "subexpressions compose helpers" do
+      helpers = [
+        uppercase: fn [value], _ctx -> String.upcase(to_string(value)) end,
+        format: fn [value], _ctx -> "[#{value}]" end
+      ]
+
+      assert eval("{{format (uppercase name)}}", [assigns: [name: "nina"]], helpers: helpers) ==
+               "[NINA]"
     end
   end
 

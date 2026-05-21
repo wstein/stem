@@ -8,8 +8,9 @@ defmodule Stem.Parser do
   # The parser drives `Stem.Tokenizer`, matches block open/else/close tokens
   # into nested nodes, expands partials inline (with a recursion guard), and
   # reports structural errors such as mismatched or unclosed blocks. Expression
-  # contents are left as raw strings for `Stem.Expression` to interpret later.
+  # contents are parsed into `Stem.Expression` nodes for later compiler stages.
 
+  alias Stem.Expression
   alias Stem.Tokenizer
 
   @kind_tags %{if: "if", unless: "unless", each: "each", with: "with"}
@@ -53,7 +54,8 @@ defmodule Stem.Parser do
   end
 
   defp collect([{:expr, raw, meta} | rest], partials, stack, acc) do
-    collect(rest, partials, stack, [{:expr, raw, meta} | acc])
+    {:ok, expr} = Expression.parse(raw)
+    collect(rest, partials, stack, [{:expr, expr, meta} | acc])
   end
 
   defp collect([{:partial, name, meta} | rest], partials, stack, acc) do
@@ -83,28 +85,32 @@ defmodule Stem.Parser do
   end
 
   defp parse_block(kind, args, meta, tokens, partials, stack) do
-    case collect(tokens, partials, stack, []) do
-      {:ok, body, {:else, _else_meta}, rest} ->
-        parse_else(kind, args, body, meta, rest, partials, stack)
+    with {:ok, expr, params} <- parse_block_expression(kind, args) do
+      case collect(tokens, partials, stack, []) do
+        {:ok, body, {:else, _else_meta}, rest} ->
+          parse_else(kind, expr, params, body, meta, rest, partials, stack)
 
-      {:ok, body, {:close, ^kind, _close_meta}, rest} ->
-        {:ok, {kind, args, body, [], meta}, rest}
+        {:ok, body, {:close, ^kind, _close_meta}, rest} ->
+          {:ok, block_node(kind, expr, params, body, [], meta), rest}
 
-      {:ok, _body, {:close, other, close_meta}, _rest} ->
-        {:error, mismatched_close(kind, other), close_meta}
+        {:ok, _body, {:close, other, close_meta}, _rest} ->
+          {:error, mismatched_close(kind, other), close_meta}
 
-      {:ok, _body, {:eof, _eof_meta}, _rest} ->
-        {:error, unclosed_block(kind), meta}
+        {:ok, _body, {:eof, _eof_meta}, _rest} ->
+          {:error, unclosed_block(kind), meta}
 
-      {:error, _message, _meta} = error ->
-        error
+        {:error, _message, _meta} = error ->
+          error
+      end
+    else
+      {:error, message} -> {:error, message, meta}
     end
   end
 
-  defp parse_else(kind, args, body, meta, tokens, partials, stack) do
+  defp parse_else(kind, expr, params, body, meta, tokens, partials, stack) do
     case collect(tokens, partials, stack, []) do
       {:ok, else_body, {:close, ^kind, _close_meta}, rest} ->
-        {:ok, {kind, args, body, else_body, meta}, rest}
+        {:ok, block_node(kind, expr, params, body, else_body, meta), rest}
 
       {:ok, _else_body, {:else, else_meta}, _rest} ->
         {:error, "unexpected second '{{else}}' inside '{{##{@kind_tags[kind]}}}'", else_meta}
@@ -119,6 +125,69 @@ defmodule Stem.Parser do
         error
     end
   end
+
+  defp parse_block_expression(kind, args) when kind in [:if, :unless] do
+    {:ok, expr} = Expression.parse(args)
+    {:ok, expr, []}
+  end
+
+  defp parse_block_expression(kind, args) when kind in [:each, :with] do
+    case split_block_params(args) do
+      {:ok, expr_source, params} ->
+        with :ok <- validate_block_params(kind, params),
+             {:ok, expr} <- Expression.parse(expr_source) do
+          {:ok, expr, params}
+        end
+    end
+  end
+
+  defp split_block_params(args) do
+    case Regex.run(~r/^(.*?)(?:\s+as\s+\|([^|]+)\|)?\s*$/s, args, capture: :all_but_first) do
+      [expr_source] ->
+        {:ok, String.trim(expr_source), []}
+
+      [expr_source, nil] ->
+        {:ok, String.trim(expr_source), []}
+
+      [expr_source, params_source] ->
+        params = params_source |> String.split(~r/\s+/, trim: true)
+        {:ok, String.trim(expr_source), params}
+    end
+  end
+
+  defp validate_block_params(:with, []), do: :ok
+  defp validate_block_params(:with, [_param]), do: :ok
+
+  defp validate_block_params(:with, _params),
+    do: {:error, "{{#with}} accepts at most one block parameter"}
+
+  defp validate_block_params(:each, params) when length(params) <= 2,
+    do: validate_identifier_list(params)
+
+  defp validate_block_params(:each, _params),
+    do: {:error, "{{#each}} accepts at most two block parameters"}
+
+  defp validate_identifier_list(params) do
+    cond do
+      Enum.any?(params, &(not String.match?(&1, ~r/^[a-z_][a-zA-Z0-9_]*$/))) ->
+        {:error, "block parameters must be simple identifiers"}
+
+      length(params) != length(Enum.uniq(params)) ->
+        {:error, "block parameters must be unique"}
+
+      true ->
+        :ok
+    end
+  end
+
+  defp block_node(:each, expr, params, body, else_body, meta),
+    do: {:each, expr, params, body, else_body, meta}
+
+  defp block_node(:with, expr, params, body, else_body, meta),
+    do: {:with, expr, params, body, else_body, meta}
+
+  defp block_node(kind, expr, _params, body, else_body, meta),
+    do: {kind, expr, body, else_body, meta}
 
   defp mismatched_close(open_kind, close_kind) do
     "unexpected closing tag '{{/#{@kind_tags[close_kind]}}}'; " <>

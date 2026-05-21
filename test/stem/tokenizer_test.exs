@@ -12,11 +12,25 @@ defmodule Stem.TokenizerTest do
     tokens
   end
 
+  test "tilde trim markers remove adjacent whitespace" do
+    assert tokens("a {{~name~}} b") == [
+             {:text, "a", %{line: 1, column: 1}},
+             {:expr, "name", %{line: 1, column: 3}},
+             {:text, "b", %{line: 1, column: 14}},
+             {:eof, %{line: 1, column: 15}}
+           ]
+  end
+
   test "plain text becomes a single text token" do
     assert tokens("foo bar") == [
              {:text, "foo bar", %{line: 1, column: 1}},
              {:eof, %{line: 1, column: 8}}
            ]
+  end
+
+  test "trim markers work for block tags" do
+    assert [{:block_open, :if, "show", _}, {:text, "yes", _}, {:block_close, :if, _}, {:eof, _}] =
+             tokens(" {{~#if show~}} yes {{~/if~}} ")
   end
 
   test "empty source yields only eof" do

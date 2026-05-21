@@ -23,4 +23,21 @@ defmodule Stem.RuntimeSecurityTest do
   test "compile-time generated template function still works" do
     assert Stem.RuntimeSecurity.Compiled.render_from_string(name: "Nina") == "Hello Nina"
   end
+
+  test "safe mode rejects arbitrary Elixir fallback expressions" do
+    assert_raise CompileError, ~r/safe mode forbids arbitrary Elixir expressions/, fn ->
+      Stem.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], mode: :safe)
+    end
+  end
+
+  test "safe mode still allows structured Stem expressions" do
+    assert Stem.eval_string("Hello {{name}}", [assigns: [name: "Nina"]], mode: :safe) ==
+             "Hello Nina"
+  end
+
+  test "runtime contract validation enforces required assigns" do
+    assert_raise ArgumentError, ~r/missing required assigns/, fn ->
+      Stem.eval_string("Hello {{name}}", [assigns: []], contract: [required: [:name]])
+    end
+  end
 end

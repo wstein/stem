@@ -49,6 +49,7 @@ defmodule Stem.DSLTest.UseStemViews do
   use Stem
 
   deftemplate(:hello, "Hello {{name}}", [:assigns])
+  deftemplate(:contract_card, "{{title}}", [:assigns], contract: [required: [:title]])
 
   def hello_inline(assigns), do: ~STEM"Inline {{name}}"
 end
@@ -83,6 +84,14 @@ defmodule Stem.DSLTest do
   test "use Stem imports the DSL and sigil" do
     assert Stem.DSLTest.UseStemViews.hello(name: "Nina") == "Hello Nina"
     assert Stem.DSLTest.UseStemViews.hello_inline(name: "Nina") == "Inline Nina"
+  end
+
+  test "template contracts validate required assigns" do
+    assert Stem.DSLTest.UseStemViews.contract_card(title: "Spec") == "Spec"
+
+    assert_raise ArgumentError, ~r/missing required assigns/, fn ->
+      Stem.DSLTest.UseStemViews.contract_card([])
+    end
   end
 
   test "invalid :kind raises argument error" do
