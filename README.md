@@ -21,8 +21,9 @@ Useful entrypoints:
 
 ## Context Bundling
 
-`cx.toml` is already configured to treat `docs/**`, `notes/**`, and
-repository markdown as the docs section.
+`cx.toml` is configured to keep Elixir source in `lib/**`, tests in
+`test/**`, examples in `examples/**`, docs in `docs/**`, and repository
+root files in a separate project section.
 
 ## Next Steps
 

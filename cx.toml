@@ -1,9 +1,11 @@
 #:schema https://wstein.github.io/cx-cli/schemas/cx-config-v1.schema.json
-# cx works in four cooperating paths:
-#   proof:     bundle, extract, list, validate, verify
-#   live:      mcp
-#   cognition: notes
-#   adapter:   adapter, render
+# cx organizes the Elixir workspace into source, tests, examples,
+# project files, docs, and notes.
+#
+# proof:     bundle, extract, list, validate, verify
+# live:      mcp
+# cognition: notes
+# adapter:   adapter, render
 # See: cx --help, or docs/modules/manual/pages/operating-modes.adoc
 schema_version = 1
 project_name = "stem"
@@ -26,7 +28,7 @@ security_check = true
 # include is intentionally empty: the VCS-controlled file list is the master base.
 # Add patterns here only to pull in generated or deliberately git-ignored files.
 include = []
-exclude = ["node_modules/**", "dist/**", "tmp/**"]
+exclude = ["node_modules/**", "dist/**", "tmp/**", "_build/**", "cover/**", "deps/**"]
 follow_symlinks = false
 unmatched = "ignore"
 
@@ -107,16 +109,34 @@ root_level = 1
 [sections.docs]
 # Section globs classify files that are already in the master list.
 # They do not pull ignored files into the bundle; use [files].include for that.
-include = ["docs/**", "README.md", "*.md"]
+include = ["docs/**"]
+
+[sections.project]
+include = [
+	"README.md",
+	"GUIDELINES.md",
+	"Claude.md",
+	"SPEC_MINUTES.md",
+	"LICENSE",
+	"Makefile",
+	"antora-playbook.yml",
+	"mix.exs",
+	"mix.lock",
+	"cx.toml",
+	"cx-mcp.toml"
+]
+
+[sections.lib]
+include = ["lib/**"]
+
+[sections.test]
+include = ["test/**"]
+
+[sections.examples]
+include = ["examples/**"]
 
 [sections.notes]
 include = ["notes/**"]
-
-[sections.src]
-include = ["src/**"]
-
-[sections.tests]
-include = ["tests/**"]
 
 [sections.unassigned]
 # Keep this catch-all visible while learning the repo shape. Replace it with
