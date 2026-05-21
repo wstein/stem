@@ -25,4 +25,4 @@ Keep transformation helpers focused and explicit so templates make security-sens
 
 - [[Handlebars Expression Resolution]] - How helper calls are distinguished from variables.
 - [[Native AST Compilation Pipeline]] - Where partial expansion occurs.
-- [[Elixir Truthiness Semantics]] - How helper return values are interpreted in blocks.
+- [[Handlebars Truthiness Semantics]] - How helper return values are interpreted in blocks.

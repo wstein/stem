@@ -49,7 +49,6 @@ If a note contains multiple unrelated ideas, split it.
 - [[Iteration and Context Scoping]]
 - [[Template Variable Hygiene]]
 - [[Handlebars Truthiness Semantics]]
-- [[Elixir Truthiness Semantics]] (deprecated, v0.1.0 only)
 - [[Whitespace Trim Markers]]
 
 ## Start With The Summary Contract

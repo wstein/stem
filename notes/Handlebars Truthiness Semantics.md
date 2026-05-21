@@ -1,7 +1,7 @@
 ---
 id: 20260521210600
 aliases: [Truthiness, Handlebars Truthiness]
-tags: [semantics, logic, v0.2.0]
+tags: [semantics, logic, v0-2-0]
 ---
 
 Block conditionals in Stem (v0.2.0+) follow **Handlebars truthiness rules**: `false`, `nil`, `0`, `""`, `[]`, and `{}` (empty map) are falsey. All other values are truthy.

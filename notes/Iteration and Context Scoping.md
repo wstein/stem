@@ -20,5 +20,5 @@ Iterate over lists or maps using `{{#each}}`. Use `{{#with}}` to clean up deep p
 ## Links
 
 - [[Template Variable Hygiene]] - How these bindings are implemented in the compiler.
-- [[Elixir Truthiness Semantics]] - How empty collections are handled in iteration.
+- [[Handlebars Truthiness Semantics]] - How empty collections are handled in iteration.
 - [[Handlebars Expression Resolution]] - The resolution order for these tokens.

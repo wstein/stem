@@ -1,0 +1,35 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "cli-test",
+			"type": "shell",
+			"command": "mix",
+			"args": [
+				"test",
+				"test/stem/cli_test.exs",
+				"--trace"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$mix"
+			],
+			"group": "test"
+		},
+		{
+			"label": "cli-test-2",
+			"type": "shell",
+			"command": "mix",
+			"args": [
+				"test",
+				"test/stem/cli_test.exs",
+				"--trace"
+			],
+			"isBackground": false,
+			"problemMatcher": [
+				"$mix"
+			],
+			"group": "test"
+		}
+	]
+}

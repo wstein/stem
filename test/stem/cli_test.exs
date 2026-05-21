@@ -195,6 +195,54 @@ defmodule Mix.Tasks.StemTest do
         File.rm(data_path)
       end
     end
+
+    test "loads project config while honoring CLI escape overrides" do
+      temp_dir = Path.join(System.tmp_dir!(), "stem-cli-config-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+
+      config_path = Path.join(temp_dir, ".stem.config.json")
+      template_path = Path.join(temp_dir, "template.stem")
+
+      File.write!(config_path, ~s({"mode":"safe"}))
+      File.write!(template_path, "{{value}}")
+
+      original_cwd = System.get_env("EXBAR_CWD")
+      System.put_env("EXBAR_CWD", temp_dir)
+
+      try do
+        output = capture_io([input: ~s({"value":"<tag>"})], fn ->
+          Stem.CLI.run(["--escape", "none", template_path])
+        end)
+
+        assert output == "<tag>"
+      after
+        if original_cwd do
+          System.put_env("EXBAR_CWD", original_cwd)
+        else
+          System.delete_env("EXBAR_CWD")
+        end
+
+        File.rm_rf!(temp_dir)
+      end
+    end
+
+    test "raises on invalid escape mode" do
+      temp_dir = Path.join(System.tmp_dir!(), "stem-cli-escape-#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+
+      data_path = Path.join(temp_dir, "data.json")
+      template = Path.join(temp_dir, "template.stem")
+      File.write!(data_path, ~s({"value":"<tag>"}))
+      File.write!(template, "{{value}}")
+
+      try do
+        assert_raise ArgumentError, ~r/unknown escape mode: bogus/, fn ->
+          Stem.CLI.run(["--escape", "bogus", data_path, template])
+        end
+      after
+        File.rm_rf!(temp_dir)
+      end
+    end
   end
 
   describe "Stem.CLI.render_template!" do

@@ -19,7 +19,7 @@ When authoring templates, expect Elixir-style data resolution and truthiness. Fo
 
 ## Links
 
-- [[Elixir Truthiness Semantics]] - Where the semantics diverge most clearly.
+- [[Handlebars Truthiness Semantics]] - Where the semantics diverge most clearly.
 - [[Native AST Compilation Pipeline]] - The mechanism enabling this performance.
 - [[Compile-Time-Only Security Model]] - The runtime trust-boundary trade-off.
 - [[Strict CLI Contract and Launcher]] - The philosophy of explicit data separation in tooling.
