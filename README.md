@@ -82,7 +82,7 @@ Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 - Helper calls support nested subexpressions such as `{{format (uppercase name)}}`.
 - Elixir-style helper pipelines such as `{{user.name |> trim |> upcase |> truncate(20)}}` compile to nested helper calls.
 - `{{#each items as |item idx|}}` and `{{#with story as |article|}}` introduce block parameters.
-- `{{~ ... ~}}` trims surrounding literal whitespace around a tag.
+- `{{~ ... ~}}`, `{{~ ...}}`, and `{{... ~}}` trim surrounding literal whitespace around a tag on both or one side.
 
 Bare identifiers resolve to assigns, so `{{name}}` reads the `:name` assign.
 Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the index, and `{{@key}}` the key when iterating a map.

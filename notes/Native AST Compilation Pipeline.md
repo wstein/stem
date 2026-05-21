@@ -22,6 +22,7 @@ Owning the pipeline gives precise error positions, a real AST to analyse, and fu
 Treat the four stages as the contract: add lexical concerns to the tokenizer, structural concerns to the parser, and lowering concerns to the compiler.
 Keep expression semantics in `Stem.Expression` so the parser stays independent of how tags are interpreted.
 Subexpressions, helper pipelines, block parameters, whitespace control, diagnostics, and safe-mode checks all attach to one of those owned stages instead of re-parsing raw template text later.
+Whitespace control includes the one-sided variants `{{~ ...}}` and `{{... ~}}` as well as the symmetric `{{~ ... ~}}` form.
 
 ## Links
 

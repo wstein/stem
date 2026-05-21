@@ -155,6 +155,24 @@ defmodule Mix.Tasks.StemTest do
       assert output == "foo 7\n"
     end
 
+    test "reads data from standard input with trim markers in the template" do
+      template_path =
+        Path.join(System.tmp_dir!(), "stem-cli-trim-#{System.unique_integer([:positive])}.stem")
+
+      File.write!(template_path, "test - {{~name~}} \n-")
+
+      try do
+        output =
+          capture_io([input: ~s({"name":"Tom"})], fn ->
+            Stem.CLI.run([template_path])
+          end)
+
+        assert output == "test -Tom-"
+      after
+        File.rm(template_path)
+      end
+    end
+
     test "empty standard input renders an empty template" do
       assert capture_io([input: ""], fn -> Stem.CLI.run(["-"]) end) == ""
     end

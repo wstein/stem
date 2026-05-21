@@ -82,6 +82,11 @@ defmodule StemTest do
       assert eval("a {{~name~}} b", assigns: [name: "Nina"]) == "aNinab"
     end
 
+    test "one-sided whitespace control trims only one side" do
+      assert eval("a {{~name}} b", assigns: [name: "Nina"]) == "aNina b"
+      assert eval("a {{name~}} b", assigns: [name: "Nina"]) == "a Ninab"
+    end
+
     test "dotted paths read nested values" do
       assert eval("{{user.name}}", assigns: [user: %{name: "Nina"}]) == "Nina"
     end
@@ -153,6 +158,11 @@ defmodule StemTest do
 
     test "whitespace control works around block tags" do
       assert eval(" {{~#if ok~}} yes {{~/if~}} ", assigns: [ok: true]) == "yes"
+    end
+
+    test "one-sided whitespace control works around block tags" do
+      assert eval(" {{~#if ok}}yes{{/if}} ", assigns: [ok: true]) == "yes "
+      assert eval(" {{#if ok~}}yes{{/if}} ", assigns: [ok: true]) == " yes "
     end
 
     test "each block params bind item and index" do

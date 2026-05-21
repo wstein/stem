@@ -21,6 +21,22 @@ defmodule Stem.TokenizerTest do
            ]
   end
 
+  test "one-sided trim markers trim only the marked side" do
+    assert tokens("a {{~name}} b") == [
+             {:text, "a", %{line: 1, column: 1}},
+             {:expr, "name", %{line: 1, column: 3}},
+             {:text, " b", %{line: 1, column: 12}},
+             {:eof, %{line: 1, column: 14}}
+           ]
+
+    assert tokens("a {{name~}} b") == [
+             {:text, "a ", %{line: 1, column: 1}},
+             {:expr, "name", %{line: 1, column: 3}},
+             {:text, "b", %{line: 1, column: 13}},
+             {:eof, %{line: 1, column: 14}}
+           ]
+  end
+
   test "plain text becomes a single text token" do
     assert tokens("foo bar") == [
              {:text, "foo bar", %{line: 1, column: 1}},

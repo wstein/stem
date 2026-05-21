@@ -26,6 +26,11 @@ defmodule Stem.FormatterTest do
              " {{~#if ok~}} yes {{~/if~}} "
   end
 
+  test "preserves one-sided whitespace trim markers" do
+    assert Stem.Formatter.format_string("{{~ name }}") == "{{~name}}"
+    assert Stem.Formatter.format_string("{{ name ~}}") == "{{name~}}"
+  end
+
   test "formats partials, comments, else, and empty tags" do
     assert Stem.Formatter.format_string("{{ > greet }}") == "{{> greet}}"
     assert Stem.Formatter.format_string("{{ else }}") == "{{else}}"

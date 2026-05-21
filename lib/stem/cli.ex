@@ -124,12 +124,12 @@ defmodule Stem.CLI do
 
   defp template_uses_assigns?(template) when is_binary(template) do
     Regex.scan(~r/\{\{\{?\s*(.*?)\s*\}\}\}?/s, template)
-    |> Enum.any?(fn [_, expr] -> expression_uses_assigns?(String.trim(expr)) end)
+    |> Enum.any?(fn [_, expr] -> expression_uses_assigns?(normalize_expression(expr)) end)
   end
 
   defp template_uses_helpers?(template) when is_binary(template) do
     Regex.scan(~r/\{\{\{?\s*(.*?)\s*\}\}\}?/s, template)
-    |> Enum.any?(fn [_, expr] -> helper_expression?(String.trim(expr)) end)
+    |> Enum.any?(fn [_, expr] -> helper_expression?(normalize_expression(expr)) end)
   end
 
   defp helper_expression?(expr) do
@@ -166,6 +166,14 @@ defmodule Stem.CLI do
   end
 
   defp helper_name?(name), do: String.match?(name, ~r/^[a-z_][a-zA-Z0-9_]*$/)
+
+  defp normalize_expression(expr) do
+    expr
+    |> String.trim()
+    |> String.trim_leading("~")
+    |> String.trim_trailing("~")
+    |> String.trim()
+  end
 
   defp expression_uses_assigns?(expr) do
     case String.split(expr) do
