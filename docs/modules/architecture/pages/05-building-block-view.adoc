@@ -31,7 +31,7 @@ The compiler is a four-stage pipeline supported by helper, runtime, and command-
 | Resolves assigns when a compiled template runs.
 
 | `Stem.Helpers`, `Stem.Builtins`
-| Helper registry and invocation, built-in sanitize helpers, and the `each` loop primitive.
+| Helper registry and invocation, built-in helpers (including `escape_html`), and the `each` loop primitive.
 
 | `Stem.DSL`, `Stem.CLI`, `Mix.Tasks.Stem`
 | Declarative macros, the command-line renderer, and the Mix task.

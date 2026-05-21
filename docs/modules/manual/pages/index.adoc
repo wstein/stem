@@ -3,12 +3,41 @@
 
 Use this space for task-oriented operating guidance.
 
-== Suggested Sections
+== Command Line Interface (CLI)
 
-* local development workflow
-* build and test commands
-* release or deployment procedure
-* troubleshooting and recovery steps
+Stem ships with an explicit, file-centric CLI that allows you to easily format and execute templates from your shell.
+
+=== Formatting Templates
+
+To format your `.stem` template files, use the `mix stem.format` task:
+
+[source,sh]
+----
+mix stem.format "lib/**/*.stem"
+mix stem.format --check-formatted path/to/template.stem
+----
+
+=== Rendering Templates
+
+The CLI supports strict file or standard input models for binding data, modeled after standard Mustache CLI tooling conventions.
+
+*File-backed Data and Template:*
+When providing two positional arguments, the first specifies a JSON data file and the second points to the `.stem` template file:
+
+[source,sh]
+----
+mix stem data.json template.stem
+----
+
+*Standard Input Interpolation:*
+When providing a single positional argument, the CLI reads the JSON object from the pipeline standard input and applies it to the template:
+
+[source,sh]
+----
+echo '{"name":"Nina"}' | mix stem template.stem
+----
+
+By isolating the data into standalone files or pipes, there is no ambiguity parsing raw strings vs files on the command line.
 
 == Relationship To The Other Docs
 

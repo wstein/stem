@@ -1,17 +1,20 @@
 = Start Here
 :page-layout: default
 
-Welcome to `myproject`.
+Welcome to `Stem`.
 
 == What This Project Is
 
-Replace this section with a short explanation of the product, service, or tool
-you are building.
+Stem is a native template compiler for Elixir that fuses the familiar syntax of Handlebars with the attribute strictness of StringTemplate and the powerful transformation pipelines of Jinja2. It compiles double-curly-brace (`{{ }}`) templates directly into Elixir's abstract syntax tree.
+
+Unlike earlier templating efforts that translated text via EEx, Stem owns the entire pipeline from lexing to macro generation, offering exact compile-time checks, fast rendering performance, and explicit security models.
 
 == First Steps
 
-* Explain how to build or run the project locally.
-* Point contributors to the primary workflows they should learn first.
+* Format your code locally with `mix stem.format`.
+* Generate documentation with `mix docs`.
+* Check out the `.stem` test files in the `test/fixtures/` directory to grasp how Stem templates map to data constructs.
+* Try running a template directly using the bundled `mix stem` task or the `bin/stem` shell launcher: `echo '{"name": "Alice"}' | bin/stem test/fixtures/stem_template.stem`
 * Link deeper operational detail into xref:manual:index.adoc[the manual].
 
 == How The Docs Are Organized

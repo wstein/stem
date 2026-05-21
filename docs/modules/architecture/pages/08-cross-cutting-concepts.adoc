@@ -3,6 +3,23 @@
 
 Use this chapter for concepts that apply across multiple building blocks.
 
-== Shared Concerns
+== Security and HTML Escaping
 
-Examples include observability, security, configuration, and error handling.
+Stem does not perform automatic HTML escaping; `{{ expression }}` renders the expression result directly as a string.
+Any output transformation, including sanitization and escaping, must be done explicitly through helper functions (e.g., `{{name |> escape_html}}`) or ordinary Elixir function calls used in expressions.
+
+Keeping the rendering model to one expression form removes ambiguous output modes and makes security-sensitive formatting decisions explicit at the call site.
+Callers must treat all dynamically selected templates and user-provided context as untrusted, applying sanitization at the output boundary.
+
+== Explicit Data Boundaries
+
+Stem preserves an explicit boundary between data and templates at all levels.
+In the CLI, the command contract differentiates between file-backed JSON (`mix stem data.json template.stem`) and stdin-piped JSON (`echo '{}' | mix stem template.stem`), avoiding implicit ambiguity parsing strings versus files.
+
+== Whitespace Control
+
+Stem provides declarative, tag-level whitespace control using the `~` character.
+Whitespace logic allows adjusting spacing around rendered content without littering source files with unreadable formatting:
+
+* `{{~ ... ~}}`: Trims literal whitespace symmetrically before and after the tag.
+* `{{~ ... }}` and `{{ ... ~}}`: Trims whitespace precisely on the given side (one-sided trim).

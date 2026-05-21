@@ -30,3 +30,13 @@ Output rendering remains unescaped by default and transformations are explicit v
 
 *Consequences.* Runtime evaluation is supported directly, so callers must enforce trust boundaries around template input.
 Escaping and sanitization are explicit responsibilities of helper functions and calling code.
+
+=== ADR-0003: Explicit Data Boundaries and CLI Contract
+
+Accepted (2026-05-21).
+
+*Context.* The CLI previously allowed flexible inline JSON data directly in the positional arguments (`stem template.stem '{"key": "value"}'`), which mixed string evaluation with file paths.
+
+*Decision.* Remove inline JSON from the positional CLI contract. Establish a Mustache-style contract: one argument (`stem template.stem`) means the template gets bound to JSON read from standard input. Two arguments (`stem data.json template.stem`) mean file-backed data first, then the template.
+
+*Consequences.* The CLI behavior is strictly file-based or pipe-based, avoiding ambiguity and reinforcing Stem's philosophy of explicit data separation and strict input boundaries.
