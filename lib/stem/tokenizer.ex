@@ -11,7 +11,7 @@ defmodule Stem.Tokenizer do
   # parser's job; expression semantics belong to `Stem.Expression`.
 
   @type meta :: %{line: pos_integer(), column: pos_integer()}
-  @type kind :: :if | :unless | :each | :with
+  @type kind :: :if | :unless | :each | :with | :region
 
   @type token ::
           {:text, binary(), meta()}
@@ -19,10 +19,17 @@ defmodule Stem.Tokenizer do
           | {:block_open, kind(), binary(), meta()}
           | {:block_else, meta()}
           | {:block_close, kind(), meta()}
+          | {:yield, binary(), meta()}
           | {:partial, binary(), meta()}
           | {:eof, meta()}
 
-  @block_kinds %{"if" => :if, "unless" => :unless, "each" => :each, "with" => :with}
+  @block_kinds %{
+    "if" => :if,
+    "unless" => :unless,
+    "each" => :each,
+    "with" => :with,
+    "region" => :region
+  }
 
   @spec tokenize(binary(), keyword()) :: {:ok, [token()]} | {:error, binary(), meta()}
   def tokenize(source, opts \\ []) when is_binary(source) do
@@ -141,6 +148,9 @@ defmodule Stem.Tokenizer do
       tag == "else" ->
         {:ok, {:block_else, meta}}
 
+      first_word(tag) == "yield" ->
+        classify_yield(tag, meta)
+
       String.starts_with?(tag, "#") ->
         classify_open(tag, meta)
 
@@ -183,6 +193,11 @@ defmodule Stem.Tokenizer do
     end
   end
 
+  defp classify_yield(tag, meta) do
+    {_yield, args} = split_first_word(tag)
+    {:ok, {:yield, args, meta}}
+  end
+
   defp classify_close(tag, meta) do
     name = binary_part(tag, 1, byte_size(tag) - 1) |> String.trim()
 
@@ -197,6 +212,12 @@ defmodule Stem.Tokenizer do
       [word] -> {word, ""}
       [word, rest] -> {word, String.trim(rest)}
     end
+  end
+
+  defp first_word(string) do
+    string
+    |> split_first_word()
+    |> elem(0)
   end
 
   defp extract_trim_markers(inner) do

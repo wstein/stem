@@ -92,6 +92,15 @@ defmodule Stem.TokenizerTest do
     assert [{:block_open, :with, "story", _} | _] = tokens("{{#with story}}{{/with}}")
   end
 
+  test "region blocks and yield tags" do
+    assert [
+             {:block_open, :region, "body", _},
+             {:yield, "body", _},
+             {:block_close, :region, _},
+             {:eof, _}
+           ] = tokens("{{#region body}}{{yield body}}{{/region}}")
+  end
+
   test "else token" do
     assert [{:block_open, :if, "a", _}, {:block_else, _}, {:block_close, :if, _}, {:eof, _}] =
              tokens("{{#if a}}{{else}}{{/if}}")

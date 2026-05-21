@@ -13,7 +13,7 @@ defmodule Stem.Parser do
   alias Stem.Expression
   alias Stem.Tokenizer
 
-  @kind_tags %{if: "if", unless: "unless", each: "each", with: "with"}
+  @kind_tags %{if: "if", unless: "unless", each: "each", with: "with", region: "region"}
 
   @spec parse(binary(), keyword()) :: {:ok, Stem.AST.t()} | {:error, binary(), Tokenizer.meta()}
   def parse(source, opts \\ []) when is_binary(source) do
@@ -60,6 +60,14 @@ defmodule Stem.Parser do
     end
   end
 
+  defp collect([{:yield, raw_name, meta} | rest], partials, stack, acc) do
+    with :ok <- validate_region_name(raw_name) do
+      collect(rest, partials, stack, [{:yield, raw_name, meta} | acc])
+    else
+      {:error, message} -> {:error, message, meta}
+    end
+  end
+
   defp collect([{:partial, name, meta} | rest], partials, stack, acc) do
     case expand_partial(name, meta, partials, stack) do
       {:ok, nodes} -> collect(rest, partials, stack, Enum.reverse(nodes, acc))
@@ -89,6 +97,9 @@ defmodule Stem.Parser do
   defp parse_block(kind, args, meta, tokens, partials, stack) do
     with {:ok, expr, params} <- parse_block_expression(kind, args) do
       case collect(tokens, partials, stack, []) do
+        {:ok, _body, {:else, else_meta}, _rest} when kind == :region ->
+          {:error, "unexpected '{{else}}' inside '{{#region}}'", else_meta}
+
         {:ok, body, {:else, _else_meta}, rest} ->
           parse_else(kind, expr, params, body, meta, rest, partials, stack)
 
@@ -145,6 +156,14 @@ defmodule Stem.Parser do
     end
   end
 
+  defp parse_block_expression(:region, args) do
+    name = String.trim(args)
+
+    with :ok <- validate_region_name(name) do
+      {:ok, name, []}
+    end
+  end
+
   defp split_block_params(args) do
     case Regex.run(~r/^(.*?)(?:\s+as\s+\|([^|]+)\|)?\s*$/s, args, capture: :all_but_first) do
       [expr_source] ->
@@ -187,6 +206,9 @@ defmodule Stem.Parser do
   defp block_node(:with, expr, params, body, else_body, meta),
     do: {:with, expr, params, body, else_body, meta}
 
+  defp block_node(:region, name, _params, body, _else_body, meta),
+    do: {:region, name, body, meta}
+
   defp block_node(kind, expr, _params, body, else_body, meta),
     do: {kind, expr, body, else_body, meta}
 
@@ -222,5 +244,18 @@ defmodule Stem.Parser do
 
   defp normalize_partials(partials) when is_list(partials) do
     partials |> Enum.into(%{}) |> normalize_partials()
+  end
+
+  defp validate_region_name(name) do
+    cond do
+      name == "" ->
+        {:error, "region name is required"}
+
+      String.match?(name, ~r/^[a-z_][a-zA-Z0-9_]*$/) ->
+        :ok
+
+      true ->
+        {:error, "region names must be simple identifiers"}
+    end
   end
 end

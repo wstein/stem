@@ -43,4 +43,19 @@ defmodule Stem.CompilerTest do
            ) ==
              "Stem"
   end
+
+  test "regions render through yields across inline partial layouts" do
+    {:ok, ast} =
+      Parser.parse("{{#region body}}<p>{{content}}</p>{{/region}}{{> layout}}",
+        partials: %{layout: "<article>{{yield body}}</article>"}
+      )
+
+    {result, _bindings} = Code.eval_quoted(Compiler.compile(ast), assigns: [content: "Hello"])
+
+    assert result == "<article><p>Hello</p></article>"
+  end
+
+  test "missing yields render as empty strings" do
+    assert render("<main>{{yield body}}</main>", []) == "<main></main>"
+  end
 end

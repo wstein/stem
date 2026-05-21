@@ -46,6 +46,13 @@ defmodule Stem.ParserTest do
              ast("{{#with story}}{{this.title}}{{/with}}")
   end
 
+  test "region blocks and yields" do
+    assert [
+             {:region, "body", [{:text, "hi"}, {:yield, "sidebar", _}], _},
+             {:yield, "body", _}
+           ] = ast("{{#region body}}hi{{yield sidebar}}{{/region}}{{yield body}}")
+  end
+
   test "nested blocks" do
     assert [
              {:each, {:identifier, "rows"}, [],
@@ -74,6 +81,16 @@ defmodule Stem.ParserTest do
     assert {:error,
             "pipeline stages must be helper names or helper calls like trim or truncate(20)", _} =
              Parser.parse("{{#if name |> String.trim()}}ok{{/if}}")
+  end
+
+  test "invalid region names are rejected" do
+    assert {:error, "region name is required", _} = Parser.parse("{{yield}}")
+
+    assert {:error, "region names must be simple identifiers", _} =
+             Parser.parse("{{yield hero-body}}")
+
+    assert {:error, "region names must be simple identifiers", _} =
+             Parser.parse("{{#region hero-body}}x{{/region}}")
   end
 
   test "partials are expanded inline" do
@@ -125,6 +142,11 @@ defmodule Stem.ParserTest do
     test "second else inside a block" do
       assert {:error, "unexpected second '{{else}}' inside '{{#each}}'", _} =
                Parser.parse("{{#each xs}}a{{else}}b{{else}}c{{/each}}")
+    end
+
+    test "else inside region is rejected" do
+      assert {:error, "unexpected '{{else}}' inside '{{#region}}'", _} =
+               Parser.parse("{{#region body}}x{{else}}y{{/region}}")
     end
 
     test "unknown partial" do

@@ -87,7 +87,8 @@ Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 * `{{{expression}}}` evaluates an expression and prints the string result without escaping (raw output).
 * `{{! comment }}` and `{{!-- comment --}}` are discarded.
 * `{{> partial}}` expands a named partial.
-* `{{#if}}`, `{{#unless}}`, `{{#each}}`, and `{{#with}}` open blocks closed by `{{/...}}`, each with an optional `{{else}}`.
+* `{{#if}}`, `{{#unless}}`, `{{#each}}`, `{{#with}}`, and `{{#region name}}` open blocks closed by `{{/...}}`, with `{{else}}` available on conditional and iteration blocks.
+* `{{yield name}}` renders a named region from the current expanded template scope.
 * Helper calls support nested subexpressions such as `{{format (uppercase name)}}`.
 * Elixir-style helper pipelines such as `{{user.name |> trim |> upcase |> truncate(20)}}` compile to nested helper calls.
 * `{{#each items as |item idx|}}` and `{{#with story as |article|}}` introduce block parameters.
@@ -101,25 +102,22 @@ Use helpers or regular Elixir functions when output needs transformation (for ex
 Nested brace forms inside expressions are not supported.
 Pipeline stages are restricted to helper names and helper calls so templates stay declarative.
 
-## Layouts with Partials
+## Layouts with Regions and Partials
 
-Stem does not ship block-region layout syntax today. The supported layout pattern is higher-order partial composition: define a wrapper partial that expands other partials, and let those partials read the surrounding assigns directly instead of threading every value through intermediate layers.
+Stem supports first-class named regions for layout composition. Define a region in the caller, then render it inside a wrapper partial with `{{yield name}}`. Because partials still expand inline during parsing, yields can resolve regions across nested partial boundaries without prop drilling.
 
 ```elixir
 partials = %{
-  layout: "<article>{{> header}}<main>{{> body}}</main>{{> footer}}</article>",
-  header: "<h1>{{title}}</h1>",
-  body: "{{content}}",
-  footer: "<small>{{site_name}}</small>"
+  layout: "<article><header>{{yield header}}</header><main>{{yield body}}</main></article>"
 }
 
-Stem.eval_string("{{> layout}}",
-  assigns: [title: "Stem", content: "Hello", site_name: "Docs"],
+Stem.eval_string("{{#region header}}<h1>{{title}}</h1>{{/region}}{{#region body}}Hello {{name}}{{/region}}{{> layout}}",
+  assigns: [title: "Stem", name: "Nina"],
   partials: partials
 )
 ```
 
-Because partials expand inline during parsing, nested partials inherit the ambient scope automatically. That gives you layout composition without adding a separate parameter-passing system on top of assigns.
+Missing yields render as empty strings, so wrapper partials can expose optional slots without extra conditionals.
 
 ## Runtime APIs
 
@@ -178,8 +176,7 @@ Create a `.stem.config.json` file in your project root to set default options fo
 {
   "escape": "html",
   "warn_on_missing_assigns": false,
-  "mode": "permissive",
-  "lock_security": false
+  "mode": "permissive"
 }
 ```
 
@@ -188,86 +185,21 @@ Create a `.stem.config.json` file in your project root to set default options fo
 * `escape` - Default escape mode: `none`, `html` (default), `xml`, `json`, `url`
 * `warn_on_missing_assigns` - Print warnings for missing assigns: `true` or `false`
 * `mode` - Template evaluation mode: `permissive` (default) or `safe`
-* `lock_security` - Prevent template frontmatter from overriding project-level `escape` and `mode`
 
 **Config discovery**: Stem walks up the directory tree from the current working directory to find `.stem.config.json`. It stops at the project root (when `mix.exs` is found) or the filesystem root.
 
 **Option precedence** (highest to lowest):
 
 1. Explicit compile/eval options
-2. Per-template frontmatter
-3. CLI flags (via `--escape`, `--strict`)
-4. Config file (`.stem.config.json`)
-5. Defaults
-
-When `lock_security` is `true` in `.stem.config.json`, that precedence changes only for security-sensitive frontmatter keys: template frontmatter can no longer override the project-level `escape` or `mode` values, while explicit API options and CLI flags still can.
+2. CLI flags (via `--escape`, `--strict`)
+3. Config file (`.stem.config.json`)
+4. Defaults
 
 Example with CLI override:
 
 ```bash
 # Config file has escape: xml
 # But CLI flag overrides it
-bin/stem data.json template.stem --escape html
-```
-
-### Per-Template Config with YAML Frontmatter
-
-Add YAML frontmatter at the top of `.stem` files to set template-specific options. Frontmatter takes precedence over the config file but can be overridden by explicit options.
-
-```handlebars
----
-escape: json
-mode: safe
-warn_on_missing_assigns: true
----
-
-{{#if data}}
-  Result: {{data}}
-{{else}}
-  No data
-{{/if}}
-```
-
-**Supported frontmatter fields**:
-
-* `escape` - Escape mode for this template
-* `mode` - Safe or permissive evaluation mode
-* `warn_on_missing_assigns` - Warn on missing assigns
-
-If the project config enables `lock_security`, the `escape` and `mode` fields are ignored in frontmatter so individual templates cannot silently weaken project-wide security settings.
-
-**Frontmatter syntax**:
-
-* Must start with `---` on the first line
-* Must be closed with `---` on its own line
-* Supports YAML key: value pairs (keys and boolean values are case-insensitive)
-* Comments starting with `#` are ignored
-* Empty lines are allowed
-
-**Example frontmatter variations**:
-
-```handlebars
----
-escape: none
----
-Raw HTML: {{{html_content}}}
-```
-
-```handlebars
----
-mode: safe
-warn_on_missing_assigns: true
----
-{{name |> upcase}}
-```
-
-**Precedence example**:
-
-```bash
-# If template has frontmatter: escape: json
-# And config file has: escape: xml
-# And CLI has: --escape html
-# Result: --escape html wins (CLI > frontmatter > config)
 bin/stem data.json template.stem --escape html
 ```
 

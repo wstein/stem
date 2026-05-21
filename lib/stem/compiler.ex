@@ -26,14 +26,18 @@ defmodule Stem.Compiler do
       escape: Keyword.get(opts, :escape, :html),
       in_each: false,
       locals: %{},
-      mode: Keyword.get(opts, :mode, :permissive)
+      mode: Keyword.get(opts, :mode, :permissive),
+      region_stack: [],
+      regions: %{}
     }
 
     compile_nodes(nodes, state)
   end
 
   defp compile_nodes(nodes, state) do
-    segments = Enum.map(nodes, &compile_node(&1, state))
+    {regions, visible_nodes} = extract_regions(nodes)
+    state = %{state | regions: Map.merge(state.regions, regions)}
+    segments = Enum.map(visible_nodes, &compile_node(&1, state))
     quote(do: IO.iodata_to_binary(unquote(segments)))
   end
 
@@ -44,6 +48,20 @@ defmodule Stem.Compiler do
     escaped = quote(do: String.Chars.to_string(unquote(expr)))
     apply_escape(escaped, escape_mode, state)
   end
+
+  defp compile_node({:yield, name, meta}, state) do
+    if name in state.region_stack do
+      raise CompileError,
+        file: state.file,
+        line: meta.line,
+        description: "recursive region yield detected for '#{name}'"
+    end
+
+    region_nodes = Map.get(state.regions, name, [])
+    compile_nodes(region_nodes, %{state | region_stack: [name | state.region_stack]})
+  end
+
+  defp compile_node({:region, _name, _body, _meta}, _state), do: ""
 
   defp compile_node({:if, expr_ast, body, else_body, meta}, state) do
     warn_on_constant_condition(:if, expr_ast, meta, state)
@@ -257,6 +275,11 @@ defmodule Stem.Compiler do
 
   defp node_references_identifier?({:text, _text}, _name), do: false
 
+  defp node_references_identifier?({:yield, _region_name, _meta}, _name), do: false
+
+  defp node_references_identifier?({:region, _region_name, body, _meta}, name),
+    do: body_references_identifier?(body, name)
+
   defp node_references_identifier?({:expr, expr_ast, _escape_mode, _meta}, name),
     do: Expression.references_identifier?(expr_ast, name)
 
@@ -305,5 +328,16 @@ defmodule Stem.Compiler do
     if state.diagnostics do
       IO.warn("#{state.file}:#{meta.line}: #{message}")
     end
+  end
+
+  defp extract_regions(nodes) do
+    Enum.reduce(nodes, {%{}, []}, fn
+      {:region, name, body, _meta}, {regions, visible_nodes} ->
+        {Map.put(regions, name, body), visible_nodes}
+
+      node, {regions, visible_nodes} ->
+        {regions, [node | visible_nodes]}
+    end)
+    |> then(fn {regions, visible_nodes} -> {regions, Enum.reverse(visible_nodes)} end)
   end
 end

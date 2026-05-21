@@ -18,6 +18,8 @@ defmodule Stem.AST do
   @type node_t ::
           {:text, binary()}
           | {:expr, Stem.Expression.expr_t(), atom(), meta()}
+          | {:yield, binary(), meta()}
+          | {:region, binary(), [node_t()], meta()}
           | {:if, Stem.Expression.expr_t(), [node_t()], [node_t()], meta()}
           | {:unless, Stem.Expression.expr_t(), [node_t()], [node_t()], meta()}
           | {:each, Stem.Expression.expr_t(), [binary()], [node_t()], [node_t()], meta()}
