@@ -1,14 +1,16 @@
 # Stem
 
-Stem is a native Handlebars-inspired template compiler for Elixir.
+Stem is a native template compiler for Elixir that fuses the familiar syntax of **Handlebars** with the attribute strictness of **StringTemplate** and the powerful transformation pipelines of **Jinja2**.
 It compiles double-curly-brace templates directly into Elixir's abstract syntax tree.
 There is no intermediate template language.
 
 ## Why Stem
 
-Templates become ordinary compiled functions, so rendering is fast and type-checked by the compiler.
-You can choose compile-time macros for static templates or runtime compile/eval APIs for dynamic templates.
-The syntax stays familiar if you know double-curly templating systems.
+*   **Handlebars Syntax**: Remains approachable and compatible with standard frontend tooling.
+*   **StringTemplate Strictness**: Enforces clear separation of concerns with restricted expression evaluation and safe-mode compatibility.
+*   **Jinja2 Pipelines**: Enables elegant data transformation using the Elixir-style `|>` pipe operator to chain built-in and project-specific helpers.
+*   **Native Performance**: Templates become ordinary compiled functions, so rendering is fast and type-checked by the compiler.
+*   **Flexibility**: Choose compile-time macros for static performance or runtime APIs for dynamic content.
 
 ## Quick Start
 
