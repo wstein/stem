@@ -74,6 +74,10 @@ defmodule Stem do
       constant block conditions and unused block parameters. Defaults to
       `false`.
 
+    * `:warn_on_falsy_coercion` - when `true`, Stem warns at render time when
+      values like `0`, `""`, `[]`, or `%{}` are coerced to false under
+      Handlebars truthiness. Defaults to `false`.
+
     * `:contract` - a keyword list like `[required: [:title], optional:
       [:subtitle]]` used to validate required assigns before rendering.
 
@@ -122,10 +126,10 @@ defmodule Stem do
       iex> Greeting.render(name: "Nina")
       "Hello Nina"
 
-  Block conditionals follow Elixir truthiness: only `false` and `nil` are
-  falsey, while `0`, `""`, and `[]` are truthy. For checks that should treat
-  `0` as false, use `&&`, `||`, and parentheses, as in
-  `{{#if (render && render != 0) || fallback}}`.
+  Block conditionals follow Handlebars truthiness: `false`, `nil`, `0`, `""`,
+  `[]`, and `%{}` are falsey. Pass `warn_on_falsy_coercion: true` to surface
+  when native Elixir values are being coerced into that falsey set at render
+  time.
 
   Missing assigns render as an empty string. Pass `warn_on_missing_assigns:
   true` to print a warning for missing values.
@@ -149,6 +153,7 @@ defmodule Stem do
           | {:column, column}
           | {:partials, map() | keyword()}
           | {:warn_on_missing_assigns, boolean()}
+          | {:warn_on_falsy_coercion, boolean()}
           | {:contract, keyword()}
           | {:mode, :permissive | :safe}
           | {atom(), term()}

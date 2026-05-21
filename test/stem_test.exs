@@ -125,8 +125,10 @@ defmodule StemTest do
       assert eval("{{#unless ok}}no{{/unless}}", assigns: [ok: true]) == ""
     end
 
-    test "blocks follow Elixir truthiness" do
-      assert eval("{{#if v}}t{{else}}f{{/if}}", assigns: [v: 0]) == "t"
+    test "blocks follow Handlebars truthiness" do
+      assert eval("{{#if v}}t{{else}}f{{/if}}", assigns: [v: 0]) == "f"
+      assert eval("{{#unless v}}t{{else}}f{{/unless}}", assigns: [v: ""]) == "t"
+      assert eval("{{#if v}}t{{else}}f{{/if}}", assigns: [v: []]) == "f"
       assert eval("{{#if v}}t{{else}}f{{/if}}", assigns: [v: nil]) == "f"
     end
 

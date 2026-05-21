@@ -15,6 +15,11 @@ defmodule Stem.CompilerDiagnosticsTest do
     Compiler.compile(ast, file: "diagnostics.stem", warn_on_diagnostics: true)
   end
 
+  defp compile_template(template, opts) do
+    {:ok, ast} = Parser.parse(template)
+    Compiler.compile(ast, Keyword.merge([file: "diagnostics.stem"], opts))
+  end
+
   test "warns on constant conditions" do
     stderr =
       capture_io(:stderr, fn ->
@@ -60,6 +65,26 @@ defmodule Stem.CompilerDiagnosticsTest do
       end)
 
     assert stderr == ""
+  end
+
+  test "warns when Handlebars truthiness coerces native Elixir values" do
+    stderr =
+      capture_io(:stderr, fn ->
+        quoted =
+          compile_template(
+            "{{#if zero}}if{{/if}}{{#with empty_map}}with{{/with}}{{#each empty_list}}{{this}}{{/each}}",
+            warn_on_falsy_coercion: true
+          )
+
+        Code.eval_quoted(quoted,
+          assigns: %{zero: 0, empty_map: %{}, empty_list: []},
+          helpers: []
+        )
+      end)
+
+    assert stderr =~ "diagnostics.stem:1: if coerces 0 to falsy under Stem truthiness"
+    assert stderr =~ "diagnostics.stem:1: with coerces %{} to falsy under Stem truthiness"
+    assert stderr =~ "diagnostics.stem:1: each coerces [] to falsy under Stem truthiness"
   end
 
   test "nested control-flow still counts block params as used" do

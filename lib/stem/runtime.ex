@@ -40,4 +40,32 @@ defmodule Stem.Runtime do
   """
   @spec is_truthy(term()) :: boolean()
   def is_truthy(value), do: value not in [false, nil, 0, "", [], %{}]
+
+  @spec is_truthy(term(), keyword()) :: boolean()
+  def is_truthy(value, opts) when is_list(opts) do
+    value
+    |> warn_on_falsy_coercion(opts)
+    |> is_truthy()
+  end
+
+  @spec warn_on_falsy_coercion(term(), keyword()) :: term()
+  def warn_on_falsy_coercion(value, opts \\ []) when is_list(opts) do
+    if Keyword.get(opts, :warn_on_falsy_coercion, false) and coerced_falsey?(value) do
+      file = Keyword.get(opts, :file, "nofile")
+      line = Keyword.get(opts, :line, 1)
+      context = Keyword.get(opts, :context, :condition)
+
+      IO.warn(
+        "#{file}:#{line}: #{context} coerces #{inspect(value)} to falsy under Stem truthiness"
+      )
+    end
+
+    value
+  end
+
+  defp coerced_falsey?(0), do: true
+  defp coerced_falsey?(""), do: true
+  defp coerced_falsey?([]), do: true
+  defp coerced_falsey?(value) when is_map(value), do: map_size(value) == 0
+  defp coerced_falsey?(_value), do: false
 end

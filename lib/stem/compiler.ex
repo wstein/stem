@@ -22,6 +22,7 @@ defmodule Stem.Compiler do
       file: opts[:file] || "nofile",
       warn: Keyword.get(opts, :warn_on_missing_assigns, false),
       diagnostics: Keyword.get(opts, :warn_on_diagnostics, false),
+      warn_falsy: Keyword.get(opts, :warn_on_falsy_coercion, false),
       escape: Keyword.get(opts, :escape, :html),
       in_each: false,
       locals: %{},
@@ -46,7 +47,7 @@ defmodule Stem.Compiler do
 
   defp compile_node({:if, expr_ast, body, else_body, meta}, state) do
     warn_on_constant_condition(:if, expr_ast, meta, state)
-    condition = compile_expression(expr_ast, meta, state)
+    condition = compile_truthy_expression(expr_ast, meta, :if, state)
 
     quote do
       if unquote(condition),
@@ -57,7 +58,7 @@ defmodule Stem.Compiler do
 
   defp compile_node({:unless, expr_ast, body, else_body, meta}, state) do
     warn_on_constant_condition(:unless, expr_ast, meta, state)
-    condition = compile_expression(expr_ast, meta, state)
+    condition = compile_truthy_expression(expr_ast, meta, :unless, state)
 
     quote do
       if unquote(condition),
@@ -85,7 +86,15 @@ defmodule Stem.Compiler do
 
     quote do
       Stem.Builtins.each(
-        Stem.Builtins.each_entries(unquote(collection)),
+        Stem.Builtins.each_entries(
+          Stem.Runtime.warn_on_falsy_coercion(
+            unquote(collection),
+            warn_on_falsy_coercion: unquote(state.warn_falsy),
+            file: unquote(state.file),
+            line: unquote(meta.line),
+            context: :each
+          )
+        ),
         fn {unquote(current), unquote(stem_key)}, unquote(stem_index) ->
           unquote_splicing(block_param_assignments(:each, params, current, stem_index))
           unquote(body_ast)
@@ -104,7 +113,13 @@ defmodule Stem.Compiler do
     quote do
       unquote(this) = unquote(subject)
 
-      if Stem.Runtime.is_truthy(unquote(this)),
+      if Stem.Runtime.is_truthy(
+           unquote(this),
+           warn_on_falsy_coercion: unquote(state.warn_falsy),
+           file: unquote(state.file),
+           line: unquote(meta.line),
+           context: :with
+         ),
         do:
           (
             unquote_splicing(block_param_assignments(:with, params, this, nil))
@@ -134,6 +149,20 @@ defmodule Stem.Compiler do
     source
     |> Code.string_to_quoted!(file: state.file, line: meta.line, column: meta.column)
     |> Macro.prewalk(&rewrite_assign(&1, state.warn))
+  end
+
+  defp compile_truthy_expression(expr_ast, meta, context, state) do
+    value = compile_expression(expr_ast, meta, state)
+
+    quote do
+      Stem.Runtime.is_truthy(
+        unquote(value),
+        warn_on_falsy_coercion: unquote(state.warn_falsy),
+        file: unquote(state.file),
+        line: unquote(meta.line),
+        context: unquote(context)
+      )
+    end
   end
 
   defp rewrite_assign({:@, meta, [{name, _name_meta, atom}]}, warn)
@@ -180,7 +209,7 @@ defmodule Stem.Compiler do
   defp local_var(name), do: {String.to_atom(name), [generated: true], nil}
 
   defp warn_on_constant_condition(kind, {:literal, source}, meta, state) do
-    truthy = source not in ["false", "nil"]
+    truthy = literal_truthy?(source)
     outcome = if kind == :unless, do: !truthy, else: truthy
 
     warn(
@@ -191,6 +220,26 @@ defmodule Stem.Compiler do
   end
 
   defp warn_on_constant_condition(_kind, _expr_ast, _meta, _state), do: :ok
+
+  defp literal_truthy?(source) do
+    trimmed = String.trim(source)
+
+    case Code.string_to_quoted(trimmed) do
+      {:ok, value} ->
+        case literal_value(value) do
+          :unknown -> trimmed not in ["false", "nil"]
+          literal -> Stem.Runtime.is_truthy(literal)
+        end
+
+      _ ->
+        trimmed not in ["false", "nil"]
+    end
+  end
+
+  defp literal_value(value) when is_boolean(value) or is_nil(value) or is_number(value), do: value
+  defp literal_value(value) when is_binary(value) or is_list(value), do: value
+  defp literal_value({:%{}, _, []}), do: %{}
+  defp literal_value(_value), do: :unknown
 
   defp warn_on_unused_block_params(_kind, [], _body, _meta, _state), do: :ok
 
