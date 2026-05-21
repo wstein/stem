@@ -152,7 +152,7 @@ defmodule Stem.Tokenizer do
         {:ok, {:partial, name, meta}}
 
       true ->
-        {:ok, {:expr, tag, :none, meta}}
+        {:ok, {:expr, tag, :default, meta}}
     end
   end
 

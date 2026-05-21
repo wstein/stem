@@ -15,7 +15,7 @@ defmodule Stem.TokenizerTest do
   test "tilde trim markers remove adjacent whitespace" do
     assert tokens("a {{~name~}} b") == [
              {:text, "a", %{line: 1, column: 1}},
-             {:expr, "name", :none, %{line: 1, column: 3}},
+             {:expr, "name", :default, %{line: 1, column: 3}},
              {:text, "b", %{line: 1, column: 14}},
              {:eof, %{line: 1, column: 15}}
            ]
@@ -24,14 +24,14 @@ defmodule Stem.TokenizerTest do
   test "one-sided trim markers trim only the marked side" do
     assert tokens("a {{~name}} b") == [
              {:text, "a", %{line: 1, column: 1}},
-             {:expr, "name", :none, %{line: 1, column: 3}},
+             {:expr, "name", :default, %{line: 1, column: 3}},
              {:text, " b", %{line: 1, column: 12}},
              {:eof, %{line: 1, column: 14}}
            ]
 
     assert tokens("a {{name~}} b") == [
              {:text, "a ", %{line: 1, column: 1}},
-             {:expr, "name", :none, %{line: 1, column: 3}},
+             {:expr, "name", :default, %{line: 1, column: 3}},
              {:text, "b", %{line: 1, column: 13}},
              {:eof, %{line: 1, column: 14}}
            ]
@@ -56,13 +56,13 @@ defmodule Stem.TokenizerTest do
   test "double-brace expression" do
     assert tokens("Hi {{name}}") == [
              {:text, "Hi ", %{line: 1, column: 1}},
-             {:expr, "name", :none, %{line: 1, column: 4}},
+             {:expr, "name", :default, %{line: 1, column: 4}},
              {:eof, %{line: 1, column: 12}}
            ]
   end
 
   test "expression contents are trimmed" do
-    assert [{:expr, "name", :none, _}, {:eof, _}] = tokens("{{  name  }}")
+    assert [{:expr, "name", :default, _}, {:eof, _}] = tokens("{{  name  }}")
   end
 
   test "nested braces are rejected" do
@@ -104,7 +104,7 @@ defmodule Stem.TokenizerTest do
   test "tracks line and column across newlines" do
     assert [
              {:text, "a\n", %{line: 1, column: 1}},
-             {:expr, "b", :none, %{line: 2, column: 1}},
+             {:expr, "b", :default, %{line: 2, column: 1}},
              {:eof, %{line: 2, column: 6}}
            ] = tokens("a\n{{b}}")
   end
@@ -117,7 +117,7 @@ defmodule Stem.TokenizerTest do
   test "tracks lines across CRLF newlines" do
     assert [
              {:text, "a\r\n", %{line: 1, column: 1}},
-             {:expr, "b", :none, %{line: 2, column: 1}},
+             {:expr, "b", :default, %{line: 2, column: 1}},
              {:eof, _}
            ] = tokens("a\r\n{{b}}")
   end

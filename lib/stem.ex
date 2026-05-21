@@ -76,6 +76,11 @@ defmodule Stem do
       arbitrary Elixir expressions. `:safe` only allows structured Stem
       expressions, helpers, literals, and paths.
 
+    * `:escape` - the default escape mode for `{{ }}` expressions. One of
+      `:html` (default, recommended for security), `:none` (no escaping),
+      `:xml`, `:json`, `:url`, or a custom escape function. Use `{{{ }}}`
+      to override per expression and skip escaping.
+
   ## Syntax
 
   Stem supports the following tags:

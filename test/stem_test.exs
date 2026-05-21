@@ -54,8 +54,12 @@ defmodule StemTest do
       assert eval("foo bar") == "foo bar"
     end
 
-    test "expressions render without HTML escaping" do
-      assert eval("{{x}}", assigns: [x: ~s(<b>&"')]) == ~s(<b>&"')
+    test "expressions render without HTML escaping with triple braces" do
+      assert eval("{{{x}}}", assigns: [x: ~s(<b>&"')]) == ~s(<b>&"')
+    end
+
+    test "expressions render with HTML escaping by default" do
+      assert eval("{{x}}", assigns: [x: ~s(<b>&"')]) == ~s(&lt;b&gt;&amp;&quot;&#39;)
     end
 
     test "missing assigns render as empty string" do

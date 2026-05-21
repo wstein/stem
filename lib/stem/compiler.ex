@@ -22,6 +22,7 @@ defmodule Stem.Compiler do
       file: opts[:file] || "nofile",
       warn: Keyword.get(opts, :warn_on_missing_assigns, false),
       diagnostics: Keyword.get(opts, :warn_on_diagnostics, false),
+      escape: Keyword.get(opts, :escape, :html),
       in_each: false,
       locals: %{},
       mode: Keyword.get(opts, :mode, :permissive)
@@ -229,6 +230,13 @@ defmodule Stem.Compiler do
     do:
       Expression.references_identifier?(expr_ast, name) or body_references_identifier?(body, name) or
         body_references_identifier?(else_body, name)
+
+  defp apply_escape(value, :default, state) do
+    case state.escape do
+      :none -> value
+      escape_mode -> apply_escape(value, escape_mode, state)
+    end
+  end
 
   defp apply_escape(value, :none, _state), do: value
 

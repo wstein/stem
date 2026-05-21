@@ -13,7 +13,9 @@ defmodule Stem.StemMigrationTest do
   test "double braces resolve assigns without HTML escaping" do
     template = "Hello {{name}}"
 
-    assert Stem.TestTemplate.eval_string(template, assigns: [name: "<b>World</b>"]) ==
+    assert Stem.TestTemplate.eval_string(template, [assigns: [name: "<b>World</b>"]],
+             escape: :none
+           ) ==
              "Hello <b>World</b>"
   end
 
@@ -109,7 +111,8 @@ defmodule Stem.StemMigrationTest do
       Stem.TestTemplate.eval_file(
         template,
         [assigns: [person: %{url: "https://yehudakatz.com/"}]],
-        helpers: helpers
+        helpers: helpers,
+        escape: :none
       )
 
     assert output |> String.split("\n", trim: true) == [
@@ -129,7 +132,10 @@ defmodule Stem.StemMigrationTest do
   end
 
   test "double braces preserve apostrophe and quotes" do
-    assert Stem.TestTemplate.eval_string("{{name}}", assigns: [name: "'\""]) == "'\""
+    name_value = "'\""
+
+    assert Stem.TestTemplate.eval_string("{{name}}", [assigns: [name: name_value]], escape: :none) ==
+             name_value
   end
 
   test "missing assign renders as empty string" do
