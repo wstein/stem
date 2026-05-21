@@ -7,19 +7,15 @@ tags: [compiler, semantics]
 
 ## What
 
-A bare identifier resolves to an assign (`@name`) at the top level and to the current item (`current.name`) inside `{{#each}}`.
-`this`, `@index`, and `@key` map to the loop bindings; `../name` strips parent segments to a top-level assign; and a word followed by arguments is a helper call routed through `Stem.Helpers.invoke/3`.
-Anything else is treated as an Elixir expression with its identifiers rewritten to assigns.
+A bare identifier resolves to an assign at the top level and to the current item inside `{{#each}}`. Stem supports nested subexpressions `(helper arg)` and Elixir-style helper pipelines (`lhs |> helper(a, b)`). Anything else is treated as an Elixir expression with its identifiers rewritten to assigns.
 
 ## Why
 
-Handlebars is ambiguous: `{{a b}}` means "helper `a` with argument `b`", not the expression `a b`.
-A single, documented resolution order keeps templates predictable and matches author expectations.
+Handlebars is inherently ambiguous: `{{a b}}` means "helper a with argument b", not the expression `a b`. A single, documented resolution order keeps templates predictable. Supporting pipelines and subexpressions allows templates to chain transformations declaratively without escalating into arbitrary, unsafe Elixir code.
 
 ## How
 
-Read `Stem.Expression.translate/2` as the authority for how a tag becomes Elixir.
-Remember that any space-separated tag whose first token looks like a name is interpreted as a helper call, so wrap genuine expressions in operators or parentheses when that is not intended.
+Read `Stem.Expression.translate/2` as the authority for how a tag becomes Elixir. Use parentheses for nested helper evaluation, and use the pipe operator to chain built-in or custom helpers. Wrap genuine Elixir expressions in operators or parentheses when a helper call is not intended.
 
 ## Links
 

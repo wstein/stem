@@ -7,19 +7,15 @@ Stem resolves helpers and partials through a combination of compile-time expansi
 
 ## What
 
-Helpers are functions registered in `Stem.Helpers` or passed in the `helpers` assign; they are invoked when a tag's first token is a name followed by arguments.
-Partials (`{{> name}}`) are expanded inline by the parser at compile time using the `:partials` option.
-Because `{{ ... }}` output is unescaped by default, helpers are the primary place to apply output transformations such as escaping, normalization, and formatting.
+Helpers are functions registered in `Stem.Helpers` or passed in the `helpers` assign; they are invoked when a tag's first token is a name followed by arguments. Partials (`{{> name}}`) are expanded inline by the parser at compile time. Stem ships with a robust set of built-in pipeline-friendly helpers like `trim`, `upcase`, `map`, and `filter`.
 
 ## Why
 
-Inlining partials at compile time removes recursive calls at runtime and allows the compiler to optimize the entire block as a single unit. Using a registry for helpers allows modules to share common functionality without duplicating code in every template.
+Inlining partials at compile time removes recursive calls at runtime and allows the compiler to optimize the block as a single unit. Because `{{ ... }}` output is now HTML escaped by default (secure-by-default), helpers and pipelines provide the explicit, developer-controlled mechanism to apply safe formatting without disabling XSS protection.
 
 ## How
 
-Register global helpers with `Stem.Helpers.register/2` or pass local helpers as a map in function arguments.
-Provide partials as a map to `Stem.function_from_string/5` (or the DSL macros).
-Keep transformation helpers focused and explicit so templates make security-sensitive behavior obvious.
+Register global helpers with `Stem.Helpers.register/2` or pass local helpers as a map. Provide partials as a map to `Stem.function_from_string/5`. Use the pipe operator to chain built-in or custom helpers to explicitly shape output.
 
 ## Links
 
