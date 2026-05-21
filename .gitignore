@@ -19,3 +19,4 @@ erl_crash.dump
 ### cx bundle output ###
 bundle/
 repomix-output.xml
+.cx/
