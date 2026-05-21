@@ -8,9 +8,9 @@ defmodule Mix.Tasks.Stem do
   @moduledoc """
   Render a Stem template.
 
-      mix stem template.stem '{"name":"Nina"}'
-      mix stem template.stem data.json -o output.txt
-      mix stem - < data.json
+      mix stem data.json template.stem
+      echo '{"name":"Nina"}' | mix stem template.stem
+      mix stem data.json template.stem -o output.txt
   """
 
   @impl true

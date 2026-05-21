@@ -14,7 +14,46 @@ There is no intermediate template language.
 
 ## Quick Start
 
-Compile a template into a function at compile time:
+### 1. The `~STEM` Sigil
+For inline rendering inside any Elixir function, use the `~STEM` sigil. It compiles the template to native AST at compile-time for maximum performance.
+
+```elixir
+defmodule MyView do
+  import Stem.Sigil
+
+  def render(assigns) do
+    ~STEM"Hello {{name |> trim |> capitalize}}"
+  end
+end
+```
+
+### 2. File-Based Templates
+Use `.stem` files for larger templates. Stem provides DSL macros to bind these files to module functions.
+
+```elixir
+defmodule Views do
+  use Stem
+
+  # Binds templates/card.stem to Views.card_template(assigns)
+  deftemplate_file :card_template, "templates/card.stem", [:assigns]
+end
+```
+
+### 3. Command Line Interface
+Format and validate your templates using the included Mix tasks.
+
+```bash
+# Format your .stem files
+mix stem.format "lib/**/*.stem"
+
+# Run a template directly from the CLI
+mix stem.run --template "Hello {{name}}" --assigns '{"name": "Nina"}'
+```
+
+## Compilation Strategies
+
+### Performance: Compile-Time Macros
+Stem can compile templates directly into functions within your modules.
 
 ```elixir
 defmodule Greeting do
@@ -26,28 +65,13 @@ Greeting.render(name: "Nina")
 #=> "Hello Nina"
 ```
 
-The compile-time DSL also supports a more declarative form:
+### Flexibility: Runtime Eval
+For dynamic contents or user-provided templates, use the runtime API:
 
 ```elixir
-defmodule Views do
-  use Stem
-
-  deftemplate :hello, "Hello {{name}}", [:assigns]
-  deftemplate_file :card, "templates/card.stem", [:assigns]
-end
+Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"])
+#=> "Hello Nina"
 ```
-
-For inline rendering inside a function, import `Stem.Sigil` or `use Stem.DSL` / `use Stem` and use the compile-time `~STEM` sigil:
-
-```elixir
-import Stem.Sigil
-
-def render(assigns) do
-  ~STEM"Hello {{name}}"
-end
-```
-
-See `examples/` for runnable scripts via `mix run examples/<name>.exs`.
 
 ## Syntax
 
@@ -131,12 +155,12 @@ Apply escaping or sanitization explicitly through helper functions such as `esca
 
 ## Command Line
 
-Render a template file with JSON data:
+Render a template file with Mustache-style input order:
 
 ```sh
-mix stem template.stem '{"name":"Nina"}'
-mix stem template.stem data.json -o output.txt
-mix stem - < data.json
+mix stem data.json template.stem
+echo '{"name":"Nina"}' | mix stem template.stem
+mix stem data.json template.stem -o output.txt
 ```
 
 ## Documentation
