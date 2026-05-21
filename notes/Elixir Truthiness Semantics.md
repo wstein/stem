@@ -1,23 +1,26 @@
 ---
 id: 20260521131100
-aliases: [Truthiness]
-tags: [semantics, logic]
+aliases: [Truthiness, Elixir Truthiness (Deprecated)]
+tags: [semantics, logic, deprecated, v0.1.0]
+status: archived
 ---
-Block conditionals in Stem follow Elixir truthiness rules: only `false` and `nil` are falsey, while all other values are truthy.
 
-## What
+> ⚠️ **ARCHIVED (v0.1.0)**: This note describes the truthiness semantics from Stem v0.1.0.
+> As of v0.2.0, Stem uses **Handlebars truthiness** instead. See [[Handlebars Truthiness Semantics]].
 
-In `{{#if expr}}` and `{{#unless expr}}`, the condition is checked using Elixir's native logic. Unlike JavaScript Handlebars, `0`, `""`, and `[]` are considered truthy in Stem because they are truthy in Elixir.
+## Historical: Elixir Truthiness (v0.1.0 only)
 
-## Why
+Block conditionals in Stem v0.1.0 followed Elixir truthiness rules: only `false` and `nil` were falsey, while all other values were truthy.
 
-Mapping Handlebars to Elixir's native `if` and `case` structures ensures there is no performance penalty for "translation" at runtime. It also avoids surprising behavior for Elixir developers who expect standard language semantics.
+This decision was made to minimize translation overhead at runtime and provide Elixir semantics to Elixir developers. However, it created cognitive friction when working with Handlebars conventions.
 
-## How
+### Why Changed
 
-If a template needs to treat an empty list or zero as falsey, use a helper or an explicit comparison expression: `{{#if (items != [])}}` or `{{#if (count > 0)}}`. The common pattern `{{#if list}}` will execute the block if `list` is defined, even if empty.
+The shift to Handlebars truthiness (v0.2.0+) aligns Stem with:
+- Frontend template language conventions (Handlebars, Liquid, EJS)
+- JavaScript truthiness expectations
+- Developer familiarity and reduced cognitive load
 
-## Links
+### Migration from v0.1 to v0.2
 
-- [[Handlebars-Inspired Philosophy]] - The rationale for choosing Elixir semantics.
-- [[Iteration and Context Scoping]] - How truthiness affects `{{#each}}` and `{{else}}` blocks.
+See [[Handlebars Truthiness Semantics]] for the breaking change details and migration guidance.
