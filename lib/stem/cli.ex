@@ -219,13 +219,6 @@ defmodule Stem.CLI do
 
   defp read_assigns!("-"), do: read_stdin() |> decode_assigns!()
 
-  defp read_stdin do
-    case IO.read(:stdio, :eof) do
-      :eof -> ""
-      data -> IO.iodata_to_binary(data)
-    end
-  end
-
   defp read_assigns!(data_source) do
     source =
       cond do
@@ -234,6 +227,13 @@ defmodule Stem.CLI do
       end
 
     decode_assigns!(source)
+  end
+
+  defp read_stdin do
+    case IO.read(:stdio, :eof) do
+      :eof -> ""
+      data -> IO.iodata_to_binary(data)
+    end
   end
 
   defp decode_assigns!(source) when is_binary(source) do
