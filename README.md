@@ -78,7 +78,8 @@ Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 
 ## Syntax
 
-- `{{expression}}` evaluates an expression and prints the string result without HTML escaping.
+- `{{expression}}` evaluates an expression and prints the string result with HTML escaping by default (secure-by-default).
+- `{{{expression}}}` evaluates an expression and prints the string result without escaping (raw output).
 - `{{! comment }}` and `{{!-- comment --}}` are discarded.
 - `{{> partial}}` expands a named partial.
 - `{{#if}}`, `{{#unless}}`, `{{#each}}`, and `{{#with}}` open blocks closed by `{{/...}}`, each with an optional `{{else}}`.
@@ -153,8 +154,31 @@ Pipeline expressions are represented in that expression AST and lowered into nes
 
 ## Security
 
-`{{...}}` output is not escaped automatically.
-Apply escaping or sanitization explicitly through helper functions such as `escape_html`, or project-specific helpers.
+Stem is secure-by-default: `{{...}}` output is **HTML escaped automatically** to prevent XSS attacks.
+Use `{{{...}}}` for raw output when you know the content is safe.
+
+### Configurable Escape Modes
+
+You can override the default HTML escaping with the `:escape` option:
+
+```elixir
+# HTML escaping (default, recommended)
+Stem.eval_string("{{name}}", assigns: [name: "<script>alert('xss')</script>"])
+#=> "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;"
+
+# Raw output (use with caution)
+Stem.eval_string("{{name}}", assigns: [name: "<b>bold</b>"], escape: :none)
+#=> "<b>bold</b>"
+
+# Other escape modes: :xml, :json, :url, or custom functions
+Stem.eval_string("{{name}}", assigns: [name: "hello&world"], escape: :xml)
+
+# Via CLI
+bin/stem data.json template.stem --escape none
+```
+
+Built-in escape formatters: `:html` (default), `:xml`, `:json`, `:url`, `:none`.
+Custom escape functions can be registered via `Stem.Escaping.register/2`.
 
 ## Command Line
 
@@ -169,6 +193,12 @@ echo '{"name":"Nina"}' | bin/stem template.stem
 
 # Output to a file
 bin/stem data.json template.stem -o output.txt
+
+# Disable HTML escaping
+bin/stem data.json template.stem --escape none
+
+# Use other escape modes: xml, json, url
+bin/stem data.json template.stem --escape xml
 ```
 
 Formatting and checking is performed via Mix tasks:
