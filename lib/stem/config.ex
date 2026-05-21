@@ -5,7 +5,7 @@ defmodule Stem.Config do
 
   # Config file loading and merging for Stem templates.
   # Supports .stem.config.json files with sensible defaults for escape mode,
-  # warn_on_missing_assigns, and safe mode.
+  # warn_on_missing_assigns, safe mode, and frontmatter security locking.
 
   @config_filename ".stem.config.json"
 
@@ -112,6 +112,7 @@ defmodule Stem.Config do
     |> maybe_add_escape(map)
     |> maybe_add_warn_on_missing_assigns(map)
     |> maybe_add_mode(map)
+    |> maybe_add_lock_security(map)
   end
 
   defp maybe_add_escape(acc, map) do
@@ -133,6 +134,14 @@ defmodule Stem.Config do
     case Map.get(map, "mode") do
       nil -> acc
       mode_string when mode_string in ["permissive", "safe"] -> Keyword.put(acc, :mode, String.to_atom(mode_string))
+      _ -> acc
+    end
+  end
+
+  defp maybe_add_lock_security(acc, map) do
+    case Map.get(map, "lock_security") do
+      nil -> acc
+      value when is_boolean(value) -> Keyword.put(acc, :lock_security, value)
       _ -> acc
     end
   end

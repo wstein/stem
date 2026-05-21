@@ -78,6 +78,10 @@ defmodule Stem do
       values like `0`, `""`, `[]`, or `%{}` are coerced to false under
       Handlebars truthiness. Defaults to `false`.
 
+    * `:lock_security` - when `true`, template frontmatter cannot override
+      project-level `:escape` or `:mode` security settings. Defaults to
+      `false`.
+
     * `:contract` - a keyword list like `[required: [:title], optional:
       [:subtitle]]` used to validate required assigns before rendering.
 
@@ -154,6 +158,7 @@ defmodule Stem do
           | {:partials, map() | keyword()}
           | {:warn_on_missing_assigns, boolean()}
           | {:warn_on_falsy_coercion, boolean()}
+          | {:lock_security, boolean()}
           | {:contract, keyword()}
           | {:mode, :permissive | :safe}
           | {atom(), term()}
@@ -358,7 +363,7 @@ defmodule Stem do
   @doc false
   def __compile_file__(filename, options) when is_list(options) do
     filename = IO.chardata_to_string(filename)
-    compile_file_internal(filename, options)
+    compile_file_internal(filename, load_and_merge_config(options))
   end
 
   defp compile_string_internal(source, options) do
@@ -386,7 +391,7 @@ defmodule Stem do
     case Stem.Frontmatter.parse(source) do
       {:ok, {frontmatter_opts, template_body}} ->
         merged_options =
-          frontmatter_opts
+          maybe_lock_frontmatter_security(frontmatter_opts, options)
           |> Keyword.merge(options)
           |> Keyword.merge([file: filename, line: 1])
 
@@ -399,6 +404,14 @@ defmodule Stem do
           column: 1,
           message: "invalid frontmatter: #{reason}",
           snippet: nil
+    end
+  end
+
+  defp maybe_lock_frontmatter_security(frontmatter_opts, options) do
+    if Keyword.get(options, :lock_security, false) do
+      Keyword.drop(frontmatter_opts, [:escape, :mode])
+    else
+      frontmatter_opts
     end
   end
 

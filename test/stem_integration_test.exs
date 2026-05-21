@@ -52,6 +52,40 @@ defmodule Stem.StemTest do
 
       assert is_tuple(result)
     end
+
+    test "compile_file honors lock_security from project config" do
+      temp_dir = Path.join(System.tmp_dir!(), "lock_security_compile_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+
+      config_file = Path.join(temp_dir, ".stem.config.json")
+      template_file = Path.join(temp_dir, "safe_mode.stem")
+
+      File.write!(config_file, ~s({"mode":"safe","lock_security":true}))
+
+      File.write!(template_file, """
+      ---
+      mode: permissive
+      ---
+      {{1 + 1}}
+      """)
+
+      original_cwd = System.get_env("EXBAR_CWD")
+      System.put_env("EXBAR_CWD", temp_dir)
+
+      try do
+        assert_raise CompileError, ~r/safe mode forbids arbitrary Elixir expressions/, fn ->
+          Stem.compile_file(template_file)
+        end
+      after
+        if original_cwd do
+          System.put_env("EXBAR_CWD", original_cwd)
+        else
+          System.delete_env("EXBAR_CWD")
+        end
+
+        File.rm_rf!(temp_dir)
+      end
+    end
   end
 
   describe "eval_string" do
@@ -84,6 +118,40 @@ defmodule Stem.StemTest do
       result = Stem.eval_file(temp_file, assigns: [val: "success"])
 
       assert result == "Value: success"
+    end
+
+    test "eval_file ignores frontmatter escape overrides when lock_security is enabled" do
+      temp_dir = Path.join(System.tmp_dir!(), "lock_security_eval_#{System.unique_integer([:positive])}")
+      File.mkdir_p!(temp_dir)
+
+      config_file = Path.join(temp_dir, ".stem.config.json")
+      template_file = Path.join(temp_dir, "escaped.stem")
+
+      File.write!(config_file, ~s({"escape":"html","lock_security":true}))
+
+      File.write!(template_file, """
+      ---
+      escape: none
+      ---
+      {{html}}
+      """)
+
+      original_cwd = System.get_env("EXBAR_CWD")
+      System.put_env("EXBAR_CWD", temp_dir)
+
+      try do
+        result = Stem.eval_file(template_file, assigns: [html: "<b>safe</b>"])
+
+        assert result == "&lt;b&gt;safe&lt;/b&gt;\n"
+      after
+        if original_cwd do
+          System.put_env("EXBAR_CWD", original_cwd)
+        else
+          System.delete_env("EXBAR_CWD")
+        end
+
+        File.rm_rf!(temp_dir)
+      end
     end
   end
 

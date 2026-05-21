@@ -21,7 +21,8 @@ defmodule Stem.ConfigTest do
     {
       "escape": "html",
       "warn_on_missing_assigns": true,
-      "mode": "safe"
+      "mode": "safe",
+      "lock_security": true
     }
     """)
 
@@ -30,6 +31,7 @@ defmodule Stem.ConfigTest do
     assert config[:escape] == :html
     assert config[:warn_on_missing_assigns] == true
     assert config[:mode] == :safe
+    assert config[:lock_security] == true
   end
 
   test "load_config handles invalid JSON", %{temp_dir: temp_dir} do
@@ -112,7 +114,7 @@ defmodule Stem.ConfigTest do
     assert result == :not_found
   end
 
-  test "merge_with_defaults prefers explicit options", %{temp_dir: temp_dir} do
+  test "merge_with_defaults prefers explicit options" do
     config = [escape: :xml, warn_on_missing_assigns: true]
     explicit_opts = [escape: :json]
 
@@ -150,7 +152,8 @@ defmodule Stem.ConfigTest do
     {
       "escape": "json",
       "warn_on_missing_assigns": false,
-      "mode": "permissive"
+      "mode": "permissive",
+      "lock_security": true
     }
     """)
 
@@ -159,6 +162,7 @@ defmodule Stem.ConfigTest do
     assert config[:escape] == :json
     assert config[:warn_on_missing_assigns] == false
     assert config[:mode] == :permissive
+    assert config[:lock_security] == true
   end
 
   test "config file ignores unsupported options", %{temp_dir: temp_dir} do
