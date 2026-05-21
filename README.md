@@ -53,6 +53,9 @@ See `examples/` for runnable scripts via `mix run examples/<name>.exs`.
 - `{{! comment }}` and `{{!-- comment --}}` are discarded.
 - `{{> partial}}` expands a named partial.
 - `{{#if}}`, `{{#unless}}`, `{{#each}}`, and `{{#with}}` open blocks closed by `{{/...}}`, each with an optional `{{else}}`.
+- Helper calls support nested subexpressions such as `{{format (uppercase name)}}`.
+- `{{#each items as |item idx|}}` and `{{#with story as |article|}}` introduce block parameters.
+- `{{~ ... ~}}` trims surrounding literal whitespace around a tag.
 
 Bare identifiers resolve to assigns, so `{{name}}` reads the `:name` assign.
 Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the index, and `{{@key}}` the key when iterating a map.
@@ -72,7 +75,27 @@ quoted = Stem.compile_string("Hello {{name}}")
 
 Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 #=> "Hello Nina"
+
+Stem.eval_string("{{name}}", assigns: [name: "Nina"], mode: :safe)
+#=> "Nina"
+
+Stem.eval_string("{{name}}", assigns: [name: "Nina"], contract: [required: [:name]])
+#=> "Nina"
 ```
+
+`mode: :safe` disables the arbitrary Elixir fallback path and only accepts structured Stem expressions, literals, helpers, and paths.
+`contract:` lets templates declare required assigns at the call boundary.
+
+## Tooling
+
+Stem can format template files with:
+
+```sh
+mix stem.format path/to/template.stem
+mix stem.format --check-formatted path/to/template.stem
+```
+
+Compiler diagnostics are available with `warn_on_diagnostics: true` and currently cover constant block conditions and unused block parameters.
 
 ## Pipeline
 
