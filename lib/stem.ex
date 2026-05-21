@@ -38,6 +38,11 @@ defmodule Stem do
     * `compile_string/2` and `compile_file/2` return quoted Elixir.
     * `eval_string/3` and `eval_file/3` compile and evaluate templates.
 
+  ⚠️ **Security**: Runtime evaluation APIs (`eval_string`, `eval_file`) should
+  only be used with **templates from trusted sources**. Use compile-time APIs
+  (`function_from_string`, `compile_string`) for untrusted templates to prevent
+  server-side template injection attacks. See `Stem.Unsafe` for runtime APIs.
+
   ## Pipeline
 
   Compilation flows through four stages:
@@ -296,6 +301,10 @@ defmodule Stem do
 
   @doc """
   Compiles and evaluates a template string using the provided bindings.
+
+  ⚠️ **WARNING**: This function is only safe when templates come from a trusted source.
+  For better security, use compile-time APIs like `function_from_string/5` instead.
+  See `Stem.Unsafe` for more information.
   """
   @spec eval_string(String.t(), keyword, [compile_opt]) :: term()
   def eval_string(source, bindings \\ [], options \\ [])
@@ -308,6 +317,10 @@ defmodule Stem do
 
   @doc """
   Compiles and evaluates a template file using the provided bindings.
+
+  ⚠️ **WARNING**: This function is only safe when the file path comes from a trusted source.
+  For better security, use compile-time APIs like `function_from_file/5` instead.
+  See `Stem.Unsafe` for more information.
   """
   @spec eval_file(Path.t(), keyword, [compile_opt]) :: String.t()
   def eval_file(filename, bindings \\ [], options \\ [])

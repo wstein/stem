@@ -375,7 +375,7 @@ defmodule Stem.Helpers do
   defp empty?(_value), do: false
 
   defp present?(value), do: not empty?(value)
-  defp truthy?(value), do: value not in [false, nil]
+  defp truthy?(value), do: value not in [false, nil, 0, "", [], %{}]
 
   defp enumerable_list(value) when is_list(value), do: value
   defp enumerable_list(value) when is_map(value), do: Map.values(value)

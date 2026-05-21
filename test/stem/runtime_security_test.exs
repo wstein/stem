@@ -11,7 +11,7 @@ defmodule Stem.RuntimeSecurityTest do
   use ExUnit.Case, async: true
 
   test "eval_string works at runtime" do
-    assert Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"]) == "Hello Nina"
+    assert Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"]) == "Hello Nina"
   end
 
   test "compile_string returns quoted expressions" do
@@ -26,19 +26,19 @@ defmodule Stem.RuntimeSecurityTest do
 
   test "safe mode rejects arbitrary Elixir fallback expressions" do
     assert_raise CompileError, ~r/safe mode forbids arbitrary Elixir expressions/, fn ->
-      Stem.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], mode: :safe)
+      Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], mode: :safe)
     end
   end
 
   test "safe mode still allows structured Stem expressions" do
-    assert Stem.eval_string("Hello {{name}}", [assigns: [name: "Nina"]], mode: :safe) ==
+    assert Stem.Unsafe.eval_string("Hello {{name}}", [assigns: [name: "Nina"]], mode: :safe) ==
              "Hello Nina"
   end
 
   test "safe mode allows helper pipelines" do
     helpers = [trim: fn [value], _ctx -> String.trim(to_string(value)) end]
 
-    assert Stem.eval_string(
+    assert Stem.Unsafe.eval_string(
              "{{name |> trim}}",
              [assigns: [name: " Nina "], helpers: helpers],
              mode: :safe
@@ -47,7 +47,7 @@ defmodule Stem.RuntimeSecurityTest do
 
   test "runtime contract validation enforces required assigns" do
     assert_raise ArgumentError, ~r/missing required assigns/, fn ->
-      Stem.eval_string("Hello {{name}}", [assigns: []], contract: [required: [:name]])
+      Stem.Unsafe.eval_string("Hello {{name}}", [assigns: []], contract: [required: [:name]])
     end
   end
 end

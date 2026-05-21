@@ -197,7 +197,7 @@ defmodule Stem.HelpersTest do
       assert Helpers.invoke(:compact, [nil], []) == []
       assert Helpers.invoke(:sort, [[3, 1, 2]], []) == [1, 2, 3]
       assert Helpers.invoke(:sort, [%{a: 2, b: 1}], []) == [1, 2]
-      assert Helpers.invoke(:filter, [[true, false, nil, 0, ""]], []) == [true, 0, ""]
+      assert Helpers.invoke(:filter, [[true, false, nil, 0, ""]], []) == [true]
       assert Helpers.invoke(:take, [[1, 2, 3], 2], []) == [1, 2]
       assert Helpers.invoke(:take, [[1, 2, 3], "2"], []) == [1, 2]
       assert Helpers.invoke(:take, [7, 1], []) == [7]

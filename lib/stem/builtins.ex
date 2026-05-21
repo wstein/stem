@@ -5,9 +5,17 @@ defmodule Stem.Builtins do
 
   @spec each_entries(term()) :: list()
   def each_entries(nil), do: []
+  def each_entries(false), do: []
+  def each_entries(0), do: []
+  def each_entries(""), do: []
+  def each_entries([]), do: []
 
   def each_entries(value) when is_map(value) do
-    Enum.map(value, fn {key, current} -> {current, key} end)
+    if map_size(value) == 0 do
+      []
+    else
+      Enum.map(value, fn {key, current} -> {current, key} end)
+    end
   end
 
   def each_entries(value) when is_list(value) do

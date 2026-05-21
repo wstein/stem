@@ -373,7 +373,7 @@ defmodule StemTest do
 
   describe "runtime entry points" do
     test "eval_string and compile_string work at runtime" do
-      assert Stem.eval_string("{{x}}", assigns: [x: 1]) == "1"
+      assert Stem.Unsafe.eval_string("{{x}}", assigns: [x: 1]) == "1"
 
       quoted = Stem.compile_string("{{x}}")
       assert is_tuple(quoted)

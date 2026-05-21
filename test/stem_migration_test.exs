@@ -148,7 +148,7 @@ defmodule Stem.StemMigrationTest do
   end
 
   test "runtime eval_string and compile_string behave like runtime EEx-style evaluation" do
-    assert Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"]) == "Hello Nina"
+    assert Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"]) == "Hello Nina"
 
     quoted = Stem.compile_string("Hello {{name}}")
     {result, _binding} = Code.eval_quoted(quoted, assigns: [name: "Joe"], helpers: [])

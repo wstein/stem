@@ -31,4 +31,13 @@ defmodule Stem.Runtime do
         nil
     end
   end
+
+  @doc """
+  Checks if a value is truthy according to Handlebars semantics.
+
+  Falsey values: false, nil, 0, "", [], %{}
+  All other values are truthy.
+  """
+  @spec is_truthy(term()) :: boolean()
+  def is_truthy(value), do: value not in [false, nil, 0, "", [], %{}]
 end

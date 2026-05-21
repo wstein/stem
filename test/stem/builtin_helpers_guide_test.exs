@@ -70,11 +70,13 @@ defmodule Stem.BuiltinHelpersGuideTest do
                "The Story by A. Writer"
     end
 
-    test "with uses standard Elixir truthiness" do
+    test "with uses Handlebars truthiness (0, empty string are falsey)" do
       template = "{{#with value}}{{this}}{{else}}empty{{/with}}"
 
-      assert Stem.TestTemplate.eval_string(template, assigns: [value: 0]) == "0"
-      assert Stem.TestTemplate.eval_string(template, assigns: [value: ""]) == ""
+      assert Stem.TestTemplate.eval_string(template, assigns: [value: 0]) == "empty"
+      assert Stem.TestTemplate.eval_string(template, assigns: [value: ""]) == "empty"
+      assert Stem.TestTemplate.eval_string(template, assigns: [value: 1]) == "1"
+      assert Stem.TestTemplate.eval_string(template, assigns: [value: "text"]) == "text"
     end
   end
 

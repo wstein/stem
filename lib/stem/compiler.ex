@@ -104,7 +104,7 @@ defmodule Stem.Compiler do
     quote do
       unquote(this) = unquote(subject)
 
-      if unquote(this),
+      if Stem.Runtime.is_truthy(unquote(this)),
         do:
           (
             unquote_splicing(block_param_assignments(:with, params, this, nil))
