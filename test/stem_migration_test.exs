@@ -10,18 +10,21 @@ defmodule Stem.StemMigrationTest do
     :ok
   end
 
-  test "double braces resolve assigns and HTML-escape output" do
+  test "double braces resolve assigns without HTML escaping" do
     template = "Hello {{name}}"
 
     assert Stem.TestTemplate.eval_string(template, assigns: [name: "<b>World</b>"]) ==
-             "Hello &lt;b&gt;World&lt;/b&gt;"
+             "Hello <b>World</b>"
   end
 
-  test "triple braces resolve assigns without escaping" do
+  test "triple braces are rejected" do
     template = "Hello {{{name}}}"
 
-    assert Stem.TestTemplate.eval_string(template, assigns: [name: "<b>World</b>"]) ==
-             "Hello <b>World</b>"
+    assert_raise Stem.SyntaxError,
+                 ~r/unsupported Stem expression '\{\{\{\.\.\.\}\}\}'; use '\{\{\.\.\.\}\}'/,
+                 fn ->
+                   Stem.TestTemplate.eval_string(template, assigns: [name: "<b>World</b>"])
+                 end
   end
 
   test "stem comments are discarded" do
@@ -113,7 +116,7 @@ defmodule Stem.StemMigrationTest do
              "Search:10:false",
              "Upload:90:true",
              "Finish:100:false",
-             "&lt;a class=&quot;person&quot; href=&quot;https://yehudakatz.com/&quot;&gt;See Website&lt;/a&gt;"
+             "<a class=\"person\" href=\"https://yehudakatz.com/\">See Website</a>"
            ]
   end
 
@@ -125,8 +128,8 @@ defmodule Stem.StemMigrationTest do
              "(1:item:1)(2:item:2)"
   end
 
-  test "escaping covers apostrophe and quotes" do
-    assert Stem.TestTemplate.eval_string("{{name}}", assigns: [name: "'\""]) == "&#39;&quot;"
+  test "double braces preserve apostrophe and quotes" do
+    assert Stem.TestTemplate.eval_string("{{name}}", assigns: [name: "'\""]) == "'\""
   end
 
   test "missing assign renders as empty string" do

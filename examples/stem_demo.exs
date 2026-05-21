@@ -15,7 +15,7 @@ defmodule StemDemo do
     Partial: {{> signature}}
     """,
     [:assigns, :helpers],
-    partials: %{signature: "Kind regards, {{{name}}}"}
+    partials: %{signature: "Kind regards, {{name}}"}
   )
 end
 

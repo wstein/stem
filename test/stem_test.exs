@@ -54,12 +54,8 @@ defmodule StemTest do
       assert eval("foo bar") == "foo bar"
     end
 
-    test "expressions HTML-escape by default" do
-      assert eval("{{x}}", assigns: [x: ~s(<b>&"')]) == "&lt;b&gt;&amp;&quot;&#39;"
-    end
-
-    test "triple braces emit raw output" do
-      assert eval("{{{x}}}", assigns: [x: "<b>World</b>"]) == "<b>World</b>"
+    test "expressions render without HTML escaping" do
+      assert eval("{{x}}", assigns: [x: ~s(<b>&"')]) == ~s(<b>&"')
     end
 
     test "missing assigns render as empty string" do
@@ -70,8 +66,20 @@ defmodule StemTest do
       assert eval("a{{! note }}b{{!-- block --}}c") == "abc"
     end
 
-    test "raw quotation emits its contents literally" do
-      assert eval("{{{{ {{name}} }}}}") == " {{name}} "
+    test "triple braces are no longer supported" do
+      assert_raise Stem.SyntaxError,
+                   ~r/unsupported Stem expression '\{\{\{\.\.\.\}\}\}'; use '\{\{\.\.\.\}\}'/,
+                   fn ->
+                     eval("{{{x}}}", assigns: [x: "<b>World</b>"])
+                   end
+    end
+
+    test "four braces are no longer supported" do
+      assert_raise Stem.SyntaxError,
+                   ~r/unsupported Stem expression '\{\{\{\{\.\.\.\}\}\}\}'; use '\{\{\.\.\.\}\}'/,
+                   fn ->
+                     eval("{{{{ {{name}} }}}}")
+                   end
     end
 
     test "compound Elixir expressions resolve assigns" do

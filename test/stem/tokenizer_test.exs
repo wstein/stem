@@ -23,7 +23,7 @@ defmodule Stem.TokenizerTest do
     assert tokens("") == [{:eof, %{line: 1, column: 1}}]
   end
 
-  test "escaped expression" do
+  test "double-brace expression" do
     assert tokens("Hi {{name}}") == [
              {:text, "Hi ", %{line: 1, column: 1}},
              {:expr, "name", %{line: 1, column: 4}},
@@ -35,13 +35,16 @@ defmodule Stem.TokenizerTest do
     assert [{:expr, "name", _}, {:eof, _}] = tokens("{{  name  }}")
   end
 
-  test "raw triple-brace expression" do
-    assert [{:raw, "name", %{line: 1, column: 1}}, {:eof, _}] = tokens("{{{name}}}")
+  test "triple braces are rejected" do
+    assert {:error,
+            "unsupported Stem expression '{{{...}}}'; use '{{...}}' with helper functions", _} =
+             Tokenizer.tokenize("{{{name}}}")
   end
 
-  test "raw quotation emits inner content as literal text" do
-    assert [{:text, " #if literal ", %{line: 1, column: 1}}, {:eof, _}] =
-             tokens("{{{{ #if literal }}}}")
+  test "four braces are rejected" do
+    assert {:error,
+            "unsupported Stem expression '{{{{...}}}}'; use '{{...}}' with helper functions", _} =
+             Tokenizer.tokenize("{{{{ #if literal }}}}")
   end
 
   test "short comments are discarded and surrounding text merges" do
@@ -109,13 +112,15 @@ defmodule Stem.TokenizerTest do
                {:error, "expected closing '}}' for Stem expression", %{line: 1, column: 5}}
     end
 
-    test "unterminated raw expression" do
-      assert {:error, "expected closing '}}}' for Stem expression", _} =
+    test "unsupported triple braces" do
+      assert {:error,
+              "unsupported Stem expression '{{{...}}}'; use '{{...}}' with helper functions", _} =
                Tokenizer.tokenize("{{{bar")
     end
 
-    test "unterminated quotation" do
-      assert {:error, "expected closing '}}}}' for Stem quotation", _} =
+    test "unsupported four braces" do
+      assert {:error,
+              "unsupported Stem expression '{{{{...}}}}'; use '{{...}}' with helper functions", _} =
                Tokenizer.tokenize("{{{{bar")
     end
 

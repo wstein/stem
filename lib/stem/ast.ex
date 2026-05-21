@@ -18,7 +18,6 @@ defmodule Stem.AST do
   @type node_t ::
           {:text, binary()}
           | {:expr, binary(), meta()}
-          | {:raw, binary(), meta()}
           | {:if, binary(), [node_t()], [node_t()], meta()}
           | {:unless, binary(), [node_t()], [node_t()], meta()}
           | {:each, binary(), [node_t()], [node_t()], meta()}

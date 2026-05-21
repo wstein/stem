@@ -74,11 +74,8 @@ defmodule Stem do
   Stem supports the following tags:
 
     * `{{expression}}` - evaluates the expression and prints the
-      HTML-escaped result.
-    * `{{{expression}}}` - evaluates the expression and prints the raw,
-      unescaped result.
+      string result without HTML escaping.
     * `{{! comment }}` and `{{!-- comment --}}` - discarded from the output.
-    * `{{{{ literal }}}}` - emits the literal contents verbatim.
     * `{{> partial}}` - expands a named partial.
     * `{{#if}}`, `{{#unless}}`, `{{#each}}`, `{{#with}}` with matching
       `{{/...}}` closing tags and an optional `{{else}}`.

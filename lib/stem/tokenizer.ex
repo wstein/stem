@@ -16,7 +16,6 @@ defmodule Stem.Tokenizer do
   @type token ::
           {:text, binary(), meta()}
           | {:expr, binary(), meta()}
-          | {:raw, binary(), meta()}
           | {:block_open, kind(), binary(), meta()}
           | {:block_else, meta()}
           | {:block_close, kind(), meta()}
@@ -36,18 +35,11 @@ defmodule Stem.Tokenizer do
   # `buffer` accumulates literal text as reverse iodata; `buffer_meta` records
   # where the current text run started so the flushed `:text` token is anchored.
 
-  defp scan(<<"{{{{", rest::binary>>, line, column, buffer, buffer_meta, acc) do
+  defp scan(<<"{{{{", _rest::binary>>, line, column, _buffer, _buffer_meta, _acc) do
     meta = %{line: line, column: column}
 
-    case take_until(rest, "}}}}") do
-      {:ok, inner, tail} ->
-        {line, column} = advance(["{{{{", inner, "}}}}"], line, column)
-        acc = flush(buffer, buffer_meta, acc)
-        scan(tail, line, column, [], nil, [{:text, inner, meta} | acc])
-
-      :error ->
-        {:error, "expected closing '}}}}' for Stem quotation", meta}
-    end
+    {:error, "unsupported Stem expression '{{{{...}}}}'; use '{{...}}' with helper functions",
+     meta}
   end
 
   defp scan(<<"{{!--", rest::binary>>, line, column, buffer, buffer_meta, acc) do
@@ -63,18 +55,10 @@ defmodule Stem.Tokenizer do
     end
   end
 
-  defp scan(<<"{{{", rest::binary>>, line, column, buffer, buffer_meta, acc) do
+  defp scan(<<"{{{", _rest::binary>>, line, column, _buffer, _buffer_meta, _acc) do
     meta = %{line: line, column: column}
 
-    case take_until(rest, "}}}") do
-      {:ok, inner, tail} ->
-        {line, column} = advance(["{{{", inner, "}}}"], line, column)
-        acc = flush(buffer, buffer_meta, acc)
-        scan(tail, line, column, [], nil, [{:raw, inner, meta} | acc])
-
-      :error ->
-        {:error, "expected closing '}}}' for Stem expression", meta}
-    end
+    {:error, "unsupported Stem expression '{{{...}}}'; use '{{...}}' with helper functions", meta}
   end
 
   defp scan(<<"{{!", rest::binary>>, line, column, buffer, buffer_meta, acc) do

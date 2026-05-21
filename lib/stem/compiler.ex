@@ -5,7 +5,7 @@ defmodule Stem.Compiler do
 
   # Lowers a `Stem.AST` into quoted Elixir that evaluates to a binary.
   #
-  # Text becomes literal binaries; `{{ }}`/`{{{ }}}` become escaped/raw output;
+  # Text becomes literal binaries and `{{ }}` expressions become string output;
   # blocks become `if`/`unless` expressions, `Stem.Builtins.each/3` loops, and
   # `{{#with}}` bindings. Embedded expressions are translated by
   # `Stem.Expression`, parsed with `Code.string_to_quoted!/2`, and have their
@@ -36,11 +36,6 @@ defmodule Stem.Compiler do
   defp compile_node({:text, text}, _state), do: text
 
   defp compile_node({:expr, raw, meta}, state) do
-    expr = compile_expression(raw, meta, state)
-    quote(do: Stem.HTML.escape_to_string(unquote(expr)))
-  end
-
-  defp compile_node({:raw, raw, meta}, state) do
     expr = compile_expression(raw, meta, state)
     quote(do: String.Chars.to_string(unquote(expr)))
   end

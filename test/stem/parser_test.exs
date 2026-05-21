@@ -20,10 +20,6 @@ defmodule Stem.ParserTest do
            ]
   end
 
-  test "raw expression node" do
-    assert [{:raw, "name", _}] = ast("{{{name}}}")
-  end
-
   test "if block without else" do
     assert [{:if, "show", [{:text, "yes"}], [], %{line: 1, column: 1}}] =
              ast("{{#if show}}yes{{/if}}")
@@ -108,6 +104,12 @@ defmodule Stem.ParserTest do
 
     test "tokenizer errors propagate" do
       assert {:error, "expected closing '}}' for Stem expression", _} = Parser.parse("{{oops")
+    end
+
+    test "unsupported triple-brace syntax propagates" do
+      assert {:error,
+              "unsupported Stem expression '{{{...}}}'; use '{{...}}' with helper functions", _} =
+               Parser.parse("{{{name}}}")
     end
 
     test "errors inside a block body propagate" do

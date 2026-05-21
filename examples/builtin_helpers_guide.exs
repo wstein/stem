@@ -11,7 +11,9 @@ defmodule BuiltinHelpersGuide do
   deftemplate(:unless_block, "{{#unless isActive}}inactive{{/unless}}", [:assigns])
   deftemplate(:each_index, "{{#each items}}{{@index}}:{{this}};{{/each}}", [:assigns])
   deftemplate(:each_key, "{{#each map}}{{@key}}: {{this}}{{/each}}", [:assigns])
+
   deftemplate(:with_block, "{{#with story}}{{this.title}} by {{this.author}}{{/with}}", [:assigns])
+
   deftemplate(:lookup_map, ~s({{lookup person "firstName"}}), [:assigns, :helpers])
   deftemplate(:lookup_list, "{{lookup values 1}}", [:assigns, :helpers])
 end

@@ -56,10 +56,6 @@ defmodule Stem.Parser do
     collect(rest, partials, stack, [{:expr, raw, meta} | acc])
   end
 
-  defp collect([{:raw, raw, meta} | rest], partials, stack, acc) do
-    collect(rest, partials, stack, [{:raw, raw, meta} | acc])
-  end
-
   defp collect([{:partial, name, meta} | rest], partials, stack, acc) do
     case expand_partial(name, meta, partials, stack) do
       {:ok, nodes} -> collect(rest, partials, stack, Enum.reverse(nodes, acc))
