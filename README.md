@@ -39,15 +39,18 @@ defmodule Views do
 end
 ```
 
-### 3. Command Line Interface
-Format and validate your templates using the included Mix tasks.
+### 3. Command Line Interface (CLI)
+Format your templates or render them directly using the bundled executable in the `bin/` folder.
 
 ```bash
 # Format your .stem files
 mix stem.format "lib/**/*.stem"
 
-# Run a template directly from the CLI
-mix stem.run --template "Hello {{name}}" --assigns '{"name": "Nina"}'
+# Render a template from a data file
+bin/stem data.json template.stem
+
+# Or pipe JSON data into it
+echo '{"name": "Nina"}' | bin/stem template.stem
 ```
 
 ## Compilation Strategies
@@ -155,12 +158,24 @@ Apply escaping or sanitization explicitly through helper functions such as `esca
 
 ## Command Line
 
-Render a template file with Mustache-style input order:
+Render a template file with Mustache-style input order using the `bin/stem` launcher:
 
 ```sh
-mix stem data.json template.stem
-echo '{"name":"Nina"}' | mix stem template.stem
-mix stem data.json template.stem -o output.txt
+# Using a data file
+bin/stem data.json template.stem
+
+# Using standard input
+echo '{"name":"Nina"}' | bin/stem template.stem
+
+# Output to a file
+bin/stem data.json template.stem -o output.txt
+```
+
+Formatting and checking is performed via Mix tasks:
+
+```sh
+mix stem.format "lib/**/*.stem"
+mix stem.format --check-formatted lib/my_template.stem
 ```
 
 ## Documentation
