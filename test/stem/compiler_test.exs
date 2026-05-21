@@ -8,7 +8,7 @@ defmodule Stem.CompilerTest do
   alias Stem.Compiler
   alias Stem.Parser
 
-  defp render(template, assigns \\ []) do
+  defp render(template, assigns) do
     {:ok, ast} = Parser.parse(template)
     {result, _bindings} = Code.eval_quoted(Compiler.compile(ast), assigns: assigns)
     result

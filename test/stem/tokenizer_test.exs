@@ -35,16 +35,9 @@ defmodule Stem.TokenizerTest do
     assert [{:expr, "name", _}, {:eof, _}] = tokens("{{  name  }}")
   end
 
-  test "triple braces are rejected" do
-    assert {:error,
-            "unsupported Stem expression '{{{...}}}'; use '{{...}}' with helper functions", _} =
-             Tokenizer.tokenize("{{{name}}}")
-  end
-
-  test "four braces are rejected" do
-    assert {:error,
-            "unsupported Stem expression '{{{{...}}}}'; use '{{...}}' with helper functions", _} =
-             Tokenizer.tokenize("{{{{ #if literal }}}}")
+  test "nested braces are rejected" do
+    assert {:error, "nested braces are not supported in Stem expressions", _} =
+             Tokenizer.tokenize("{{ {name} }}")
   end
 
   test "short comments are discarded and surrounding text merges" do
@@ -112,16 +105,9 @@ defmodule Stem.TokenizerTest do
                {:error, "expected closing '}}' for Stem expression", %{line: 1, column: 5}}
     end
 
-    test "unsupported triple braces" do
-      assert {:error,
-              "unsupported Stem expression '{{{...}}}'; use '{{...}}' with helper functions", _} =
-               Tokenizer.tokenize("{{{bar")
-    end
-
-    test "unsupported four braces" do
-      assert {:error,
-              "unsupported Stem expression '{{{{...}}}}'; use '{{...}}' with helper functions", _} =
-               Tokenizer.tokenize("{{{{bar")
+    test "nested braces are not supported" do
+      assert {:error, "nested braces are not supported in Stem expressions", _} =
+               Tokenizer.tokenize("{{ #if {bar} }}")
     end
 
     test "unterminated block comment" do

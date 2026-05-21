@@ -14,11 +14,6 @@ defmodule Stem.SyntaxError do
   end
 end
 
-defmodule Stem.SecurityError do
-  defexception message:
-                 "runtime template compilation is disabled; use Stem.function_from_string/5 or Stem.function_from_file/5 at compile time"
-end
-
 defmodule Stem do
   @moduledoc ~S"""
   Stem is a native Handlebars-style template compiler for Elixir.
@@ -26,7 +21,8 @@ defmodule Stem do
   Stem compiles double-curly-brace templates straight into Elixir's abstract
   syntax tree through its own tokenizer, parser, and compiler — there is no
   intermediate template language. Templates become efficient compiled
-  functions, and template source is never evaluated at runtime.
+  functions, and templates can be compiled or evaluated both at compile time
+  and at runtime.
 
   This module provides two compile-time APIs:
 
@@ -37,10 +33,10 @@ defmodule Stem do
     2. Compile a string (`compile_string/2`) or a file (`compile_file/2`)
        into an Elixir abstract syntax tree.
 
-  For security, the runtime entry points (`eval_string/3`, `eval_file/3`,
-  `compile_string/2`, and `compile_file/2`) raise `Stem.SecurityError`: Stem
-  never compiles untrusted template source at runtime. Use the compile-time
-  macros instead.
+  Runtime APIs are also available for dynamic use cases:
+
+    * `compile_string/2` and `compile_file/2` return quoted Elixir.
+    * `eval_string/3` and `eval_file/3` compile and evaluate templates.
 
   ## Pipeline
 
@@ -239,53 +235,43 @@ defmodule Stem do
   end
 
   @doc """
-  Disabled: raises `Stem.SecurityError`.
-
-  Stem does not compile template source at runtime. Use the compile-time
-  macros `function_from_string/5` and `function_from_file/5` instead.
+  Compiles a template string into quoted Elixir.
   """
   @spec compile_string(String.t(), [compile_opt]) :: Macro.t()
   def compile_string(source, options \\ []) when is_binary(source) and is_list(options) do
-    _ = {source, options}
-    raise Stem.SecurityError
+    __compile_string__(source, options)
   end
 
   @doc """
-  Disabled: raises `Stem.SecurityError`.
-
-  Stem does not compile template source at runtime. Use the compile-time
-  macros `function_from_string/5` and `function_from_file/5` instead.
+  Compiles a template file into quoted Elixir.
   """
   @spec compile_file(Path.t(), [compile_opt]) :: Macro.t()
   def compile_file(filename, options \\ []) when is_list(options) do
-    _ = {filename, options}
-    raise Stem.SecurityError
+    __compile_file__(filename, options)
   end
 
   @doc """
-  Disabled: raises `Stem.SecurityError`.
-
-  Stem does not evaluate template source at runtime. Use the compile-time
-  macros `function_from_string/5` and `function_from_file/5` instead.
+  Compiles and evaluates a template string using the provided bindings.
   """
   @spec eval_string(String.t(), keyword, [compile_opt]) :: term()
   def eval_string(source, bindings \\ [], options \\ [])
       when is_binary(source) and is_list(bindings) and is_list(options) do
-    _ = {source, bindings, options}
-    raise Stem.SecurityError
+    bindings = normalize_runtime_bindings(bindings)
+    quoted = __compile_string__(source, options)
+    {result, _} = Code.eval_quoted(quoted, bindings)
+    result
   end
 
   @doc """
-  Disabled: raises `Stem.SecurityError`.
-
-  Stem does not evaluate template source at runtime. Use the compile-time
-  macros `function_from_string/5` and `function_from_file/5` instead.
+  Compiles and evaluates a template file using the provided bindings.
   """
   @spec eval_file(Path.t(), keyword, [compile_opt]) :: String.t()
   def eval_file(filename, bindings \\ [], options \\ [])
       when is_list(bindings) and is_list(options) do
-    _ = {filename, bindings, options}
-    raise Stem.SecurityError
+    bindings = normalize_runtime_bindings(bindings)
+    quoted = __compile_file__(filename, options)
+    {result, _} = Code.eval_quoted(quoted, bindings)
+    result
   end
 
   ### Helpers
@@ -331,6 +317,12 @@ defmodule Stem do
   defp compile_file_internal(filename, options) do
     options = Keyword.merge([file: filename, line: 1], options)
     compile_string_internal(File.read!(filename), options)
+  end
+
+  defp normalize_runtime_bindings(bindings) do
+    bindings
+    |> Keyword.put_new(:assigns, [])
+    |> Keyword.put_new(:helpers, [])
   end
 
   defp code_snippet(source, line, column) do

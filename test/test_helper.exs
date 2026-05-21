@@ -145,7 +145,7 @@ defmodule Stem.TestTemplate do
   end
 
   defp template_uses_helpers?(template) when is_binary(template) do
-    Regex.scan(~r/\{\{\{?\s*(.*?)\s*\}\}\}?/s, template)
+    Regex.scan(~r/\{\{\s*(.*?)\s*\}\}/s, template)
     |> Enum.any?(fn [_, expr] -> helper_expression?(String.trim(expr)) end)
   end
 

@@ -106,10 +106,9 @@ defmodule Stem.ParserTest do
       assert {:error, "expected closing '}}' for Stem expression", _} = Parser.parse("{{oops")
     end
 
-    test "unsupported triple-brace syntax propagates" do
-      assert {:error,
-              "unsupported Stem expression '{{{...}}}'; use '{{...}}' with helper functions", _} =
-               Parser.parse("{{{name}}}")
+    test "nested-brace syntax errors propagate" do
+      assert {:error, "nested braces are not supported in Stem expressions", _} =
+               Parser.parse("{{ {name} }}")
     end
 
     test "errors inside a block body propagate" do

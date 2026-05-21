@@ -35,13 +35,6 @@ defmodule Stem.Tokenizer do
   # `buffer` accumulates literal text as reverse iodata; `buffer_meta` records
   # where the current text run started so the flushed `:text` token is anchored.
 
-  defp scan(<<"{{{{", _rest::binary>>, line, column, _buffer, _buffer_meta, _acc) do
-    meta = %{line: line, column: column}
-
-    {:error, "unsupported Stem expression '{{{{...}}}}'; use '{{...}}' with helper functions",
-     meta}
-  end
-
   defp scan(<<"{{!--", rest::binary>>, line, column, buffer, buffer_meta, acc) do
     meta = %{line: line, column: column}
 
@@ -53,12 +46,6 @@ defmodule Stem.Tokenizer do
       :error ->
         {:error, "expected closing '--}}' for Stem comment", meta}
     end
-  end
-
-  defp scan(<<"{{{", _rest::binary>>, line, column, _buffer, _buffer_meta, _acc) do
-    meta = %{line: line, column: column}
-
-    {:error, "unsupported Stem expression '{{{...}}}'; use '{{...}}' with helper functions", meta}
   end
 
   defp scan(<<"{{!", rest::binary>>, line, column, buffer, buffer_meta, acc) do
@@ -115,6 +102,9 @@ defmodule Stem.Tokenizer do
     tag = String.trim(inner)
 
     cond do
+      String.contains?(tag, "{") or String.contains?(tag, "}") ->
+        {:error, "nested braces are not supported in Stem expressions", meta}
+
       tag == "" ->
         :skip
 

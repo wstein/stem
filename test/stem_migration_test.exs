@@ -17,11 +17,11 @@ defmodule Stem.StemMigrationTest do
              "Hello <b>World</b>"
   end
 
-  test "triple braces are rejected" do
-    template = "Hello {{{name}}}"
+  test "nested braces are rejected" do
+    template = "Hello {{ {name} }}"
 
     assert_raise Stem.SyntaxError,
-                 ~r/unsupported Stem expression '\{\{\{\.\.\.\}\}\}'; use '\{\{\.\.\.\}\}'/,
+                 ~r/nested braces are not supported in Stem expressions/,
                  fn ->
                    Stem.TestTemplate.eval_string(template, assigns: [name: "<b>World</b>"])
                  end
@@ -139,5 +139,13 @@ defmodule Stem.StemMigrationTest do
   test "each over empty list renders empty block body" do
     assert Stem.TestTemplate.eval_string("a{{#each items}}x{{/each}}b", assigns: [items: []]) ==
              "ab"
+  end
+
+  test "runtime eval_string and compile_string behave like runtime EEx-style evaluation" do
+    assert Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"]) == "Hello Nina"
+
+    quoted = Stem.compile_string("Hello {{name}}")
+    {result, _binding} = Code.eval_quoted(quoted, assigns: [name: "Joe"], helpers: [])
+    assert result == "Hello Joe"
   end
 end

@@ -66,19 +66,11 @@ defmodule StemTest do
       assert eval("a{{! note }}b{{!-- block --}}c") == "abc"
     end
 
-    test "triple braces are no longer supported" do
+    test "nested braces are not supported" do
       assert_raise Stem.SyntaxError,
-                   ~r/unsupported Stem expression '\{\{\{\.\.\.\}\}\}'; use '\{\{\.\.\.\}\}'/,
+                   ~r/nested braces are not supported in Stem expressions/,
                    fn ->
-                     eval("{{{x}}}", assigns: [x: "<b>World</b>"])
-                   end
-    end
-
-    test "four braces are no longer supported" do
-      assert_raise Stem.SyntaxError,
-                   ~r/unsupported Stem expression '\{\{\{\{\.\.\.\}\}\}\}'; use '\{\{\.\.\.\}\}'/,
-                   fn ->
-                     eval("{{{{ {{name}} }}}}")
+                     eval("{{ {x} }}", assigns: [x: "<b>World</b>"])
                    end
     end
 
@@ -292,12 +284,25 @@ defmodule StemTest do
     end
   end
 
-  describe "disabled runtime entry points" do
-    test "eval_string, eval_file, compile_string and compile_file raise" do
-      assert_raise Stem.SecurityError, fn -> Stem.eval_string("{{x}}", assigns: [x: 1]) end
-      assert_raise Stem.SecurityError, fn -> Stem.eval_file("x.stem") end
-      assert_raise Stem.SecurityError, fn -> Stem.compile_string("{{x}}") end
-      assert_raise Stem.SecurityError, fn -> Stem.compile_file("x.stem") end
+  describe "runtime entry points" do
+    test "eval_string and compile_string work at runtime" do
+      assert Stem.eval_string("{{x}}", assigns: [x: 1]) == "1"
+
+      quoted = Stem.compile_string("{{x}}")
+      assert is_tuple(quoted)
+
+      {result, _binding} = Code.eval_quoted(quoted, assigns: [x: 2], helpers: [])
+      assert result == "2"
+    end
+
+    test "eval_file and compile_file work at runtime" do
+      file = Path.join(__DIR__, "fixtures/stem_template_with_bindings.stem")
+
+      assert Stem.eval_file(file, assigns: [bar: 9]) == "foo 9\n"
+
+      quoted = Stem.compile_file(file)
+      {result, _binding} = Code.eval_quoted(quoted, assigns: [bar: 7], helpers: [])
+      assert result == "foo 7\n"
     end
 
     test "compiling a missing file raises" do

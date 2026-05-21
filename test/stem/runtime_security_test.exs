@@ -10,16 +10,14 @@ end
 defmodule Stem.RuntimeSecurityTest do
   use ExUnit.Case, async: true
 
-  test "eval_string is disabled" do
-    assert_raise Stem.SecurityError, fn ->
-      Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"])
-    end
+  test "eval_string works at runtime" do
+    assert Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"]) == "Hello Nina"
   end
 
-  test "compile_string is disabled" do
-    assert_raise Stem.SecurityError, fn ->
-      Stem.compile_string("Hello {{name}}")
-    end
+  test "compile_string returns quoted expressions" do
+    quoted = Stem.compile_string("Hello {{name}}")
+    {result, _binding} = Code.eval_quoted(quoted, assigns: [name: "Nina"], helpers: [])
+    assert result == "Hello Nina"
   end
 
   test "compile-time generated template function still works" do
