@@ -1,27 +1,21 @@
 ---
 id: 20260521131200
+title: "HTML Escaping Behavior"
 aliases: [Escaping]
-tags: [security, html]
+tags: ['security', 'html']
 ---
-Stem does not perform automatic HTML escaping; `{{ expression }}` renders the expression result directly as a string.
 
-## What
+#### What
+Stem is secure-by-default: output from `{{ expression }}` tags is automatically HTML-escaped. Raw, unescaped output must be explicitly requested using triple braces `{{{ expression }}}`. The escape mode is configurable, supporting `:html` (default), `:xml`, `:json`, `:url`, `:none`, or custom formatter functions.
 
-Only `{{ expression }}` is supported for expression output.
-Any output transformation, including sanitization and escaping, must be done explicitly through helper functions or ordinary Elixir function calls used in expressions.
+#### Why
+Automatic HTML escaping protects against Cross-Site Scripting (XSS) and other injection vulnerabilities by default, without relying on developers to remember to manually invoke an `escape_html` helper on every output. Providing multiple built-in escape modes ensures the engine adapts securely to different rendering contexts, such as JSON APIs or XML feeds.
 
-## Why
+#### How
+Use `{{ }}` for all standard output. Only use `{{{ }}}` when you are absolutely certain the rendered content is trusted and safe to be printed without sanitization. You can override the default escape mode via the `--escape` CLI flag, a `.stem.config.json` file, YAML frontmatter within the template, or the `:escape` compile option.
 
-Keeping the rendering model to one expression form removes ambiguous output modes and keeps template semantics simple.
-Explicit transformation avoids hidden behavior and makes security-sensitive formatting decisions visible at the call site.
-
-## How
-
-Use helpers for output shaping, for example `{{escape_html body}}`.
-If a helper is not needed globally, call local functions through expression-compatible helper wrappers.
-Treat all user-provided content as untrusted and enforce escaping/sanitization where the value is produced.
+#### Links
+* [[Compile-Time-Only Security Model]] - The broader security context of Stem.
+* [[Configuration and Frontmatter]] - How to configure escape modes per template or project.
 
 ## Links
-
-- [[Helper and Partial Resolution]] - Where custom transformation logic is integrated.
-- [[Compile-Time-Only Security Model]] - The broader security context of Stem.
