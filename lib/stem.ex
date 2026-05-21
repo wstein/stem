@@ -310,7 +310,8 @@ defmodule Stem do
   def eval_string(source, bindings \\ [], options \\ [])
       when is_binary(source) and is_list(bindings) and is_list(options) do
     bindings = normalize_runtime_bindings(bindings)
-    quoted = __compile_string__(source, options)
+    merged_options = load_and_merge_config(options)
+    quoted = __compile_string__(source, merged_options)
     {result, _} = Code.eval_quoted(quoted, bindings)
     result
   end
@@ -326,7 +327,8 @@ defmodule Stem do
   def eval_file(filename, bindings \\ [], options \\ [])
       when is_list(bindings) and is_list(options) do
     bindings = normalize_runtime_bindings(bindings)
-    quoted = __compile_file__(filename, options)
+    merged_options = load_and_merge_config(options)
+    quoted = __compile_file__(filename, merged_options)
     {result, _} = Code.eval_quoted(quoted, bindings)
     result
   end
@@ -382,6 +384,24 @@ defmodule Stem do
     bindings
     |> Keyword.put_new(:assigns, [])
     |> Keyword.put_new(:helpers, [])
+  end
+
+  defp load_and_merge_config(options) do
+    cwd = System.get_env("EXBAR_CWD") || File.cwd!()
+
+    case Stem.Config.find_config(cwd) do
+      {:ok, config_path} ->
+        case Stem.Config.load_config(config_path) do
+          {:ok, config} ->
+            Keyword.merge(config, options)
+
+          {:error, _reason} ->
+            options
+        end
+
+      :not_found ->
+        options
+    end
   end
 
   defp maybe_apply_contract(quoted, options) do

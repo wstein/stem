@@ -91,7 +91,7 @@ Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 Bare identifiers resolve to assigns, so `{{name}}` reads the `:name` assign.
 Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the index, and `{{@key}}` the key when iterating a map.
 `{{../name}}` reaches the parent (top-level assign) scope.
-Block conditionals follow Elixir truthiness: only `false` and `nil` are falsey.
+Block conditionals follow Handlebars truthiness: `false`, `nil`, `0`, `""`, `[]`, and `{}` (empty map) are falsey.
 Use helpers or regular Elixir functions when output needs transformation (for example, sanitization, normalization, or formatting).
 Nested brace forms inside expressions are not supported.
 Pipeline stages are restricted to helper names and helper calls so templates stay declarative.
@@ -140,6 +140,41 @@ mix stem.format --check-formatted path/to/template.stem
 ```
 
 Compiler diagnostics are available with `warn_on_diagnostics: true` and currently cover constant block conditions and unused block parameters.
+
+## Configuration
+
+### Project-Level Config with `.stem.config.json`
+
+Create a `.stem.config.json` file in your project root to set default options for template compilation and evaluation. The CLI and runtime APIs automatically discover and apply these defaults.
+
+```json
+{
+  "escape": "html",
+  "warn_on_missing_assigns": false,
+  "mode": "permissive"
+}
+```
+
+**Supported options**:
+- `escape` - Default escape mode: `none`, `html` (default), `xml`, `json`, `url`
+- `warn_on_missing_assigns` - Print warnings for missing assigns: `true` or `false`
+- `mode` - Template evaluation mode: `permissive` (default) or `safe`
+
+**Config discovery**: Stem walks up the directory tree from the current working directory to find `.stem.config.json`. It stops at the project root (when `mix.exs` is found) or the filesystem root.
+
+**Option precedence** (highest to lowest):
+1. Explicit compile/eval options
+2. CLI flags (via `--escape`, `--strict`)
+3. Config file (`.stem.config.json`)
+4. Defaults
+
+Example with CLI override:
+
+```bash
+# Config file has escape: xml
+# But CLI flag overrides it
+bin/stem data.json template.stem --escape html
+```
 
 ## Pipeline
 

@@ -60,12 +60,10 @@ defmodule Stem.CLI do
         read_assigns_from_stdin!()
       end
 
+    compile_opts = build_compile_options(template_path, opts)
+
     output =
-      render_template!(template, bindings,
-        file: template_path,
-        warn_on_missing_assigns: !!opts[:strict],
-        escape: parse_escape_mode(opts[:escape])
-      )
+      render_template!(template, bindings, compile_opts)
 
     case opts[:output] do
       nil ->
@@ -82,12 +80,10 @@ defmodule Stem.CLI do
     template = read_template!(template_path)
     bindings = read_assigns_file!(data_source)
 
+    compile_opts = build_compile_options(template_path, opts)
+
     output =
-      render_template!(template, bindings,
-        file: template_path,
-        warn_on_missing_assigns: !!opts[:strict],
-        escape: parse_escape_mode(opts[:escape])
-      )
+      render_template!(template, bindings, compile_opts)
 
     case opts[:output] do
       nil ->
@@ -320,6 +316,30 @@ defmodule Stem.CLI do
       "json" -> :json
       "url" -> :url
       other -> raise ArgumentError, "unknown escape mode: #{other}"
+    end
+  end
+
+  defp build_compile_options(template_path, opts) do
+    cwd = System.get_env("EXBAR_CWD") || File.cwd!()
+
+    cli_opts = [
+      file: template_path,
+      warn_on_missing_assigns: !!opts[:strict],
+      escape: parse_escape_mode(opts[:escape])
+    ]
+
+    case Stem.Config.find_config(cwd) do
+      {:ok, config_path} ->
+        case Stem.Config.load_config(config_path) do
+          {:ok, config} ->
+            Keyword.merge(config, cli_opts)
+
+          {:error, _reason} ->
+            cli_opts
+        end
+
+      :not_found ->
+        cli_opts
     end
   end
 end
