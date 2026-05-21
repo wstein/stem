@@ -17,7 +17,7 @@ Explicit transformation avoids hidden behavior and makes security-sensitive form
 
 ## How
 
-Use helpers for output shaping, for example `{{sanitize_html body}}`.
+Use helpers for output shaping, for example `{{escape_html body}}`.
 If a helper is not needed globally, call local functions through expression-compatible helper wrappers.
 Treat all user-provided content as untrusted and enforce escaping/sanitization where the value is produced.
 

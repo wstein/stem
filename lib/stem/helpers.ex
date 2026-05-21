@@ -81,7 +81,13 @@ defmodule Stem.Helpers do
 
   defp built_in("escape_html") do
     fn [value], _ctx ->
-      Stem.Helpers.Sanitize.escape_html(value)
+      value
+      |> String.Chars.to_string()
+      |> String.replace("&", "&amp;")
+      |> String.replace("<", "&lt;")
+      |> String.replace(">", "&gt;")
+      |> String.replace("\"", "&quot;")
+      |> String.replace("'", "&#39;")
     end
   end
 
