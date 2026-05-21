@@ -4,11 +4,11 @@ defmodule Stem.CLI do
   @moduledoc false
 
   @usage """
-  Usage: stem [options] TEMPLATE [DATA]
+  Usage: stem [options] [DATA_FILE] TEMPLATE
+
+  DATA_FILE must be a JSON file path. If omitted, Stem reads JSON data from standard input.
 
   TEMPLATE may be a file path or `-` to read from standard input.
-  DATA may be a JSON file path, a JSON string, `-` to read from standard input,
-  or omitted for an empty data object.
 
   Options:
 
@@ -47,9 +47,9 @@ defmodule Stem.CLI do
     render_cli([template_path, nil], opts)
   end
 
-  def render_cli([template_path, data_source], opts) do
+  def render_cli([data_source, template_path], opts) do
     template = read_template!(template_path)
-    bindings = read_assigns!(data_source)
+    bindings = read_assigns_file!(data_source)
 
     output =
       render_template!(template, bindings,
@@ -215,18 +215,22 @@ defmodule Stem.CLI do
     |> File.read!()
   end
 
-  defp read_assigns!(nil), do: %{}
+  defp read_assigns_from_stdin! do
+    case read_stdin() do
+      "" -> %{}
+      source -> decode_assigns!(source)
+    end
+  end
 
-  defp read_assigns!("-"), do: read_stdin() |> decode_assigns!()
+  defp read_assigns_file!("-") do
+    read_assigns_from_stdin!()
+  end
 
-  defp read_assigns!(data_source) do
-    source =
-      cond do
-        file_source?(data_source) -> data_source |> resolve_path() |> File.read!()
-        true -> data_source
-      end
-
-    decode_assigns!(source)
+  defp read_assigns_file!(data_source) do
+    data_source
+    |> resolve_path()
+    |> File.read!()
+    |> decode_assigns!()
   end
 
   defp read_stdin do
