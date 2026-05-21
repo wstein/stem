@@ -1,0 +1,1 @@
+foo {{#if print}}bar.{{/if}}

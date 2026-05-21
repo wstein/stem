@@ -1,0 +1,75 @@
+= 00003 Runtime Renderer Minutes and Specification
+
+Date: 2026-03-05
+
+Team: University Professor, Software Engineer, Technical Writer
+
+Goal: remove runtime `Code.eval_quoted/3` from Stem evaluation APIs and execute templates through compiled renderer functions for better speed and security posture.
+
+include::common/includes/_doc-policy.adoc[]
+
+== Meeting Minutes
+
+. Problem statement confirmed: `Stem.eval_string/3` and `Stem.eval_file/3` depended on `Code.eval_quoted/3` for every call.
+. Decision: keep `compile_string/2` API unchanged, but switch evaluation to cached runtime modules with `render/1`.
+. Constraint: preserve existing behavior for assigns, helpers, loops (`this`, `@index`), and file/line metadata as much as possible.
+. Additional guard agreed: reject unsupported parent traversal syntax (`../`) at compile time.
+
+== Specification Draft
+
+=== Functional Scope
+
+- `eval_string/3` and `eval_file/3` must execute without calling `Code.eval_quoted/3`.
+- Runtime renderer modules are cached by template compile context.
+- Existing compile-time macros (`function_from_string/5`, `function_from_file/5`) remain unchanged.
+- Runtime binding visibility must support:
+* direct binding variables (example: `bar`),
+* assigns access (example: `{{bar}}` / smart-engine resolution),
+* helper context variables (`this`, `@index`) in loops.
+- Expressions containing `../` in Stem expression tokens must raise `CompileError`.
+
+=== Non-Goals
+
+- No backward-compatibility layer for unsupported parent traversal semantics.
+- No redesign of the tokenizer/compiler architecture.
+
+== Implementation Summary
+
+- Replaced runtime eval path in `Stem.do_eval/3` with cached `render/1` module dispatch.
+- Added runtime module cache via `:persistent_term`.
+- Added AST rewrite for `binding()` calls:
+* now merges runtime bindings with lexical binding context so both explicit bindings and loop locals are visible.
+- Added AST rewrite for `__ENV__.file` to preserve caller-provided file option semantics.
+- Added compile-time guard for unsupported `../` traversal tokens.
+- Added regression test: handlebars variable resolution from direct runtime binding.
+
+== Validation
+
+- Test suite used:
+* `test/stem_test.exs`
+* `test/stem/template_examples_test.exs`
+* `test/stem/builtin_helpers_guide_test.exs`
+* `test/stem/smart_engine_test.exs`
+* `test/stem_migration_test.exs`
+- Result: all selected tests pass (except existing environment warnings unrelated to this feature).
+
+== Checklist
+
+- [x] Runtime execution no longer uses `Code.eval_quoted/3` in hot path.
+- [x] Binding/assign/helper behavior validated in existing tests.
+- [x] Unsupported `../` path traversal now fails at compile time.
+- [x] Regression test added for `{{bar}}` with direct bindings.
+- [x] README updated with runtime renderer note.
+- [x] Minutes + specification documented.
+
+== Mid-Term Improvements
+
+- Replace broad external-variable prebinding with a more precise free-variable analysis to reduce compiler warnings.
+- Add optional bounded cache policy (size/eviction) for runtime renderer modules.
+- Add benchmark suite comparing old eval flow vs cached renderer path (`eval_string/3`, `eval_file/3`, helpers, loops).
+
+== Next Steps
+
+1. Add micro-benchmarks and publish baseline numbers in `papers/`.
+2. Add security notes describing evaluation model and trust boundaries for template source.
+3. Consider exposing a public API for prebuilding runtime renderer modules for operational warm-up.

@@ -1,0 +1,5 @@
+{{progress "Search" 10 false}}
+{{progress "Upload" 90 true}}
+{{progress "Finish" 100 false}}
+
+{{link "See Website" href=person.url class="person"}}

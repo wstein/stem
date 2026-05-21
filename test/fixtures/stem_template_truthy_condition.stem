@@ -1,0 +1,3 @@
+{{#if (render && render != 0) || fallback}}
+Does render!
+{{/if}}
