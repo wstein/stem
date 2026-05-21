@@ -26,9 +26,8 @@ Use `contract: [required: [...]]` when a template needs an explicit assign bound
 Helper pipelines fit that safe subset because they only allow structured Stem input on the left-hand side and helper stages on the right-hand side.
 Pipeline stages are intentionally limited to helper names and helper calls so templates cannot escalate into arbitrary module pipelines.
 
-For CLI usage, this same explicit boundary is maintained in the command contract. `mix stem data.json template.stem` treats the first positional argument as a data file, while `echo '{"key":42}' | mix stem template.stem` reads JSON from stdin for the one-argument form. This avoids ambiguity between inline data values and file paths and keeps template invocation aligned with Stem's explicit security model.
-
 ## Links
 
 - [[Native AST Compilation Pipeline]] - The pipeline these macros drive.
 - [[HTML Escaping Behavior]] - Explicit transformation guidance.
+- [[Strict CLI Contract and Launcher]] - How this model persists at the command-line boundary.

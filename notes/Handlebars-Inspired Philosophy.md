@@ -17,10 +17,10 @@ Full compatibility would require simulating a JavaScript-like environment (e.g.,
 
 When authoring templates, expect Elixir-style data resolution and truthiness. For features where Handlebars behavior is desired but differs from Elixir (like truthiness for `[]` or `0`), use explicit expressions within the tags.
 
-Stem also preserves an explicit boundary between data and template input at the CLI level. The command contract treats the first positional argument as a JSON data file when present, and the single-argument form reads JSON from stdin. That choice matches the broader philosophy of clear, explicit template boundaries rather than implicit or hybrid invocation modes.
-
 ## Links
 
 - [[Elixir Truthiness Semantics]] - Where the semantics diverge most clearly.
 - [[Native AST Compilation Pipeline]] - The mechanism enabling this performance.
 - [[Compile-Time-Only Security Model]] - The runtime trust-boundary trade-off.
+- [[Strict CLI Contract and Launcher]] - The philosophy of explicit data separation in tooling.
+- [[Whitespace Trim Markers]] - Native control over surrounding template layout.

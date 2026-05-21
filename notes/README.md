@@ -37,6 +37,20 @@ Good atomic notes describe exactly one:
 
 If a note contains multiple unrelated ideas, split it.
 
+## Existing Notes
+
+- [[Native AST Compilation Pipeline]]
+- [[Compile-Time-Only Security Model]]
+- [[Strict CLI Contract and Launcher]]
+- [[Handlebars-Inspired Philosophy]]
+- [[Handlebars Expression Resolution]]
+- [[HTML Escaping Behavior]]
+- [[Helper and Partial Resolution]]
+- [[Iteration and Context Scoping]]
+- [[Template Variable Hygiene]]
+- [[Elixir Truthiness Semantics]]
+- [[Whitespace Trim Markers]]
+
 ## Start With The Summary Contract
 
 The first body paragraph is required. It must summarize the note in plain language so humans and agents can route to the right note without reading the whole graph.
