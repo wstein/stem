@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Templates are compiled into functions at compile time. Runtime evaluation of
-# template source is intentionally disabled, so render through a compiled
-# module defined with the Stem DSL.
+# Templates are compiled into functions at compile time in this example.
+# Stem also supports runtime compile/eval APIs when needed.
 defmodule StemDemo do
   use Stem
 

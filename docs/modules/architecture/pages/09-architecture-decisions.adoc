@@ -19,12 +19,14 @@ The `<%= %>` tag family, the engine behaviour and custom engines, the public EEx
 
 See `papers/00004-native-compiler-minutes.adoc` for the full record.
 
-=== ADR-0002: Compile-time-only evaluation
+=== ADR-0002: Runtime compile/eval APIs alongside compile-time macros
 
-Accepted (2026-03-05, retained).
+Accepted (2026-03-05, revised 2026-05-21).
 
-*Context.* Evaluating template source at runtime would expose the code path to untrusted input.
+*Context.* Some consumers need dynamic template evaluation at runtime, similar to EEx workflows.
 
-*Decision.* Templates are compiled only through compile-time macros; the runtime entry points raise `Stem.SecurityError`.
+*Decision.* Stem keeps compile-time macros and also provides runtime `compile_string/2`, `compile_file/2`, `eval_string/3`, and `eval_file/3` APIs.
+Output rendering remains unescaped by default and transformations are explicit via helpers.
 
-*Consequences.* Rendering is a plain function call, and runtime template selection must build a module at the trust boundary.
+*Consequences.* Runtime evaluation is supported directly, so callers must enforce trust boundaries around template input.
+Escaping and sanitization are explicit responsibilities of helper functions and calling code.

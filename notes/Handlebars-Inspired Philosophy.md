@@ -3,11 +3,11 @@ id: 20260521131000
 aliases: []
 tags: [philosophy, architecture]
 ---
-Stem is "Handlebars-inspired" rather than fully compatible because it prioritizes Elixir native performance and compile-time safety over bug-for-bug parity with the JavaScript reference implementation.
+Stem is "Handlebars-inspired" rather than fully compatible because it prioritizes Elixir-native performance and explicit semantics over bug-for-bug parity with the JavaScript reference implementation.
 
 ## What
 
-Stem adopts the Handlebars tag syntax (`{{ }}`, `{{#each}}`, etc.) but maps it directly onto Elixir semantics. It uses a native four-stage pipeline that emits Elixir AST at compile time, rejecting runtime evaluation (`eval_string/3`) for security.
+Stem adopts the Handlebars tag syntax (`{{ }}`, `{{#each}}`, etc.) but maps it directly onto Elixir semantics. It uses a native four-stage pipeline that emits Elixir AST and supports both compile-time macros and runtime compile/eval APIs.
 
 ## Why
 
@@ -21,4 +21,4 @@ When authoring templates, expect Elixir-style data resolution and truthiness. Fo
 
 - [[Elixir Truthiness Semantics]] - Where the semantics diverge most clearly.
 - [[Native AST Compilation Pipeline]] - The mechanism enabling this performance.
-- [[Compile-Time-Only Security Model]] - The security trade-off.
+- [[Compile-Time-Only Security Model]] - The runtime trust-boundary trade-off.

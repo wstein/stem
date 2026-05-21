@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Each built-in helper and block is compiled into a named function. Runtime
-# evaluation of template source is intentionally disabled, so the guide renders
-# through a compiled module defined with the Stem DSL.
+# Each built-in helper and block is compiled into a named function.
+# Stem also supports runtime eval/compile APIs, but this guide demonstrates
+# compiled functions through the Stem DSL.
 defmodule BuiltinHelpersGuide do
   use Stem
 

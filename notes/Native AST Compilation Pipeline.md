@@ -25,4 +25,4 @@ Keep expression semantics in `Stem.Expression` so the parser stays independent o
 
 - [[Handlebars Expression Resolution]] - How tag contents become Elixir.
 - [[Template Variable Hygiene]] - Why generated and parsed variables unify.
-- [[Compile-Time-Only Security Model]] - Why the pipeline runs only at compile time.
+- [[Compile-Time-Only Security Model]] - Runtime trust-boundary guidance for this pipeline.

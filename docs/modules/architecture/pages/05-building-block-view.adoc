@@ -10,7 +10,7 @@ The compiler is a four-stage pipeline supported by helper, runtime, and command-
 | Module | Responsibility
 
 | `Stem`
-| Public API: the `function_from_string/5` and `function_from_file/5` macros and the disabled runtime entry points.
+| Public API: compile-time macros (`function_from_string/5`, `function_from_file/5`) and runtime compile/eval APIs.
 
 | `Stem.Tokenizer`
 | Scans source into structural tokens with line and column metadata.
@@ -30,8 +30,8 @@ The compiler is a four-stage pipeline supported by helper, runtime, and command-
 | `Stem.Runtime`
 | Resolves assigns when a compiled template runs.
 
-| `Stem.Helpers`, `Stem.Builtins`, `Stem.HTML`
-| Helper registry and invocation, the `each` loop primitive, and output escaping.
+| `Stem.Helpers`, `Stem.Helpers.Sanitize`, `Stem.Builtins`
+| Helper registry and invocation, built-in sanitize helpers, and the `each` loop primitive.
 
 | `Stem.DSL`, `Stem.CLI`, `Mix.Tasks.Stem`
 | Declarative macros, the command-line renderer, and the Mix task.
