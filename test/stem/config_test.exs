@@ -23,8 +23,7 @@ defmodule Stem.ConfigTest do
     {
       "escape": "html",
       "warn_on_missing_assigns": true,
-      "mode": "safe",
-      "lock_security": true
+      "mode": "safe"
     }
     """)
 
@@ -33,7 +32,6 @@ defmodule Stem.ConfigTest do
     assert config[:escape] == :html
     assert config[:warn_on_missing_assigns] == true
     assert config[:mode] == :safe
-    assert config[:lock_security] == true
   end
 
   test "load_config handles invalid JSON", %{temp_dir: temp_dir} do
@@ -154,8 +152,7 @@ defmodule Stem.ConfigTest do
     {
       "escape": "json",
       "warn_on_missing_assigns": false,
-      "mode": "permissive",
-      "lock_security": true
+      "mode": "permissive"
     }
     """)
 
@@ -164,7 +161,6 @@ defmodule Stem.ConfigTest do
     assert config[:escape] == :json
     assert config[:warn_on_missing_assigns] == false
     assert config[:mode] == :permissive
-    assert config[:lock_security] == true
   end
 
   test "config file ignores unsupported options", %{temp_dir: temp_dir} do

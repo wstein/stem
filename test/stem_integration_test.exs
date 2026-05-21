@@ -37,33 +37,35 @@ defmodule Stem.StemTest do
       assert is_tuple(result)
     end
 
-    test "compile_file extracts frontmatter" do
+    test "compile_file uses literal file contents" do
       temp_file =
         Path.join(
           System.tmp_dir!(),
-          "frontmatter_compile_#{System.unique_integer([:positive])}.stem"
+          "literal_compile_#{System.unique_integer([:positive])}.stem"
         )
 
       File.write!(temp_file, """
       ---
-      escape: none
+      literal section header
       ---
-      {{html}}
+      {{value}}
       """)
 
       on_exit(fn -> File.rm_rf!(temp_file) end)
 
-      # Should not raise error even with frontmatter
-      result = Stem.compile_file(temp_file)
+      {result, _bindings} =
+        temp_file
+        |> Stem.compile_file()
+        |> Code.eval_quoted(assigns: [value: "ok"])
 
-      assert is_tuple(result)
+      assert result == "---\nliteral section header\n---\nok\n"
     end
 
-    test "compile_file honors lock_security from project config" do
+    test "compile_file honors safe mode from project config" do
       temp_dir =
         Path.join(
           System.tmp_dir!(),
-          "lock_security_compile_#{System.unique_integer([:positive])}"
+          "safe_mode_compile_#{System.unique_integer([:positive])}"
         )
 
       File.mkdir_p!(temp_dir)
@@ -71,14 +73,8 @@ defmodule Stem.StemTest do
       config_file = Path.join(temp_dir, ".stem.config.json")
       template_file = Path.join(temp_dir, "safe_mode.stem")
 
-      File.write!(config_file, ~s({"mode":"safe","lock_security":true}))
-
-      File.write!(template_file, """
-      ---
-      mode: permissive
-      ---
-      {{1 + 1}}
-      """)
+      File.write!(config_file, ~s({"mode":"safe"}))
+      File.write!(template_file, "{{1 + 1}}")
 
       original_cwd = System.get_env("EXBAR_CWD")
       System.put_env("EXBAR_CWD", temp_dir)
@@ -133,23 +129,17 @@ defmodule Stem.StemTest do
       assert result == "Value: success"
     end
 
-    test "eval_file ignores frontmatter escape overrides when lock_security is enabled" do
+    test "eval_file honors project escape defaults" do
       temp_dir =
-        Path.join(System.tmp_dir!(), "lock_security_eval_#{System.unique_integer([:positive])}")
+        Path.join(System.tmp_dir!(), "config_escape_eval_#{System.unique_integer([:positive])}")
 
       File.mkdir_p!(temp_dir)
 
       config_file = Path.join(temp_dir, ".stem.config.json")
       template_file = Path.join(temp_dir, "escaped.stem")
 
-      File.write!(config_file, ~s({"escape":"html","lock_security":true}))
-
-      File.write!(template_file, """
-      ---
-      escape: none
-      ---
-      {{html}}
-      """)
+      File.write!(config_file, ~s({"escape":"html"}))
+      File.write!(template_file, "{{html}}")
 
       original_cwd = System.get_env("EXBAR_CWD")
       System.put_env("EXBAR_CWD", temp_dir)
@@ -157,7 +147,7 @@ defmodule Stem.StemTest do
       try do
         result = Stem.eval_file(template_file, assigns: [html: "<b>safe</b>"])
 
-        assert result == "&lt;b&gt;safe&lt;/b&gt;\n"
+        assert result == "&lt;b&gt;safe&lt;/b&gt;"
       after
         if original_cwd do
           System.put_env("EXBAR_CWD", original_cwd)
@@ -217,15 +207,14 @@ defmodule Stem.StemTest do
       end
     end
 
-    test "invalid frontmatter raises error" do
+    test "invalid tags in files still raise syntax errors" do
       temp_file =
-        Path.join(System.tmp_dir!(), "invalid_front_#{System.unique_integer([:positive])}.stem")
+        Path.join(
+          System.tmp_dir!(),
+          "invalid_template_#{System.unique_integer([:positive])}.stem"
+        )
 
-      File.write!(temp_file, """
-      ---
-      escape: html
-      template without closing ---
-      """)
+      File.write!(temp_file, "{{#if missing_close }}")
 
       on_exit(fn -> File.rm_rf!(temp_file) end)
 

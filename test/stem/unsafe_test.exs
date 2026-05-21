@@ -80,13 +80,13 @@ defmodule Stem.UnsafeTest do
     assert result == "File: success"
   end
 
-  test "Unsafe.eval_file with frontmatter" do
+  test "Unsafe.eval_file reads file contents literally" do
     temp_file =
-      Path.join(System.tmp_dir!(), "frontmatter_test_#{System.unique_integer([:positive])}.stem")
+      Path.join(System.tmp_dir!(), "literal_file_test_#{System.unique_integer([:positive])}.stem")
 
     File.write!(temp_file, """
     ---
-    escape: none
+    literal content
     ---
     {{html}}
     """)
@@ -95,8 +95,7 @@ defmodule Stem.UnsafeTest do
 
     result = Stem.Unsafe.eval_file(temp_file, assigns: [html: "<b>bold</b>"])
 
-    # Result may have trailing newline from template, trim for comparison
-    assert String.trim(result) == "<b>bold</b>"
+    assert result == "---\nliteral content\n---\n&lt;b&gt;bold&lt;/b&gt;\n"
   end
 
   test "Unsafe.eval_file with empty bindings default" do

@@ -80,10 +80,6 @@ defmodule Stem do
       values like `0`, `""`, `[]`, or `%{}` are coerced to false under
       Handlebars truthiness. Defaults to `false`.
 
-    * `:lock_security` - when `true`, template frontmatter cannot override
-      project-level `:escape` or `:mode` security settings. Defaults to
-      `false`.
-
     * `:contract` - a keyword list like `[required: [:title], optional:
       [:subtitle]]` used to validate required assigns before rendering.
 
@@ -104,8 +100,11 @@ defmodule Stem do
       string result with the configured default escaping.
     * `{{! comment }}` and `{{!-- comment --}}` - discarded from the output.
     * `{{> partial}}` - expands a named partial.
-    * `{{#if}}`, `{{#unless}}`, `{{#each}}`, `{{#with}}` with matching
+    * `{{#if}}`, `{{#unless}}`, `{{#each}}`, `{{#with}}`, `{{#region name}}`
+      with matching
       `{{/...}}` closing tags and an optional `{{else}}`.
+    * `{{yield name}}` to render a named region defined earlier in the same
+      expanded template scope.
     * `{{format (uppercase name)}}` style helper subexpressions.
     * `{{name |> trim |> upcase |> truncate(20)}}` helper pipelines.
     * `{{#each items as |item idx|}}` / `{{#with story as |article|}}`
@@ -121,10 +120,11 @@ defmodule Stem do
   `{{lhs |> helper(a, b)}}` compiles as if the helper had been called with
   the pipeline value prepended: `helper(lhs, a, b)`.
 
-  For layout composition, prefer nested partials over prop drilling. A wrapper
-  partial can expand `{{> header}}`, `{{> body}}`, and `{{> footer}}`, and
-  those partials will see the same surrounding assigns because partials expand
-  inline before compilation.
+  For layout composition, combine inline partial expansion with named regions.
+  Define `{{#region body}}...{{/region}}` in the caller, then render it inside
+  a wrapper partial with `{{yield body}}`. Regions are lexical to the current
+  expanded template scope, so nested blocks can define local yields without
+  prop drilling through helper arguments.
 
   Stem ships built-in helpers for common text and collection transforms,
   including `trim`, `upcase`, `truncate`, `default`, `join`, `map`,
@@ -165,7 +165,6 @@ defmodule Stem do
           | {:partials, map() | keyword()}
           | {:warn_on_missing_assigns, boolean()}
           | {:warn_on_falsy_coercion, boolean()}
-          | {:lock_security, boolean()}
           | {:contract, keyword()}
           | {:mode, :permissive | :safe}
           | {atom(), term()}
@@ -395,31 +394,7 @@ defmodule Stem do
   defp compile_file_internal(filename, options) do
     source = File.read!(filename)
 
-    case Stem.Frontmatter.parse(source) do
-      {:ok, {frontmatter_opts, template_body}} ->
-        merged_options =
-          maybe_lock_frontmatter_security(frontmatter_opts, options)
-          |> Keyword.merge(options)
-          |> Keyword.merge(file: filename, line: 1)
-
-        compile_string_internal(template_body, merged_options)
-
-      {:error, reason} ->
-        raise Stem.SyntaxError,
-          file: filename,
-          line: 1,
-          column: 1,
-          message: "invalid frontmatter: #{reason}",
-          snippet: nil
-    end
-  end
-
-  defp maybe_lock_frontmatter_security(frontmatter_opts, options) do
-    if Keyword.get(options, :lock_security, false) do
-      Keyword.drop(frontmatter_opts, [:escape, :mode])
-    else
-      frontmatter_opts
-    end
+    compile_string_internal(source, Keyword.merge(options, file: filename, line: 1))
   end
 
   defp normalize_runtime_bindings(bindings) do
