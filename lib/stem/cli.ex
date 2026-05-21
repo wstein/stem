@@ -44,7 +44,30 @@ defmodule Stem.CLI do
   def usage, do: @usage
 
   def render_cli([template_path], opts) do
-    render_cli([template_path, nil], opts)
+    template = read_template!(template_path)
+
+    bindings =
+      if template_path == "-" do
+        %{}
+      else
+        read_assigns_from_stdin!()
+      end
+
+    output =
+      render_template!(template, bindings,
+        file: template_path,
+        warn_on_missing_assigns: !!opts[:strict]
+      )
+
+    case opts[:output] do
+      nil ->
+        IO.write(output)
+
+      path ->
+        File.write!(path, output)
+    end
+
+    :ok
   end
 
   def render_cli([data_source, template_path], opts) do
@@ -263,10 +286,6 @@ defmodule Stem.CLI do
 
   # JSON object keys are always strings, so only the binary case can occur.
   defp atomize_key(key) when is_binary(key), do: String.to_atom(key)
-
-  defp file_source?(source) when is_binary(source) do
-    source != "-" and File.exists?(resolve_path(source))
-  end
 
   defp resolve_path(path) when is_binary(path) do
     base_cwd = System.get_env("EXBAR_CWD") || File.cwd!()
