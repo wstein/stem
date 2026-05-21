@@ -15,7 +15,7 @@ defmodule Stem.Tokenizer do
 
   @type token ::
           {:text, binary(), meta()}
-          | {:expr, binary(), meta()}
+          | {:expr, binary(), atom(), meta()}
           | {:block_open, kind(), binary(), meta()}
           | {:block_else, meta()}
           | {:block_close, kind(), meta()}
@@ -58,6 +58,33 @@ defmodule Stem.Tokenizer do
 
       :error ->
         {:error, "expected closing '}}' for Stem comment", meta}
+    end
+  end
+
+  defp scan(<<"{{{", rest::binary>>, line, column, buffer, buffer_meta, acc) do
+    meta = %{line: line, column: column}
+
+    case take_until(rest, "}}}") do
+      {:ok, inner, tail} ->
+        {line, column} = advance(["{{{", inner, "}}}"], line, column)
+        {inner, trim_left, trim_right} = extract_trim_markers(inner)
+        {buffer, buffer_meta} = maybe_trim_buffer(buffer, buffer_meta, trim_left)
+        {tail, line, column} = maybe_trim_leading_tail(tail, line, column, trim_right)
+
+        case classify_raw_expr(inner, meta) do
+          {:ok, token} ->
+            acc = flush(buffer, buffer_meta, acc)
+            scan(tail, line, column, [], nil, [token | acc])
+
+          :skip ->
+            scan(tail, line, column, buffer, buffer_meta, acc)
+
+          {:error, _message, _meta} = error ->
+            error
+        end
+
+      :error ->
+        {:error, "expected closing '}}}' for raw Stem expression", meta}
     end
   end
 
@@ -125,7 +152,22 @@ defmodule Stem.Tokenizer do
         {:ok, {:partial, name, meta}}
 
       true ->
-        {:ok, {:expr, tag, meta}}
+        {:ok, {:expr, tag, :none, meta}}
+    end
+  end
+
+  defp classify_raw_expr(inner, meta) do
+    tag = String.trim(inner)
+
+    cond do
+      String.contains?(tag, "{") or String.contains?(tag, "}") ->
+        {:error, "nested braces are not supported in Stem expressions", meta}
+
+      tag == "" ->
+        :skip
+
+      true ->
+        {:ok, {:expr, tag, :none, meta}}
     end
   end
 
@@ -193,7 +235,7 @@ defmodule Stem.Tokenizer do
   defp maybe_trim_leading_tail(tail, line, column, true) do
     trimmed_tail = String.replace(tail, ~r/^[\s]+/u, "")
     removed_size = byte_size(tail) - byte_size(trimmed_tail)
-    <<removed::binary-size(removed_size), _::binary>> = tail
+    <<removed::binary-size(^removed_size), _::binary>> = tail
     {line, column} = advance(removed, line, column)
     {trimmed_tail, line, column}
   end

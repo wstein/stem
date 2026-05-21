@@ -53,9 +53,9 @@ defmodule Stem.Parser do
     collect(rest, partials, stack, [{:text, text} | acc])
   end
 
-  defp collect([{:expr, raw, meta} | rest], partials, stack, acc) do
+  defp collect([{:expr, raw, escape_mode, meta} | rest], partials, stack, acc) do
     case Expression.parse(raw) do
-      {:ok, expr} -> collect(rest, partials, stack, [{:expr, expr, meta} | acc])
+      {:ok, expr} -> collect(rest, partials, stack, [{:expr, expr, escape_mode, meta} | acc])
       {:error, message} -> {:error, message, meta}
     end
   end

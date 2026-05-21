@@ -37,9 +37,10 @@ defmodule Stem.Compiler do
 
   defp compile_node({:text, text}, _state), do: text
 
-  defp compile_node({:expr, expr_ast, meta}, state) do
+  defp compile_node({:expr, expr_ast, escape_mode, meta}, state) do
     expr = compile_expression(expr_ast, meta, state)
-    quote(do: String.Chars.to_string(unquote(expr)))
+    escaped = quote(do: String.Chars.to_string(unquote(expr)))
+    apply_escape(escaped, escape_mode, state)
   end
 
   defp compile_node({:if, expr_ast, body, else_body, meta}, state) do
@@ -206,7 +207,7 @@ defmodule Stem.Compiler do
 
   defp node_references_identifier?({:text, _text}, _name), do: false
 
-  defp node_references_identifier?({:expr, expr_ast, _meta}, name),
+  defp node_references_identifier?({:expr, expr_ast, _escape_mode, _meta}, name),
     do: Expression.references_identifier?(expr_ast, name)
 
   defp node_references_identifier?({:if, expr_ast, body, else_body, _meta}, name),
@@ -228,6 +229,20 @@ defmodule Stem.Compiler do
     do:
       Expression.references_identifier?(expr_ast, name) or body_references_identifier?(body, name) or
         body_references_identifier?(else_body, name)
+
+  defp apply_escape(value, :none, _state), do: value
+
+  defp apply_escape(value, :escape_html, _state) do
+    quote do
+      Stem.Escaping.escape_html(unquote(value))
+    end
+  end
+
+  defp apply_escape(value, escape_mode, _state) when is_atom(escape_mode) do
+    quote do
+      Stem.Escaping.escape(unquote(value), unquote(escape_mode))
+    end
+  end
 
   defp warn(message, meta, state) do
     if state.diagnostics do

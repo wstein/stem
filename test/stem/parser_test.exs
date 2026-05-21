@@ -15,7 +15,7 @@ defmodule Stem.ParserTest do
   test "text and expressions" do
     assert ast("Hi {{name}}!") == [
              {:text, "Hi "},
-             {:expr, {:identifier, "name"}, %{line: 1, column: 4}},
+             {:expr, {:identifier, "name"}, :none, %{line: 1, column: 4}},
              {:text, "!"}
            ]
   end
@@ -31,13 +31,19 @@ defmodule Stem.ParserTest do
   end
 
   test "each, unless, with blocks" do
-    assert [{:each, {:identifier, "items"}, [], [{:expr, {:special, :this}, _}], [], _}] =
+    assert [
+             {:each, {:identifier, "items"}, [], [{:expr, {:special, :this}, :none, _}],
+              [], _}
+           ] =
              ast("{{#each items}}{{this}}{{/each}}")
 
     assert [{:unless, {:identifier, "flag"}, [{:text, "x"}], [], _}] =
              ast("{{#unless flag}}x{{/unless}}")
 
-    assert [{:with, {:identifier, "story"}, [], [{:expr, {:path, :this, ["title"]}, _}], [], _}] =
+    assert [
+             {:with, {:identifier, "story"}, [],
+              [{:expr, {:path, :this, ["title"]}, :none, _}], [], _}
+           ] =
              ast("{{#with story}}{{this.title}}{{/with}}")
   end
 
@@ -77,13 +83,16 @@ defmodule Stem.ParserTest do
     assert nodes == [
              {:text, "a "},
              {:text, "Hi "},
-             {:expr, {:identifier, "name"}, %{line: 1, column: 4}},
+             {:expr, {:identifier, "name"}, :none, %{line: 1, column: 4}},
              {:text, " b"}
            ]
   end
 
   test "subexpressions are stored as expression AST" do
-    assert [{:expr, {:helper, "format", [{:helper, "uppercase", [{:identifier, "name"}]}]}, _}] =
+    assert [
+             {:expr, {:helper, "format", [{:helper, "uppercase", [{:identifier, "name"}]}]},
+              :none, _}
+           ] =
              ast("{{format (uppercase name)}}")
   end
 
