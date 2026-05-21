@@ -238,6 +238,22 @@ defmodule StemTest do
       assert eval("a {{> g}} b", [assigns: [name: "Nina"]], partials: %{g: "Hi {{name}}"}) ==
                "a Hi Nina b"
     end
+
+    test "nested partial layouts inherit ambient assigns" do
+      partials = %{
+        layout: "<article>{{> header}}<main>{{> body}}</main>{{> footer}}</article>",
+        header: "<h1>{{title}}</h1>",
+        body: "{{content}}",
+        footer: "<small>{{site_name}}</small>"
+      }
+
+      assert eval(
+               "{{> layout}}",
+               [assigns: [title: "Stem", content: "Hello", site_name: "Docs"]],
+               partials: partials
+             ) ==
+               "<article><h1>Stem</h1><main>Hello</main><small>Docs</small></article>"
+    end
   end
 
   describe "precompiled functions" do

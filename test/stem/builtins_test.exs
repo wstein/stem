@@ -118,7 +118,7 @@ defmodule Stem.BuiltinsTest do
 
     test "each joins results into single string" do
       entries = [{1, "a"}, {2, "b"}]
-      result = Stem.Builtins.each(entries, fn {val, key}, idx -> "#{val}[#{idx}]" end)
+      result = Stem.Builtins.each(entries, fn {val, _key}, idx -> "#{val}[#{idx}]" end)
 
       assert result == "1[0]2[1]"
     end
@@ -181,7 +181,9 @@ defmodule Stem.BuiltinsTest do
 
     test "each_entries with falsey value stops iteration" do
       entries = Stem.Builtins.each_entries(0)
-      result = Stem.Builtins.each(entries, fn _, _ -> "should not appear" end, fn -> "no items" end)
+
+      result =
+        Stem.Builtins.each(entries, fn _, _ -> "should not appear" end, fn -> "no items" end)
 
       assert result == "no items"
     end

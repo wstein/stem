@@ -197,7 +197,9 @@ defmodule Mix.Tasks.StemTest do
     end
 
     test "loads project config while honoring CLI escape overrides" do
-      temp_dir = Path.join(System.tmp_dir!(), "stem-cli-config-#{System.unique_integer([:positive])}")
+      temp_dir =
+        Path.join(System.tmp_dir!(), "stem-cli-config-#{System.unique_integer([:positive])}")
+
       File.mkdir_p!(temp_dir)
 
       config_path = Path.join(temp_dir, ".stem.config.json")
@@ -210,9 +212,10 @@ defmodule Mix.Tasks.StemTest do
       System.put_env("EXBAR_CWD", temp_dir)
 
       try do
-        output = capture_io([input: ~s({"value":"<tag>"})], fn ->
-          Stem.CLI.run(["--escape", "none", template_path])
-        end)
+        output =
+          capture_io([input: ~s({"value":"<tag>"})], fn ->
+            Stem.CLI.run(["--escape", "none", template_path])
+          end)
 
         assert output == "<tag>"
       after
@@ -227,7 +230,9 @@ defmodule Mix.Tasks.StemTest do
     end
 
     test "raises on invalid escape mode" do
-      temp_dir = Path.join(System.tmp_dir!(), "stem-cli-escape-#{System.unique_integer([:positive])}")
+      temp_dir =
+        Path.join(System.tmp_dir!(), "stem-cli-escape-#{System.unique_integer([:positive])}")
+
       File.mkdir_p!(temp_dir)
 
       data_path = Path.join(temp_dir, "data.json")

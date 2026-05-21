@@ -10,7 +10,9 @@ defmodule Stem.CLICoverageTest do
 
   describe "CLI render_cli variants" do
     test "render_cli with single template path from stdin" do
-      temp_file = Path.join(System.tmp_dir!(), "cli_single_#{System.unique_integer([:positive])}.stem")
+      temp_file =
+        Path.join(System.tmp_dir!(), "cli_single_#{System.unique_integer([:positive])}.stem")
+
       File.write!(temp_file, "Template: {{value}}")
 
       on_exit(fn -> File.rm_rf!(temp_file) end)
@@ -24,8 +26,11 @@ defmodule Stem.CLICoverageTest do
     end
 
     test "render_cli with data file and template" do
-      temp_data = Path.join(System.tmp_dir!(), "cli_data_#{System.unique_integer([:positive])}.json")
-      temp_template = Path.join(System.tmp_dir!(), "cli_tpl_#{System.unique_integer([:positive])}.stem")
+      temp_data =
+        Path.join(System.tmp_dir!(), "cli_data_#{System.unique_integer([:positive])}.json")
+
+      temp_template =
+        Path.join(System.tmp_dir!(), "cli_tpl_#{System.unique_integer([:positive])}.stem")
 
       File.write!(temp_data, ~S"""
       {
@@ -53,7 +58,9 @@ defmodule Stem.CLICoverageTest do
     end
 
     test "render_cli with output option" do
-      temp_file = Path.join(System.tmp_dir!(), "cli_output_#{System.unique_integer([:positive])}.stem")
+      temp_file =
+        Path.join(System.tmp_dir!(), "cli_output_#{System.unique_integer([:positive])}.stem")
+
       File.write!(temp_file, "Content")
 
       on_exit(fn -> File.rm_rf!(temp_file) end)
@@ -93,7 +100,9 @@ defmodule Stem.CLICoverageTest do
     end
 
     test "read_template handles file paths" do
-      temp_file = Path.join(System.tmp_dir!(), "read_tpl_#{System.unique_integer([:positive])}.stem")
+      temp_file =
+        Path.join(System.tmp_dir!(), "read_tpl_#{System.unique_integer([:positive])}.stem")
+
       File.write!(temp_file, "{{content}}")
 
       on_exit(fn -> File.rm_rf!(temp_file) end)
@@ -209,7 +218,7 @@ defmodule Stem.CLICoverageTest do
   describe "CLI runtime binding construction" do
     test "runtime_binding_values builds correct format" do
       # When args include :assigns, bindings should include assigns
-      args = [:assigns]
+      _args = [:assigns]
       bindings = %{name: "value"}
 
       # Simulate runtime binding value construction
@@ -220,7 +229,7 @@ defmodule Stem.CLICoverageTest do
     end
 
     test "runtime_binding_values with helpers" do
-      args = [:assigns, :helpers]
+      _args = [:assigns, :helpers]
       bindings = %{name: "value"}
 
       # Should create values for both assigns and helpers

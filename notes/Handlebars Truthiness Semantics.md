@@ -11,6 +11,7 @@ Block conditionals in Stem (v0.2.0+) follow **Handlebars truthiness rules**: `fa
 In `{{#if expr}}`, `{{#unless expr}}`, `{{#each expr}}`, and `{{#with expr}}`, falsey values trigger the `{{else}}` branch or skip the block entirely.
 
 **Falsey values:**
+
 - `false` - boolean false
 - `nil` - Elixir null
 - `0` - zero (integer or float)
@@ -27,6 +28,7 @@ Handlebars truthiness is the standard in frontend template languages and aligns 
 ## How
 
 **Conditionals trigger else on falsey values:**
+
 ```handlebars
 {{#if 0}}truthy{{else}}falsey{{/if}}        → "falsey"
 {{#if ""}}truthy{{else}}falsey{{/if}}       → "falsey"
@@ -39,6 +41,7 @@ Handlebars truthiness is the standard in frontend template languages and aligns 
 ```
 
 **Each skips empty/falsey collections:**
+
 ```handlebars
 {{#each [1, 2, 3]}}item{{/each}}            → item rendered 3x
 {{#each []}}item{{else}}empty{{/each}}      → "empty"
@@ -46,6 +49,7 @@ Handlebars truthiness is the standard in frontend template languages and aligns 
 ```
 
 **With blocks skip falsey subjects:**
+
 ```handlebars
 {{#with person}}name: {{name}}{{/with}}     → renders if person truthy
 {{#with nil}}...{{else}}missing{{/with}}    → "missing"
@@ -57,9 +61,12 @@ Handlebars truthiness is the standard in frontend template languages and aligns 
 This is a **breaking change** from v0.1, which used Elixir truthiness (only `false` and `nil` falsey). Code that relied on `0`, `""`, or `[]` being truthy must be updated.
 
 Migration path:
+
 - Explicit comparisons: `{{#if count > 0}}` instead of `{{#if count}}`
 - Use helpers: `{{#if (present? list)}}` to check for non-empty
 - Update template logic to match Handlebars conventions
+
+If a project wants visibility into these coercions during rollout, pass `warn_on_falsy_coercion: true` to emit runtime warnings whenever values such as `0`, `""`, `[]`, or `%{}` become falsey under Stem's Handlebars semantics.
 
 ## Links
 

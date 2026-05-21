@@ -18,12 +18,13 @@ defmodule Stem.BuiltinHelpersGuideTest do
       assert Stem.TestTemplate.eval_string(template, assigns: [isActive: false]) == "inactive"
     end
 
-    test "if treats standard Elixir truthy values as true" do
+    test "if treats Handlebars falsey values as empty" do
       template = "{{#if value}}non-empty{{else}}empty{{/if}}"
 
-      assert Stem.TestTemplate.eval_string(template, assigns: [value: 0]) == "non-empty"
-      assert Stem.TestTemplate.eval_string(template, assigns: [value: ""]) == "non-empty"
-      assert Stem.TestTemplate.eval_string(template, assigns: [value: []]) == "non-empty"
+      assert Stem.TestTemplate.eval_string(template, assigns: [value: 0]) == "empty"
+      assert Stem.TestTemplate.eval_string(template, assigns: [value: ""]) == "empty"
+      assert Stem.TestTemplate.eval_string(template, assigns: [value: []]) == "empty"
+      assert Stem.TestTemplate.eval_string(template, assigns: [value: 1]) == "non-empty"
     end
   end
 

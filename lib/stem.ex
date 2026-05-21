@@ -65,7 +65,9 @@ defmodule Stem do
     * `:column` - the column used as the template start. Defaults to `1`.
 
     * `:partials` - a map or keyword list of named partial templates that
-      `{{> name}}` expands inline. Defaults to `%{}`.
+      `{{> name}}` expands inline. Partials can expand other partials and
+      inherit the surrounding assign scope, which makes them Stem's current
+      layout-composition mechanism. Defaults to `%{}`.
 
     * `:warn_on_missing_assigns` - when `true`, missing assigns print a warning
       instead of returning `nil` silently. Defaults to `false`.
@@ -99,7 +101,7 @@ defmodule Stem do
   Stem supports the following tags:
 
     * `{{expression}}` - evaluates the expression and prints the
-      string result without HTML escaping.
+      string result with the configured default escaping.
     * `{{! comment }}` and `{{!-- comment --}}` - discarded from the output.
     * `{{> partial}}` - expands a named partial.
     * `{{#if}}`, `{{#unless}}`, `{{#each}}`, `{{#with}}` with matching
@@ -118,6 +120,11 @@ defmodule Stem do
   Pipelines are restricted to helper stages so templates stay declarative.
   `{{lhs |> helper(a, b)}}` compiles as if the helper had been called with
   the pipeline value prepended: `helper(lhs, a, b)`.
+
+  For layout composition, prefer nested partials over prop drilling. A wrapper
+  partial can expand `{{> header}}`, `{{> body}}`, and `{{> footer}}`, and
+  those partials will see the same surrounding assigns because partials expand
+  inline before compilation.
 
   Stem ships built-in helpers for common text and collection transforms,
   including `trim`, `upcase`, `truncate`, `default`, `join`, `map`,
@@ -393,7 +400,7 @@ defmodule Stem do
         merged_options =
           maybe_lock_frontmatter_security(frontmatter_opts, options)
           |> Keyword.merge(options)
-          |> Keyword.merge([file: filename, line: 1])
+          |> Keyword.merge(file: filename, line: 1)
 
         compile_string_internal(template_body, merged_options)
 

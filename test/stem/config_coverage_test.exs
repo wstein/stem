@@ -4,7 +4,9 @@ defmodule Stem.ConfigCoverageTest do
   use ExUnit.Case, async: true
 
   setup do
-    temp_dir = System.tmp_dir!() |> Path.join("stem_config_cov_#{System.unique_integer([:positive])}")
+    temp_dir =
+      System.tmp_dir!() |> Path.join("stem_config_cov_#{System.unique_integer([:positive])}")
+
     File.mkdir_p!(temp_dir)
 
     on_exit(fn ->

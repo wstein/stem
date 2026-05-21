@@ -25,7 +25,9 @@ defmodule Stem.StemTest do
 
   describe "compile_file" do
     test "compile_file returns quoted code from file" do
-      temp_file = Path.join(System.tmp_dir!(), "compile_test_#{System.unique_integer([:positive])}.stem")
+      temp_file =
+        Path.join(System.tmp_dir!(), "compile_test_#{System.unique_integer([:positive])}.stem")
+
       File.write!(temp_file, "{{value}}")
 
       on_exit(fn -> File.rm_rf!(temp_file) end)
@@ -36,7 +38,11 @@ defmodule Stem.StemTest do
     end
 
     test "compile_file extracts frontmatter" do
-      temp_file = Path.join(System.tmp_dir!(), "frontmatter_compile_#{System.unique_integer([:positive])}.stem")
+      temp_file =
+        Path.join(
+          System.tmp_dir!(),
+          "frontmatter_compile_#{System.unique_integer([:positive])}.stem"
+        )
 
       File.write!(temp_file, """
       ---
@@ -54,7 +60,12 @@ defmodule Stem.StemTest do
     end
 
     test "compile_file honors lock_security from project config" do
-      temp_dir = Path.join(System.tmp_dir!(), "lock_security_compile_#{System.unique_integer([:positive])}")
+      temp_dir =
+        Path.join(
+          System.tmp_dir!(),
+          "lock_security_compile_#{System.unique_integer([:positive])}"
+        )
+
       File.mkdir_p!(temp_dir)
 
       config_file = Path.join(temp_dir, ".stem.config.json")
@@ -110,7 +121,9 @@ defmodule Stem.StemTest do
 
   describe "eval_file" do
     test "eval_file returns rendered string from file" do
-      temp_file = Path.join(System.tmp_dir!(), "eval_file_test_#{System.unique_integer([:positive])}.stem")
+      temp_file =
+        Path.join(System.tmp_dir!(), "eval_file_test_#{System.unique_integer([:positive])}.stem")
+
       File.write!(temp_file, "Value: {{val}}")
 
       on_exit(fn -> File.rm_rf!(temp_file) end)
@@ -121,7 +134,9 @@ defmodule Stem.StemTest do
     end
 
     test "eval_file ignores frontmatter escape overrides when lock_security is enabled" do
-      temp_dir = Path.join(System.tmp_dir!(), "lock_security_eval_#{System.unique_integer([:positive])}")
+      temp_dir =
+        Path.join(System.tmp_dir!(), "lock_security_eval_#{System.unique_integer([:positive])}")
+
       File.mkdir_p!(temp_dir)
 
       config_file = Path.join(temp_dir, ".stem.config.json")
@@ -171,7 +186,9 @@ defmodule Stem.StemTest do
 
   describe "function_from_file" do
     test "function_from_file creates template function from file" do
-      temp_file = Path.join(System.tmp_dir!(), "func_file_#{System.unique_integer([:positive])}.stem")
+      temp_file =
+        Path.join(System.tmp_dir!(), "func_file_#{System.unique_integer([:positive])}.stem")
+
       File.write!(temp_file, "File {{content}}")
 
       on_exit(fn -> File.rm_rf!(temp_file) end)
@@ -201,7 +218,8 @@ defmodule Stem.StemTest do
     end
 
     test "invalid frontmatter raises error" do
-      temp_file = Path.join(System.tmp_dir!(), "invalid_front_#{System.unique_integer([:positive])}.stem")
+      temp_file =
+        Path.join(System.tmp_dir!(), "invalid_front_#{System.unique_integer([:positive])}.stem")
 
       File.write!(temp_file, """
       ---

@@ -46,7 +46,8 @@ defmodule Stem.UnsafeTest do
   end
 
   test "Unsafe.eval_string with each block" do
-    result = Stem.Unsafe.eval_string("{{#each items}}{{this}}{{/each}}", assigns: [items: [1, 2, 3]])
+    result =
+      Stem.Unsafe.eval_string("{{#each items}}{{this}}{{/each}}", assigns: [items: [1, 2, 3]])
 
     assert result == "123"
   end
@@ -54,7 +55,8 @@ defmodule Stem.UnsafeTest do
   test "Unsafe.eval_string with helpers" do
     helpers = [upcase: fn [v], _ctx -> String.upcase(to_string(v)) end]
 
-    result = Stem.Unsafe.eval_string("{{upcase name}}", [assigns: [name: "hello"]], helpers: helpers)
+    result =
+      Stem.Unsafe.eval_string("{{upcase name}}", [assigns: [name: "hello"]], helpers: helpers)
 
     assert result == "HELLO"
   end
@@ -66,7 +68,9 @@ defmodule Stem.UnsafeTest do
   end
 
   test "Unsafe.eval_file evaluates template from file" do
-    temp_file = Path.join(System.tmp_dir!(), "test_template_#{System.unique_integer([:positive])}.stem")
+    temp_file =
+      Path.join(System.tmp_dir!(), "test_template_#{System.unique_integer([:positive])}.stem")
+
     File.write!(temp_file, "File: {{content}}")
 
     on_exit(fn -> File.rm_rf!(temp_file) end)
@@ -77,7 +81,8 @@ defmodule Stem.UnsafeTest do
   end
 
   test "Unsafe.eval_file with frontmatter" do
-    temp_file = Path.join(System.tmp_dir!(), "frontmatter_test_#{System.unique_integer([:positive])}.stem")
+    temp_file =
+      Path.join(System.tmp_dir!(), "frontmatter_test_#{System.unique_integer([:positive])}.stem")
 
     File.write!(temp_file, """
     ---
@@ -95,7 +100,9 @@ defmodule Stem.UnsafeTest do
   end
 
   test "Unsafe.eval_file with empty bindings default" do
-    temp_file = Path.join(System.tmp_dir!(), "empty_test_#{System.unique_integer([:positive])}.stem")
+    temp_file =
+      Path.join(System.tmp_dir!(), "empty_test_#{System.unique_integer([:positive])}.stem")
+
     File.write!(temp_file, "Static content")
 
     on_exit(fn -> File.rm_rf!(temp_file) end)
@@ -106,18 +113,22 @@ defmodule Stem.UnsafeTest do
   end
 
   test "Unsafe.eval_file with default options parameter" do
-    temp_file = Path.join(System.tmp_dir!(), "opts_test_#{System.unique_integer([:positive])}.stem")
+    temp_file =
+      Path.join(System.tmp_dir!(), "opts_test_#{System.unique_integer([:positive])}.stem")
+
     File.write!(temp_file, "{{value}}")
 
     on_exit(fn -> File.rm_rf!(temp_file) end)
 
-    result = Stem.Unsafe.eval_file(temp_file, [assigns: [value: "success"]])
+    result = Stem.Unsafe.eval_file(temp_file, assigns: [value: "success"])
 
     assert result == "success"
   end
 
   test "Unsafe.eval_file respects escape option" do
-    temp_file = Path.join(System.tmp_dir!(), "escape_test_#{System.unique_integer([:positive])}.stem")
+    temp_file =
+      Path.join(System.tmp_dir!(), "escape_test_#{System.unique_integer([:positive])}.stem")
+
     File.write!(temp_file, "{{text}}")
 
     on_exit(fn -> File.rm_rf!(temp_file) end)
@@ -128,7 +139,9 @@ defmodule Stem.UnsafeTest do
   end
 
   test "Unsafe.eval_file with mode option" do
-    temp_file = Path.join(System.tmp_dir!(), "mode_test_#{System.unique_integer([:positive])}.stem")
+    temp_file =
+      Path.join(System.tmp_dir!(), "mode_test_#{System.unique_integer([:positive])}.stem")
+
     File.write!(temp_file, "{{x}}")
 
     on_exit(fn -> File.rm_rf!(temp_file) end)
@@ -147,19 +160,21 @@ defmodule Stem.UnsafeTest do
   test "Unsafe.eval_string delegates to Stem.eval_string" do
     # Both should produce the same result
     result_unsafe = Stem.Unsafe.eval_string("{{name}}", assigns: [name: "test"])
-    result_stem = Stem.eval_string("{{name}}", [assigns: [name: "test"]])
+    result_stem = Stem.eval_string("{{name}}", assigns: [name: "test"])
 
     assert result_unsafe == result_stem
   end
 
   test "Unsafe.eval_file delegates to Stem.eval_file" do
-    temp_file = Path.join(System.tmp_dir!(), "delegate_test_#{System.unique_integer([:positive])}.stem")
+    temp_file =
+      Path.join(System.tmp_dir!(), "delegate_test_#{System.unique_integer([:positive])}.stem")
+
     File.write!(temp_file, "{{content}}")
 
     on_exit(fn -> File.rm_rf!(temp_file) end)
 
     result_unsafe = Stem.Unsafe.eval_file(temp_file, assigns: [content: "same"])
-    result_stem = Stem.eval_file(temp_file, [assigns: [content: "same"]])
+    result_stem = Stem.eval_file(temp_file, assigns: [content: "same"])
 
     assert result_unsafe == result_stem
   end

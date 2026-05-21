@@ -195,7 +195,6 @@ defmodule Stem.EscapingTest do
 
   test "custom formatter receives correct value" do
     test_value = "test_input_12345"
-    received_value = []
 
     custom_formatter = fn value ->
       # Capture the value received

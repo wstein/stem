@@ -120,12 +120,12 @@ defmodule Stem.Compiler do
            line: unquote(meta.line),
            context: :with
          ),
-        do:
-          (
-            unquote_splicing(block_param_assignments(:with, params, this, nil))
-            unquote(compile_nodes(body, body_state))
-          ),
-        else: unquote(compile_nodes(else_body, state))
+         do:
+           (
+             unquote_splicing(block_param_assignments(:with, params, this, nil))
+             unquote(compile_nodes(body, body_state))
+           ),
+         else: unquote(compile_nodes(else_body, state))
     end
   end
 

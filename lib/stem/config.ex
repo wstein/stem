@@ -99,11 +99,17 @@ defmodule Stem.Config do
 
   defp parse_json_value(value) do
     cond do
-      value == "true" -> true
-      value == "false" -> false
+      value == "true" ->
+        true
+
+      value == "false" ->
+        false
+
       String.starts_with?(value, "\"") and String.ends_with?(value, "\"") ->
         String.slice(value, 1, String.length(value) - 2)
-      true -> value
+
+      true ->
+        value
     end
   end
 
@@ -132,9 +138,14 @@ defmodule Stem.Config do
 
   defp maybe_add_mode(acc, map) do
     case Map.get(map, "mode") do
-      nil -> acc
-      mode_string when mode_string in ["permissive", "safe"] -> Keyword.put(acc, :mode, String.to_atom(mode_string))
-      _ -> acc
+      nil ->
+        acc
+
+      mode_string when mode_string in ["permissive", "safe"] ->
+        Keyword.put(acc, :mode, String.to_atom(mode_string))
+
+      _ ->
+        acc
     end
   end
 

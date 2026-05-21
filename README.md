@@ -6,15 +6,16 @@ There is no intermediate template language.
 
 ## Why Stem
 
-*   **Handlebars Syntax**: Remains approachable and compatible with standard frontend tooling.
-*   **StringTemplate Strictness**: Enforces clear separation of concerns with restricted expression evaluation and safe-mode compatibility.
-*   **Jinja2 Pipelines**: Enables elegant data transformation using the Elixir-style `|>` pipe operator to chain built-in and project-specific helpers.
-*   **Native Performance**: Templates become ordinary compiled functions, so rendering is fast and type-checked by the compiler.
-*   **Flexibility**: Choose compile-time macros for static performance or runtime APIs for dynamic content.
+* **Handlebars Syntax**: Remains approachable and compatible with standard frontend tooling.
+* **StringTemplate Strictness**: Enforces clear separation of concerns with restricted expression evaluation and safe-mode compatibility.
+* **Jinja2 Pipelines**: Enables elegant data transformation using the Elixir-style `|>` pipe operator to chain built-in and project-specific helpers.
+* **Native Performance**: Templates become ordinary compiled functions, so rendering is fast and type-checked by the compiler.
+* **Flexibility**: Choose compile-time macros for static performance or runtime APIs for dynamic content.
 
 ## Quick Start
 
 ### 1. The `~STEM` Sigil
+
 For inline rendering inside any Elixir function, use the `~STEM` sigil. It compiles the template to native AST at compile-time for maximum performance.
 
 ```elixir
@@ -28,6 +29,7 @@ end
 ```
 
 ### 2. File-Based Templates
+
 Use `.stem` files for larger templates. Stem provides DSL macros to bind these files to module functions.
 
 ```elixir
@@ -40,6 +42,7 @@ end
 ```
 
 ### 3. Command Line Interface (CLI)
+
 Format your templates or render them directly using the bundled executable in the `bin/` folder.
 
 ```bash
@@ -56,6 +59,7 @@ echo '{"name": "Nina"}' | bin/stem template.stem
 ## Compilation Strategies
 
 ### Performance: Compile-Time Macros
+
 Stem can compile templates directly into functions within your modules.
 
 ```elixir
@@ -69,6 +73,7 @@ Greeting.render(name: "Nina")
 ```
 
 ### Flexibility: Runtime Eval
+
 For dynamic contents or user-provided templates, use the runtime API:
 
 ```elixir
@@ -78,15 +83,15 @@ Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 
 ## Syntax
 
-- `{{expression}}` evaluates an expression and prints the string result with HTML escaping by default (secure-by-default).
-- `{{{expression}}}` evaluates an expression and prints the string result without escaping (raw output).
-- `{{! comment }}` and `{{!-- comment --}}` are discarded.
-- `{{> partial}}` expands a named partial.
-- `{{#if}}`, `{{#unless}}`, `{{#each}}`, and `{{#with}}` open blocks closed by `{{/...}}`, each with an optional `{{else}}`.
-- Helper calls support nested subexpressions such as `{{format (uppercase name)}}`.
-- Elixir-style helper pipelines such as `{{user.name |> trim |> upcase |> truncate(20)}}` compile to nested helper calls.
-- `{{#each items as |item idx|}}` and `{{#with story as |article|}}` introduce block parameters.
-- `{{~ ... ~}}`, `{{~ ...}}`, and `{{... ~}}` trim surrounding literal whitespace around a tag on both or one side.
+* `{{expression}}` evaluates an expression and prints the string result with HTML escaping by default (secure-by-default).
+* `{{{expression}}}` evaluates an expression and prints the string result without escaping (raw output).
+* `{{! comment }}` and `{{!-- comment --}}` are discarded.
+* `{{> partial}}` expands a named partial.
+* `{{#if}}`, `{{#unless}}`, `{{#each}}`, and `{{#with}}` open blocks closed by `{{/...}}`, each with an optional `{{else}}`.
+* Helper calls support nested subexpressions such as `{{format (uppercase name)}}`.
+* Elixir-style helper pipelines such as `{{user.name |> trim |> upcase |> truncate(20)}}` compile to nested helper calls.
+* `{{#each items as |item idx|}}` and `{{#with story as |article|}}` introduce block parameters.
+* `{{~ ... ~}}`, `{{~ ...}}`, and `{{... ~}}` trim surrounding literal whitespace around a tag on both or one side.
 
 Bare identifiers resolve to assigns, so `{{name}}` reads the `:name` assign.
 Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the index, and `{{@key}}` the key when iterating a map.
@@ -95,6 +100,26 @@ Block conditionals follow Handlebars truthiness: `false`, `nil`, `0`, `""`, `[]`
 Use helpers or regular Elixir functions when output needs transformation (for example, sanitization, normalization, or formatting).
 Nested brace forms inside expressions are not supported.
 Pipeline stages are restricted to helper names and helper calls so templates stay declarative.
+
+## Layouts with Partials
+
+Stem does not ship block-region layout syntax today. The supported layout pattern is higher-order partial composition: define a wrapper partial that expands other partials, and let those partials read the surrounding assigns directly instead of threading every value through intermediate layers.
+
+```elixir
+partials = %{
+  layout: "<article>{{> header}}<main>{{> body}}</main>{{> footer}}</article>",
+  header: "<h1>{{title}}</h1>",
+  body: "{{content}}",
+  footer: "<small>{{site_name}}</small>"
+}
+
+Stem.eval_string("{{> layout}}",
+  assigns: [title: "Stem", content: "Hello", site_name: "Docs"],
+  partials: partials
+)
+```
+
+Because partials expand inline during parsing, nested partials inherit the ambient scope automatically. That gives you layout composition without adding a separate parameter-passing system on top of assigns.
 
 ## Runtime APIs
 
@@ -123,10 +148,10 @@ Helper pipelines are safe-mode compatible because they lower to helper invocatio
 
 Stem ships pipeline-friendly builtins for common presentation and collection work:
 
-- `default`, `join`, `inspect`, `json`, `escape_json`, `escape_html`
-- `trim`, `upcase`, `downcase`, `capitalize`, `replace`, `truncate`
-- `contains`, `empty?`, `present?`, `starts_with`, `ends_with`
-- `map`, `filter`, `sort`, `sort_by`, `group_by`, `take`, `drop`, `slice`, `first`, `compact`, `uniq`, `flatten`, `reverse`
+* `default`, `join`, `inspect`, `json`, `escape_json`, `escape_html`
+* `trim`, `upcase`, `downcase`, `capitalize`, `replace`, `truncate`
+* `contains`, `empty?`, `present?`, `starts_with`, `ends_with`
+* `map`, `filter`, `sort`, `sort_by`, `group_by`, `take`, `drop`, `slice`, `first`, `compact`, `uniq`, `flatten`, `reverse`
 
 Selector-based helpers such as `map`, `filter`, `sort_by`, and `group_by` accept a simple dotted path string like `"author.name"` so templates can stay declarative without anonymous functions.
 
@@ -141,6 +166,8 @@ mix stem.format --check-formatted path/to/template.stem
 
 Compiler diagnostics are available with `warn_on_diagnostics: true` and currently cover constant block conditions and unused block parameters.
 
+Pass `warn_on_falsy_coercion: true` to log when values such as `0`, `""`, `[]`, or `%{}` are coerced into false by Stem's Handlebars-style truthiness rules at render time.
+
 ## Configuration
 
 ### Project-Level Config with `.stem.config.json`
@@ -151,23 +178,29 @@ Create a `.stem.config.json` file in your project root to set default options fo
 {
   "escape": "html",
   "warn_on_missing_assigns": false,
-  "mode": "permissive"
+  "mode": "permissive",
+  "lock_security": false
 }
 ```
 
 **Supported options**:
-- `escape` - Default escape mode: `none`, `html` (default), `xml`, `json`, `url`
-- `warn_on_missing_assigns` - Print warnings for missing assigns: `true` or `false`
-- `mode` - Template evaluation mode: `permissive` (default) or `safe`
+
+* `escape` - Default escape mode: `none`, `html` (default), `xml`, `json`, `url`
+* `warn_on_missing_assigns` - Print warnings for missing assigns: `true` or `false`
+* `mode` - Template evaluation mode: `permissive` (default) or `safe`
+* `lock_security` - Prevent template frontmatter from overriding project-level `escape` and `mode`
 
 **Config discovery**: Stem walks up the directory tree from the current working directory to find `.stem.config.json`. It stops at the project root (when `mix.exs` is found) or the filesystem root.
 
 **Option precedence** (highest to lowest):
+
 1. Explicit compile/eval options
 2. Per-template frontmatter
 3. CLI flags (via `--escape`, `--strict`)
 4. Config file (`.stem.config.json`)
 5. Defaults
+
+When `lock_security` is `true` in `.stem.config.json`, that precedence changes only for security-sensitive frontmatter keys: template frontmatter can no longer override the project-level `escape` or `mode` values, while explicit API options and CLI flags still can.
 
 Example with CLI override:
 
@@ -196,16 +229,20 @@ warn_on_missing_assigns: true
 ```
 
 **Supported frontmatter fields**:
-- `escape` - Escape mode for this template
-- `mode` - Safe or permissive evaluation mode
-- `warn_on_missing_assigns` - Warn on missing assigns
+
+* `escape` - Escape mode for this template
+* `mode` - Safe or permissive evaluation mode
+* `warn_on_missing_assigns` - Warn on missing assigns
+
+If the project config enables `lock_security`, the `escape` and `mode` fields are ignored in frontmatter so individual templates cannot silently weaken project-wide security settings.
 
 **Frontmatter syntax**:
-- Must start with `---` on the first line
-- Must be closed with `---` on its own line
-- Supports YAML key: value pairs (keys and boolean values are case-insensitive)
-- Comments starting with `#` are ignored
-- Empty lines are allowed
+
+* Must start with `---` on the first line
+* Must be closed with `---` on its own line
+* Supports YAML key: value pairs (keys and boolean values are case-insensitive)
+* Comments starting with `#` are ignored
+* Empty lines are allowed
 
 **Example frontmatter variations**:
 
