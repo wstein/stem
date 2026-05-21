@@ -1,6 +1,6 @@
 # Stem
 
-Stem is a native Handlebars-style template compiler for Elixir.
+Stem is a native Handlebars-inspired template compiler for Elixir.
 It compiles double-curly-brace templates directly into Elixir's abstract syntax tree.
 There is no intermediate template language and no runtime evaluation of template source.
 
@@ -8,7 +8,7 @@ There is no intermediate template language and no runtime evaluation of template
 
 Templates become ordinary compiled functions, so rendering is fast and type-checked by the compiler.
 Template source is never evaluated at runtime, which keeps untrusted input out of the code path.
-The syntax is familiar to anyone who has used Handlebars.
+The syntax stays familiar if you know double-curly templating systems.
 
 ## Quick Start
 
@@ -24,18 +24,28 @@ Greeting.render(name: "Nina")
 #=> "Hello Nina"
 ```
 
-The `Stem.DSL` macros offer a more declarative form:
+The compile-time DSL also supports a more declarative form:
 
 ```elixir
 defmodule Views do
-  use Stem.DSL
+  use Stem
 
-  handlebars :hello, "Hello {{name}}", [:assigns]
-  handlebars_file :card, "templates/card.stem", [:assigns]
+  deftemplate :hello, "Hello {{name}}", [:assigns]
+  deftemplate_file :card, "templates/card.stem", [:assigns]
 end
 ```
 
-See `examples/` for runnable scripts.
+For inline rendering inside a function, import `Stem.Sigil` or `use Stem.DSL` / `use Stem` and use the compile-time `~STEM` sigil:
+
+```elixir
+import Stem.Sigil
+
+def render(assigns) do
+  ~STEM"Hello {{name}}"
+end
+```
+
+See `examples/` for runnable scripts via `mix run examples/<name>.exs`.
 
 ## Syntax
 

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule ExampleDSLViews do
-  use Stem.DSL
+  use Stem
 
-  handlebars(:hello, "Hello {{name}}", [:assigns])
+  deftemplate(:hello, "Hello {{name}}", [:assigns])
 
-  handlebars(
+  deftemplate(
     :welcome_email,
     """
     <h1>Hello {{name}}</h1>
@@ -18,7 +18,7 @@ defmodule ExampleDSLViews do
     [:assigns]
   )
 
-  handlebars_file(:card, Path.expand("templates/card.stem", __DIR__), [:assigns])
+  deftemplate_file(:card, Path.expand("templates/card.stem", __DIR__), [:assigns])
 end
 
 IO.puts(ExampleDSLViews.hello(name: "Nina"))

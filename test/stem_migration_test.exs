@@ -24,12 +24,12 @@ defmodule Stem.StemMigrationTest do
              "Hello <b>World</b>"
   end
 
-  test "handlebars comments are discarded" do
+  test "stem comments are discarded" do
     assert Stem.TestTemplate.eval_string("a{{! comment }}b", []) == "ab"
     assert Stem.TestTemplate.eval_string("a{{!-- comment --}}b", []) == "ab"
   end
 
-  test "unterminated handlebars expression raises syntax error" do
+  test "unterminated stem expression raises syntax error" do
     assert_raise Stem.SyntaxError, ~r/expected closing '\}\}' for Stem expression/, fn ->
       Stem.TestTemplate.eval_string("{{name", assigns: [name: "World"])
     end

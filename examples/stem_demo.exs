@@ -3,10 +3,10 @@
 # Templates are compiled into functions at compile time. Runtime evaluation of
 # template source is intentionally disabled, so render through a compiled
 # module defined with the Stem DSL.
-defmodule HandlebarsDemo do
-  use Stem.DSL
+defmodule StemDemo do
+  use Stem
 
-  handlebars(
+  deftemplate(
     :render,
     """
     Hello {{upcase name}}
@@ -24,4 +24,4 @@ Stem.Helpers.register(:upcase, fn [value], _ctx ->
   String.upcase(to_string(value))
 end)
 
-IO.puts(HandlebarsDemo.render([name: "nina", admin: true, items: ["a", "b"]], []))
+IO.puts(StemDemo.render([name: "nina", admin: true, items: ["a", "b"]], []))

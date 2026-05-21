@@ -104,6 +104,12 @@ defmodule Stem do
   true` to print a warning for missing values.
   """
 
+  defmacro __using__(_opts) do
+    quote do
+      use Stem.DSL
+    end
+  end
+
   @type line :: non_neg_integer
   @type column :: non_neg_integer
 

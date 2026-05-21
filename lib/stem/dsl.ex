@@ -2,28 +2,29 @@
 
 defmodule Stem.DSL do
   @moduledoc """
-  Compile-time DSL for defining Handlebars-backed functions.
+  Compile-time DSL for defining Stem template functions.
 
   ## Examples
 
       defmodule MyViews do
         use Stem.DSL
 
-        handlebars :hello, "Hello {{name}}", [:assigns]
-        handlebars_file :card, "templates/card.stem", [:assigns]
+        deftemplate :hello, "Hello {{name}}", [:assigns]
+        deftemplate_file :card, "templates/card.stem", [:assigns]
       end
   """
 
   defmacro __using__(_opts) do
     quote do
       require Stem
+      import Stem.Sigil
 
       import Stem.DSL,
-        only: [handlebars: 3, handlebars: 4, handlebars_file: 3, handlebars_file: 4]
+        only: [deftemplate: 3, deftemplate: 4, deftemplate_file: 3, deftemplate_file: 4]
     end
   end
 
-  defmacro handlebars(name, template, args, options \\ []) do
+  defmacro deftemplate(name, template, args, options \\ []) do
     {kind, compile_options} = extract_kind_option(options)
 
     quote do
@@ -37,7 +38,7 @@ defmodule Stem.DSL do
     end
   end
 
-  defmacro handlebars_file(name, file, args, options \\ []) do
+  defmacro deftemplate_file(name, file, args, options \\ []) do
     {kind, compile_options} = extract_kind_option(options)
 
     quote do
