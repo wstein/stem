@@ -69,4 +69,20 @@ defmodule Stem.HelpersTest do
       assert stderr =~ "hello level=debug"
     end
   end
+
+  describe "builtin sanitize helpers" do
+    test "html escapes common HTML-sensitive characters" do
+      assert Helpers.invoke(:html, [~s(<b>&"')], []) == "&lt;b&gt;&amp;&quot;&#39;"
+    end
+
+    test "strip_tags and normalize_space are not built-ins" do
+      assert_raise Stem.SyntaxError, ~r/unknown helper 'strip_tags'/, fn ->
+        Helpers.invoke(:strip_tags, ["<p>Hello <b>Nina</b></p>"], [])
+      end
+
+      assert_raise Stem.SyntaxError, ~r/unknown helper 'normalize_space'/, fn ->
+        Helpers.invoke(:normalize_space, ["  Hello\n\tNina  "], [])
+      end
+    end
+  end
 end

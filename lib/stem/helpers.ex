@@ -80,6 +80,12 @@ defmodule Stem.Helpers do
     end
   end
 
+  defp built_in("html") do
+    fn [value], _ctx ->
+      Stem.Helpers.Sanitize.html(value)
+    end
+  end
+
   defp built_in(_), do: nil
 
   defp lookup(collection, key) when is_map(collection) do
