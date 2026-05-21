@@ -376,8 +376,25 @@ defmodule Stem do
   end
 
   defp compile_file_internal(filename, options) do
-    options = Keyword.merge([file: filename, line: 1], options)
-    compile_string_internal(File.read!(filename), options)
+    source = File.read!(filename)
+
+    case Stem.Frontmatter.parse(source) do
+      {:ok, {frontmatter_opts, template_body}} ->
+        merged_options =
+          frontmatter_opts
+          |> Keyword.merge(options)
+          |> Keyword.merge([file: filename, line: 1])
+
+        compile_string_internal(template_body, merged_options)
+
+      {:error, reason} ->
+        raise Stem.SyntaxError,
+          file: filename,
+          line: 1,
+          column: 1,
+          message: "invalid frontmatter: #{reason}",
+          snippet: nil
+    end
   end
 
   defp normalize_runtime_bindings(bindings) do

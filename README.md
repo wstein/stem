@@ -164,15 +164,73 @@ Create a `.stem.config.json` file in your project root to set default options fo
 
 **Option precedence** (highest to lowest):
 1. Explicit compile/eval options
-2. CLI flags (via `--escape`, `--strict`)
-3. Config file (`.stem.config.json`)
-4. Defaults
+2. Per-template frontmatter
+3. CLI flags (via `--escape`, `--strict`)
+4. Config file (`.stem.config.json`)
+5. Defaults
 
 Example with CLI override:
 
 ```bash
 # Config file has escape: xml
 # But CLI flag overrides it
+bin/stem data.json template.stem --escape html
+```
+
+### Per-Template Config with YAML Frontmatter
+
+Add YAML frontmatter at the top of `.stem` files to set template-specific options. Frontmatter takes precedence over the config file but can be overridden by explicit options.
+
+```handlebars
+---
+escape: json
+mode: safe
+warn_on_missing_assigns: true
+---
+
+{{#if data}}
+  Result: {{data}}
+{{else}}
+  No data
+{{/if}}
+```
+
+**Supported frontmatter fields**:
+- `escape` - Escape mode for this template
+- `mode` - Safe or permissive evaluation mode
+- `warn_on_missing_assigns` - Warn on missing assigns
+
+**Frontmatter syntax**:
+- Must start with `---` on the first line
+- Must be closed with `---` on its own line
+- Supports YAML key: value pairs (keys and boolean values are case-insensitive)
+- Comments starting with `#` are ignored
+- Empty lines are allowed
+
+**Example frontmatter variations**:
+
+```handlebars
+---
+escape: none
+---
+Raw HTML: {{{html_content}}}
+```
+
+```handlebars
+---
+mode: safe
+warn_on_missing_assigns: true
+---
+{{name |> upcase}}
+```
+
+**Precedence example**:
+
+```bash
+# If template has frontmatter: escape: json
+# And config file has: escape: xml
+# And CLI has: --escape html
+# Result: --escape html wins (CLI > frontmatter > config)
 bin/stem data.json template.stem --escape html
 ```
 
