@@ -7,15 +7,24 @@ defmodule Mix.Tasks.StemTest do
 
   import ExUnit.CaptureIO
 
-  test "renders a template from a file and inline JSON data" do
+  test "renders a template from a JSON file and template file" do
     template = Path.expand("../fixtures/stem_template_with_bindings.stem", __DIR__)
 
-    output =
-      capture_io(fn ->
-        Mix.Tasks.Stem.run([template, ~s({"bar":7})])
-      end)
+    data_path =
+      Path.join(System.tmp_dir!(), "stem-data-#{System.unique_integer([:positive])}.json")
 
-    assert output == "foo 7\n"
+    File.write!(data_path, ~s({"bar":7}))
+
+    try do
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Stem.run([data_path, template])
+        end)
+
+      assert output == "foo 7\n"
+    after
+      File.rm(data_path)
+    end
   end
 
   test "renders a template with block helpers" do
@@ -23,7 +32,7 @@ defmodule Mix.Tasks.StemTest do
 
     output =
       capture_io(fn ->
-        Mix.Tasks.Stem.run([template, "{}"])
+        Mix.Tasks.Stem.run([template])
       end)
 
     assert output == "foo bar.\n"
@@ -36,7 +45,7 @@ defmodule Mix.Tasks.StemTest do
       capture_io(:stderr, fn ->
         stdout =
           capture_io(fn ->
-            Mix.Tasks.Stem.run([template, "{}", "--strict"])
+            Mix.Tasks.Stem.run([template, "--strict"])
           end)
 
         assert stdout == "foo \n"
@@ -48,25 +57,39 @@ defmodule Mix.Tasks.StemTest do
   test "supports parent traversal inside each loops" do
     template = Path.expand("../fixtures/stem_each_parent.stem", __DIR__)
 
-    output =
-      capture_io(fn ->
-        Mix.Tasks.Stem.run([
-          template,
-          ~s({"prefix":"Mr.","people":[{"firstname":"Nina"},{"firstname":"Joe"}]})
-        ])
-      end)
+    data_path =
+      Path.join(System.tmp_dir!(), "stem-data-#{System.unique_integer([:positive])}.json")
 
-    assert output == "  Mr. Nina\n  Mr. Joe\n\n"
+    File.write!(
+      data_path,
+      ~s({"prefix":"Mr.","people":[{"firstname":"Nina"},{"firstname":"Joe"}]})
+    )
+
+    try do
+      output =
+        capture_io(fn ->
+          Mix.Tasks.Stem.run([data_path, template])
+        end)
+
+      assert output == "  Mr. Nina\n  Mr. Joe\n\n"
+    after
+      File.rm(data_path)
+    end
   end
 
   test "writes output to a file when requested" do
     template = Path.expand("../fixtures/stem_template_with_bindings.stem", __DIR__)
 
+    data_path =
+      Path.join(System.tmp_dir!(), "stem-data-#{System.unique_integer([:positive])}.json")
+
+    File.write!(data_path, ~s({"bar":7}))
+
     output_path =
       Path.join(System.tmp_dir!(), "stem-output-#{System.unique_integer([:positive])}.txt")
 
     try do
-      assert :ok = Mix.Tasks.Stem.run([template, ~s({"bar":7}), "--output", output_path])
+      assert :ok = Mix.Tasks.Stem.run([data_path, template, "--output", output_path])
       assert File.read!(output_path) == "foo 7\n"
     after
       File.rm(output_path)
@@ -74,14 +97,14 @@ defmodule Mix.Tasks.StemTest do
   end
 
   test "raises on missing args" do
-    assert_raise Mix.Error, ~r/Usage: stem \[options\] TEMPLATE \[DATA\]/, fn ->
+    assert_raise Mix.Error, ~r/Usage: stem \[options\] \[DATA_FILE\] TEMPLATE/, fn ->
       Mix.Tasks.Stem.run([])
     end
   end
 
   test "mix task prints help" do
     output = capture_io(fn -> Mix.Tasks.Stem.run(["--help"]) end)
-    assert output =~ "Usage: stem [options] TEMPLATE [DATA]"
+    assert output =~ "Usage: stem [options] [DATA_FILE] TEMPLATE"
   end
 
   test "mix task prints version" do
@@ -102,19 +125,21 @@ defmodule Mix.Tasks.StemTest do
 
     test "renders a template with no data" do
       template = Path.expand("../fixtures/stem_template_with_bindings.stem", __DIR__)
-      assert capture_io(fn -> Stem.CLI.run([template]) end) == "foo \n"
+
+      assert capture_io([input: ""], fn -> Stem.CLI.run([template]) end) == "foo \n"
     end
 
-    test "renders inline JSON string data" do
+    test "renders piped JSON data" do
       template = Path.expand("../fixtures/stem_template_with_bindings.stem", __DIR__)
-      assert capture_io(fn -> Stem.CLI.run([template, ~s({"bar":9})]) end) == "foo 9\n"
+
+      assert capture_io([input: ~s({"bar":9})], fn -> Stem.CLI.run([template]) end) == "foo 9\n"
     end
 
     test "raises on invalid JSON data" do
       template = Path.expand("../fixtures/stem_template_with_bindings.stem", __DIR__)
 
       assert_raise ArgumentError, ~r/invalid JSON data/, fn ->
-        Stem.CLI.run([template, "not json"])
+        capture_io([input: "not json"], fn -> Stem.CLI.run([template]) end)
       end
     end
 
@@ -125,7 +150,8 @@ defmodule Mix.Tasks.StemTest do
 
     test "reads data from standard input" do
       template = Path.expand("../fixtures/stem_template_with_bindings.stem", __DIR__)
-      output = capture_io([input: ~s({"bar":7})], fn -> Stem.CLI.run([template, "-"]) end)
+
+      output = capture_io([input: ~s({"bar":7})], fn -> Stem.CLI.run([template]) end)
       assert output == "foo 7\n"
     end
 
@@ -146,7 +172,7 @@ defmodule Mix.Tasks.StemTest do
       File.write!(data_path, ~s({"bar":42}))
 
       try do
-        assert capture_io(fn -> Stem.CLI.run([template, data_path]) end) == "foo 42\n"
+        assert capture_io(fn -> Stem.CLI.run([data_path, template]) end) == "foo 42\n"
       after
         File.rm(data_path)
       end
