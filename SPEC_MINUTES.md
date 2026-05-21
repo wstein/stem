@@ -18,7 +18,7 @@
 - [x] Update project intro in working documents.
 - [x] Update `README.md` with Handlebars examples.
 - [x] Update `@moduledoc` in `lib/stem.ex`.
-- [ ] Implement new tokenizer/compiler for `{{ }}` syntax.
+- [x] Implement new tokenizer/compiler for `{{ }}` syntax.
 
 ---
 
@@ -44,9 +44,15 @@ Stem will use a double-curly-brace syntax for its templating engine, aligning it
 
 ## 3. API Changes
 
-- `Stem.eval_string/3`: Should now recognize `{{ }}`.
-- `Stem.function_from_string/5`: Compiles `{{ }}` into Elixir code.
+- `Stem.function_from_string/5` and `Stem.function_from_file/5`: compile `{{ }}` templates into functions at compile time.
+- `Stem.eval_string/3` and `Stem.eval_file/3`: disabled; they raise `Stem.SecurityError` because template source is never evaluated at runtime.
 
-## 4. Implementation Details
+## 4. Implementation Details (delivered)
 
-The tokenizer located in `lib/stem/compiler.ex` (or equivalent) must be updated to search for `{{` and `}}` patterns instead of `<%` and `%>`.
+The `{{ }}` syntax is compiled by a native pipeline that no longer depends on EEx:
+
+- `Stem.Tokenizer` scans source into structural tokens.
+- `Stem.Parser` matches blocks and partials into a `Stem.AST`.
+- `Stem.Compiler` lowers the AST into quoted Elixir, with `Stem.Expression` translating tag contents.
+
+The EEx tokenizer, compiler, and engine modules, along with the string preprocessor, have been removed.

@@ -5,4 +5,26 @@ Capture the architectural choices that deserve durable context.
 
 == Decision Log
 
-Summarize the most important accepted or pending decisions.
+=== ADR-0001: Native `{{ }}` compiler replaces the EEx pipeline
+
+Accepted (2026-05-21).
+
+*Context.* Stem began as Elixir's EEx engine with a preprocessor that rewrote `{{ }}` into EEx text.
+That layer leaked EEx semantics, escaping markers, and error messages, and constrained the language to what EEx allowed.
+
+*Decision.* Build a native pipeline (`Stem.Tokenizer`, `Stem.Parser`, `Stem.AST`, `Stem.Compiler`, `Stem.Expression`) that emits Elixir AST directly, and remove the EEx surface entirely.
+
+*Consequences.* Stem owns its grammar, error reporting, and code generation, at the cost of maintaining a real compiler.
+The `<%= %>` tag family, the engine behaviour and custom engines, the public EEx tokenizer, and the `:engine`/`:trim`/`:parser_options` options were removed without a compatibility layer.
+
+See `papers/00004-native-compiler-minutes.adoc` for the full record.
+
+=== ADR-0002: Compile-time-only evaluation
+
+Accepted (2026-03-05, retained).
+
+*Context.* Evaluating template source at runtime would expose the code path to untrusted input.
+
+*Decision.* Templates are compiled only through compile-time macros; the runtime entry points raise `Stem.SecurityError`.
+
+*Consequences.* Rendering is a plain function call, and runtime template selection must build a module at the trust boundary.

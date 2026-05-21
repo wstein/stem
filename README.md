@@ -1,33 +1,87 @@
-# myproject
+# Stem
 
-This project was bootstrapped with `cx init`.
+Stem is a native Handlebars-style template compiler for Elixir.
+It compiles double-curly-brace templates directly into Elixir's abstract syntax tree.
+There is no intermediate template language and no runtime evaluation of template source.
+
+## Why Stem
+
+Templates become ordinary compiled functions, so rendering is fast and type-checked by the compiler.
+Template source is never evaluated at runtime, which keeps untrusted input out of the code path.
+The syntax is familiar to anyone who has used Handlebars.
+
+## Quick Start
+
+Compile a template into a function at compile time:
+
+```elixir
+defmodule Greeting do
+  require Stem
+  Stem.function_from_string(:def, :render, "Hello {{name}}", [:assigns])
+end
+
+Greeting.render(name: "Nina")
+#=> "Hello Nina"
+```
+
+The `Stem.DSL` macros offer a more declarative form:
+
+```elixir
+defmodule Views do
+  use Stem.DSL
+
+  handlebars :hello, "Hello {{name}}", [:assigns]
+  handlebars_file :card, "templates/card.stem", [:assigns]
+end
+```
+
+See `examples/` for runnable scripts.
+
+## Syntax
+
+- `{{expression}}` evaluates an expression and prints the HTML-escaped result.
+- `{{{expression}}}` prints the raw, unescaped result.
+- `{{! comment }}` and `{{!-- comment --}}` are discarded.
+- `{{{{ literal }}}}` emits its contents verbatim.
+- `{{> partial}}` expands a named partial.
+- `{{#if}}`, `{{#unless}}`, `{{#each}}`, and `{{#with}}` open blocks closed by `{{/...}}`, each with an optional `{{else}}`.
+
+Bare identifiers resolve to assigns, so `{{name}}` reads the `:name` assign.
+Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the index, and `{{@key}}` the key when iterating a map.
+`{{../name}}` reaches the parent (top-level assign) scope.
+Block conditionals follow Elixir truthiness: only `false` and `nil` are falsey.
+
+## Pipeline
+
+Compilation flows through four stages:
+
+```text
+source -> Stem.Tokenizer -> Stem.Parser -> Stem.AST -> Stem.Compiler -> quoted Elixir
+```
+
+`Stem.Expression` translates the contents of each tag into Elixir during the compiler stage.
+
+## Security
+
+The runtime entry points (`Stem.eval_string/3`, `Stem.eval_file/3`, `Stem.compile_string/2`, and `Stem.compile_file/2`) raise `Stem.SecurityError`.
+Stem only compiles templates at compile time, through the macros above.
+
+## Command Line
+
+Render a template file with JSON data:
+
+```sh
+mix stem template.stem '{"name":"Nina"}'
+mix stem template.stem data.json -o output.txt
+mix stem - < data.json
+```
 
 ## Documentation
 
-The repository includes a minimal Antora documentation site under `docs/`
-with these first-class surfaces:
+The repository includes an Antora documentation site under `docs/` with onboarding, manual, and arc42 architecture surfaces.
+Design minutes and specifications live in `papers/`, and durable design notes live in `notes/`.
 
-- `onboarding`: entrypoint and team orientation
-- `manual`: operator-focused workflows and commands
-- `architecture`: arc42-based system documentation
+## License
 
-Useful entrypoints:
-
-- `antora-playbook.yml`
-- `docs/README.md`
-- `docs/modules/onboarding/pages/index.adoc`
-- `docs/modules/manual/pages/index.adoc`
-- `docs/modules/architecture/pages/index.adoc`
-
-## Context Bundling
-
-`cx.toml` is configured to keep Elixir source in `lib/**`, tests in
-`test/**`, examples in `examples/**`, docs in `docs/**`, and repository
-root files in a separate project section.
-
-## Next Steps
-
-1. Replace placeholder text in the Antora pages with project-specific content.
-2. Adjust `site.url` in `antora-playbook.yml` before publishing the docs site.
-3. Use `cx docs export` or `cx bundle --include-doc-exports` once the docs
-   become part of your review workflow.
+Stem is released under the Apache-2.0 license.
+See `LICENSE` for details.

@@ -1,7 +1,7 @@
 # Claude Guidelines
 
 This file is written for both humans and AI (Claude).
-It outlines how the Estache team works so that the model’s suggestions stay on track with our conventions.
+It outlines how the Stem team works so that the model’s suggestions stay on track with our conventions.
 
 ## Principles
 

@@ -51,7 +51,9 @@ defmodule Stem.StemMigrationTest do
     template = Path.expand("fixtures/stem_template_truthy_condition.stem", __DIR__)
 
     render_output = fn value, fallback ->
-      String.trim(Stem.TestTemplate.eval_file(template, assigns: [render: value, fallback: fallback]))
+      String.trim(
+        Stem.TestTemplate.eval_file(template, assigns: [render: value, fallback: fallback])
+      )
     end
 
     assert render_output.(1, false) == "Does render!"
@@ -72,9 +74,7 @@ defmodule Stem.StemMigrationTest do
     template = "before {{> greet}} after"
     partials = %{greet: "Hello {{name}}"}
 
-    assert Stem.TestTemplate.eval_string(template, [assigns: [name: "Nina"]],
-             partials: partials
-           ) ==
+    assert Stem.TestTemplate.eval_string(template, [assigns: [name: "Nina"]], partials: partials) ==
              "before Hello Nina after"
   end
 

@@ -1,8 +1,11 @@
 = Solution Strategy
 :page-layout: default
 
-Summarize the big architectural moves that answer the goals and constraints.
+Stem compiles Handlebars-style `{{ }}` templates into Elixir functions at compile time.
 
 == Core Approach
 
-Describe the main design strategy in a few direct points.
+* Own the language end to end with a native pipeline rather than translating to another template language.
+* Compile templates to quoted Elixir so rendering is a plain, fast function call.
+* Never evaluate template source at runtime, keeping untrusted input out of the code path.
+* Keep expression semantics in one place so the tokenizer and parser stay independent of how tags are interpreted.
