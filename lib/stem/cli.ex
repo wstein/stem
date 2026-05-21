@@ -12,16 +12,23 @@ defmodule Stem.CLI do
 
   Options:
 
-    -o, --output FILE   Write the rendered output to FILE
-    --strict            Warn on missing assigns
-    -h, --help          Show this message
-    -v, --version       Show the Stem version
+    -o, --output FILE         Write the rendered output to FILE
+    --strict                  Warn on missing assigns
+    --escape MODE             Escape mode: none, html (default), xml, json, url
+    -h, --help                Show this message
+    -v, --version             Show the Stem version
   """
 
   def run(argv) when is_list(argv) do
     {opts, args, invalid} =
       OptionParser.parse(argv,
-        strict: [output: :string, help: :boolean, version: :boolean, strict: :boolean],
+        strict: [
+          output: :string,
+          help: :boolean,
+          version: :boolean,
+          strict: :boolean,
+          escape: :string
+        ],
         aliases: [o: :output, h: :help, v: :version]
       )
 
@@ -56,7 +63,8 @@ defmodule Stem.CLI do
     output =
       render_template!(template, bindings,
         file: template_path,
-        warn_on_missing_assigns: !!opts[:strict]
+        warn_on_missing_assigns: !!opts[:strict],
+        escape: parse_escape_mode(opts[:escape])
       )
 
     case opts[:output] do
@@ -77,7 +85,8 @@ defmodule Stem.CLI do
     output =
       render_template!(template, bindings,
         file: template_path,
-        warn_on_missing_assigns: !!opts[:strict]
+        warn_on_missing_assigns: !!opts[:strict],
+        escape: parse_escape_mode(opts[:escape])
       )
 
     case opts[:output] do
@@ -230,7 +239,8 @@ defmodule Stem.CLI do
 
         Stem.function_from_string(:def, :render, unquote(template), unquote(args),
           file: unquote(file),
-          warn_on_missing_assigns: unquote(options[:warn_on_missing_assigns] || false)
+          warn_on_missing_assigns: unquote(options[:warn_on_missing_assigns] || false),
+          escape: unquote(options[:escape] || :html)
         )
       end
 
@@ -298,5 +308,18 @@ defmodule Stem.CLI do
   defp resolve_path(path) when is_binary(path) do
     base_cwd = System.get_env("EXBAR_CWD") || File.cwd!()
     Path.expand(path, base_cwd)
+  end
+
+  defp parse_escape_mode(nil), do: :html
+
+  defp parse_escape_mode(mode_string) when is_binary(mode_string) do
+    case String.downcase(mode_string) do
+      "none" -> :none
+      "html" -> :html
+      "xml" -> :xml
+      "json" -> :json
+      "url" -> :url
+      other -> raise ArgumentError, "unknown escape mode: #{other}"
+    end
   end
 end
