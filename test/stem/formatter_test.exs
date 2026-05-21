@@ -10,6 +10,11 @@ defmodule Stem.FormatterTest do
              "Hello {{format (uppercase name)}}"
   end
 
+  test "formats pipeline expressions canonically" do
+    assert Stem.Formatter.format_string("{{  user.name  |> trim |> truncate( 20 )  }}") ==
+             "{{user.name |> trim |> truncate(20)}}"
+  end
+
   test "preserves whitespace trim markers while normalizing block tags" do
     assert Stem.Formatter.format_string(" {{~ #if ok ~}} yes {{~ /if ~}} ") ==
              " {{~#if ok~}} yes {{~/if~}} "

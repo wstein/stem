@@ -35,6 +35,16 @@ defmodule Stem.RuntimeSecurityTest do
              "Hello Nina"
   end
 
+  test "safe mode allows helper pipelines" do
+    helpers = [trim: fn [value], _ctx -> String.trim(to_string(value)) end]
+
+    assert Stem.eval_string(
+             "{{name |> trim}}",
+             [assigns: [name: " Nina "], helpers: helpers],
+             mode: :safe
+           ) == "Nina"
+  end
+
   test "runtime contract validation enforces required assigns" do
     assert_raise ArgumentError, ~r/missing required assigns/, fn ->
       Stem.eval_string("Hello {{name}}", [assigns: []], contract: [required: [:name]])

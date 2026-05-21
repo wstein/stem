@@ -42,7 +42,10 @@ defmodule Stem.Formatter do
           format_block_open(core)
 
         true ->
-          core |> Expression.parse() |> elem(1) |> Expression.format()
+          case Expression.parse(core) do
+            {:ok, expr} -> Expression.format(expr)
+            {:error, message} -> raise ArgumentError, message
+          end
       end
 
     "{{#{left_trim}#{formatted}#{right_trim}}}"

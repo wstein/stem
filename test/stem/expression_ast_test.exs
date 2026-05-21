@@ -30,6 +30,14 @@ defmodule Stem.ExpressionAstTest do
              {:helper, "wrap", [{:kw, "value", {:helper, "uppercase", [{:identifier, "name"}]}}]}
            ) == "wrap value=(uppercase name)"
 
+    assert Expression.format(
+             {:pipeline, {:path, :implicit, ["user", "name"]},
+              [
+                {:stage, "trim", []},
+                {:stage, "truncate", [{:literal, "20"}]}
+              ]}
+           ) == "user.name |> trim |> truncate(20)"
+
     assert Expression.format({:elixir, "  a + b  "}) == "a + b"
   end
 
@@ -46,6 +54,11 @@ defmodule Stem.ExpressionAstTest do
            )
 
     assert Expression.references_identifier?({:helper, "wrap", [{:identifier, "name"}]}, "name")
+
+    assert Expression.references_identifier?(
+             {:pipeline, {:identifier, "name"}, [{:stage, "trim", []}]},
+             "name"
+           )
 
     assert Expression.references_identifier?({:elixir, "name + other"}, "name")
     refute Expression.references_identifier?({:elixir, "other + third"}, "name")
@@ -67,5 +80,22 @@ defmodule Stem.ExpressionAstTest do
   test "parse handles escaped quoted helper arguments" do
     assert {:ok, {:helper, "say", [{:literal, "\"a\\\"b\""}]}} =
              Expression.parse("say \"a\\\"b\"")
+  end
+
+  test "parse builds pipeline expression ast" do
+    assert {:ok,
+            {:pipeline, {:path, :implicit, ["user", "name"]},
+             [
+               {:stage, "trim", []},
+               {:stage, "upcase", []},
+               {:stage, "truncate", [{:literal, "20"}]}
+             ]}} =
+             Expression.parse("user.name |> trim |> upcase |> truncate(20)")
+  end
+
+  test "parse rejects non-helper pipeline stages" do
+    assert {:error,
+            "pipeline stages must be helper names or helper calls like trim or truncate(20)"} =
+             Expression.parse("user.name |> String.trim()")
   end
 end

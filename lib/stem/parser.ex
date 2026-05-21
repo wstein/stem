@@ -54,8 +54,10 @@ defmodule Stem.Parser do
   end
 
   defp collect([{:expr, raw, meta} | rest], partials, stack, acc) do
-    {:ok, expr} = Expression.parse(raw)
-    collect(rest, partials, stack, [{:expr, expr, meta} | acc])
+    case Expression.parse(raw) do
+      {:ok, expr} -> collect(rest, partials, stack, [{:expr, expr, meta} | acc])
+      {:error, message} -> {:error, message, meta}
+    end
   end
 
   defp collect([{:partial, name, meta} | rest], partials, stack, acc) do
@@ -127,8 +129,10 @@ defmodule Stem.Parser do
   end
 
   defp parse_block_expression(kind, args) when kind in [:if, :unless] do
-    {:ok, expr} = Expression.parse(args)
-    {:ok, expr, []}
+    case Expression.parse(args) do
+      {:ok, expr} -> {:ok, expr, []}
+      {:error, _message} = error -> error
+    end
   end
 
   defp parse_block_expression(kind, args) when kind in [:each, :with] do

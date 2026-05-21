@@ -86,6 +86,20 @@ defmodule StemTest do
       assert eval("{{user.name}}", assigns: [user: %{name: "Nina"}]) == "Nina"
     end
 
+    test "pipelines compose helpers in declaration order" do
+      helpers = [
+        trim: fn [value], _ctx -> String.trim(to_string(value)) end,
+        upcase: fn [value], _ctx -> String.upcase(to_string(value)) end,
+        truncate: fn [value, count], _ctx -> String.slice(to_string(value), 0, count) end
+      ]
+
+      assert eval(
+               "{{name |> trim |> upcase |> truncate(4)}}",
+               [assigns: [name: "  nina  "]],
+               helpers: helpers
+             ) == "NINA"
+    end
+
     test "booleans and nil pass through" do
       assert eval("{{true}} {{nil}}") == "true "
     end
@@ -253,6 +267,14 @@ defmodule StemTest do
   end
 
   describe "syntax errors" do
+    test "invalid pipelines are rejected as Stem syntax errors" do
+      assert_raise Stem.SyntaxError,
+                   ~r/pipeline stages must be helper names or helper calls like trim or truncate\(20\)/,
+                   fn ->
+                     eval("{{name |> String.trim()}}", assigns: [name: "Nina"])
+                   end
+    end
+
     test "unterminated expression includes a snippet" do
       message = """
       nofile:1:5: expected closing '}}' for Stem expression
