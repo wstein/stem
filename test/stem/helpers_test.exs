@@ -85,4 +85,76 @@ defmodule Stem.HelpersTest do
       end
     end
   end
+
+  describe "builtin transform helpers" do
+    test "string transforms and defaults" do
+      assert Helpers.invoke(:trim, ["  Nina  "], []) == "Nina"
+      assert Helpers.invoke(:upcase, ["Nina"], []) == "NINA"
+      assert Helpers.invoke(:downcase, ["Nina"], []) == "nina"
+      assert Helpers.invoke(:capitalize, ["nina"], []) == "Nina"
+      assert Helpers.invoke(:replace, ["stem", "e", "a"], []) == "stam"
+      assert Helpers.invoke(:truncate, ["stem", 3], []) == "ste"
+      assert Helpers.invoke(:truncate, ["stem", 3, ".."], []) == "s.."
+      assert Helpers.invoke(:default, [nil, "fallback"], []) == "fallback"
+      assert Helpers.invoke(:default, ["value", "fallback"], []) == "value"
+    end
+
+    test "json and inspect helpers serialize values" do
+      assert Helpers.invoke(:inspect, [%{a: 1}], []) == "%{a: 1}"
+      assert Helpers.invoke(:json, [%{a: 1}], []) == ~s({"a":1})
+      assert Helpers.invoke(:escape_json, [~s(a"b)], []) == "a\\\"b"
+    end
+
+    test "predicates cover strings, maps, and lists" do
+      assert Helpers.invoke(:contains, [["a", "b"], "a"], [])
+      assert Helpers.invoke(:contains, [%{name: "Nina"}, :name], [])
+      assert Helpers.invoke(:contains, ["stem", "te"], [])
+      assert Helpers.invoke(:empty?, [[]], [])
+      refute Helpers.invoke(:empty?, [[1]], [])
+      assert Helpers.invoke(:present?, [[1]], [])
+      refute Helpers.invoke(:present?, [%{}], [])
+      assert Helpers.invoke(:starts_with, ["stem", "st"], [])
+      assert Helpers.invoke(:ends_with, ["stem", "em"], [])
+    end
+
+    test "collection helpers support declarative selectors" do
+      rows = [%{name: "b", active: true}, %{name: "a", active: false}, %{name: "c", active: true}]
+
+      assert Helpers.invoke(:map, [rows, "name"], []) == ["b", "a", "c"]
+
+      assert Helpers.invoke(:filter, [rows, "active"], []) == [
+               %{name: "b", active: true},
+               %{name: "c", active: true}
+             ]
+
+      assert Helpers.invoke(:sort_by, [rows, "name"], []) == [
+               %{name: "a", active: false},
+               %{name: "b", active: true},
+               %{name: "c", active: true}
+             ]
+
+      assert Helpers.invoke(:group_by, [rows, "active"], []) == %{
+               false => [%{name: "a", active: false}],
+               true => [%{name: "b", active: true}, %{name: "c", active: true}]
+             }
+    end
+
+    test "list and string helpers support common sequence operations" do
+      assert Helpers.invoke(:join, [["a", "b"], ","], []) == "a,b"
+      assert Helpers.invoke(:compact, [[1, nil, 2]], []) == [1, 2]
+      assert Helpers.invoke(:sort, [[3, 1, 2]], []) == [1, 2, 3]
+      assert Helpers.invoke(:take, [[1, 2, 3], 2], []) == [1, 2]
+      assert Helpers.invoke(:drop, [[1, 2, 3], 1], []) == [2, 3]
+      assert Helpers.invoke(:slice, [[1, 2, 3], 1, 2], []) == [2, 3]
+      assert Helpers.invoke(:first, [[1, 2, 3]], []) == 1
+      assert Helpers.invoke(:uniq, [[1, 1, 2]], []) == [1, 2]
+      assert Helpers.invoke(:flatten, [[[1], [2, [3]]]], []) == [1, 2, 3]
+      assert Helpers.invoke(:reverse, [[1, 2, 3]], []) == [3, 2, 1]
+      assert Helpers.invoke(:take, ["stem", 2], []) == "st"
+      assert Helpers.invoke(:drop, ["stem", 2], []) == "em"
+      assert Helpers.invoke(:slice, ["stem", 1, 2], []) == "te"
+      assert Helpers.invoke(:first, ["stem"], []) == "s"
+      assert Helpers.invoke(:reverse, ["stem"], []) == "mets"
+    end
+  end
 end

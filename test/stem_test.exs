@@ -182,6 +182,23 @@ defmodule StemTest do
       assert eval(~s({{lookup m "k"}}), assigns: [m: %{"k" => "v"}]) == "v"
     end
 
+    test "builtin pipelines cover text and collection transforms" do
+      assigns = [
+        name: "  nina west  ",
+        people: [%{name: "mila"}, %{name: "nina"}, %{name: "ada"}],
+        flags: [true, nil, false, true]
+      ]
+
+      assert eval("{{name |> trim |> upcase |> truncate(4)}}", assigns: assigns) == "NINA"
+
+      assert eval("{{people |> sort_by(\"name\") |> map(\"name\") |> join(\", \")}}",
+               assigns: assigns
+             ) == "ada, mila, nina"
+
+      assert eval("{{flags |> compact |> uniq |> join(\",\")}}", assigns: assigns) ==
+               "true,false"
+    end
+
     test "helper with positional and keyword arguments" do
       helpers = [tag: fn [label, href: href], _ctx -> "#{label}@#{href}" end]
 
