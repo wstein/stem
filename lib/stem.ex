@@ -87,6 +87,7 @@ defmodule Stem do
     * `{{#if}}`, `{{#unless}}`, `{{#each}}`, `{{#with}}` with matching
       `{{/...}}` closing tags and an optional `{{else}}`.
     * `{{format (uppercase name)}}` style helper subexpressions.
+    * `{{name |> trim |> upcase |> truncate(20)}}` helper pipelines.
     * `{{#each items as |item idx|}}` / `{{#with story as |article|}}`
       block parameters.
     * `{{~ ... ~}}` whitespace control around any tag.
@@ -95,6 +96,14 @@ defmodule Stem do
   Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the
   zero-based index, and `{{@key}}` the key when iterating a map. `{{../name}}`
   reaches the parent (top-level assign) scope.
+
+  Pipelines are restricted to helper stages so templates stay declarative.
+  `{{lhs |> helper(a, b)}}` compiles as if the helper had been called with
+  the pipeline value prepended: `helper(lhs, a, b)`.
+
+  Stem ships built-in helpers for common text and collection transforms,
+  including `trim`, `upcase`, `truncate`, `default`, `join`, `map`,
+  `filter`, `sort_by`, `group_by`, `compact`, `uniq`, `json`, and `escape_html`.
 
       iex> defmodule Greeting do
       ...>   require Stem
@@ -110,6 +119,9 @@ defmodule Stem do
 
   Missing assigns render as an empty string. Pass `warn_on_missing_assigns:
   true` to print a warning for missing values.
+
+      iex> Stem.eval_string("{{name |> trim |> upcase}}", assigns: [name: "  nina  "])
+      "NINA"
   """
 
   defmacro __using__(_opts) do

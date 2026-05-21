@@ -54,6 +54,7 @@ See `examples/` for runnable scripts via `mix run examples/<name>.exs`.
 - `{{> partial}}` expands a named partial.
 - `{{#if}}`, `{{#unless}}`, `{{#each}}`, and `{{#with}}` open blocks closed by `{{/...}}`, each with an optional `{{else}}`.
 - Helper calls support nested subexpressions such as `{{format (uppercase name)}}`.
+- Elixir-style helper pipelines such as `{{user.name |> trim |> upcase |> truncate(20)}}` compile to nested helper calls.
 - `{{#each items as |item idx|}}` and `{{#with story as |article|}}` introduce block parameters.
 - `{{~ ... ~}}` trims surrounding literal whitespace around a tag.
 
@@ -63,6 +64,7 @@ Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the index, and 
 Block conditionals follow Elixir truthiness: only `false` and `nil` are falsey.
 Use helpers or regular Elixir functions when output needs transformation (for example, sanitization, normalization, or formatting).
 Nested brace forms inside expressions are not supported.
+Pipeline stages are restricted to helper names and helper calls so templates stay declarative.
 
 ## Runtime APIs
 
@@ -85,6 +87,18 @@ Stem.eval_string("{{name}}", assigns: [name: "Nina"], contract: [required: [:nam
 
 `mode: :safe` disables the arbitrary Elixir fallback path and only accepts structured Stem expressions, literals, helpers, and paths.
 `contract:` lets templates declare required assigns at the call boundary.
+Helper pipelines are safe-mode compatible because they lower to helper invocations instead of arbitrary Elixir.
+
+## Built-In Helpers
+
+Stem ships pipeline-friendly builtins for common presentation and collection work:
+
+- `default`, `join`, `inspect`, `json`, `escape_json`, `escape_html`
+- `trim`, `upcase`, `downcase`, `capitalize`, `replace`, `truncate`
+- `contains`, `empty?`, `present?`, `starts_with`, `ends_with`
+- `map`, `filter`, `sort`, `sort_by`, `group_by`, `take`, `drop`, `slice`, `first`, `compact`, `uniq`, `flatten`, `reverse`
+
+Selector-based helpers such as `map`, `filter`, `sort_by`, and `group_by` accept a simple dotted path string like `"author.name"` so templates can stay declarative without anonymous functions.
 
 ## Tooling
 
@@ -106,11 +120,12 @@ source -> Stem.Tokenizer -> Stem.Parser -> Stem.AST -> Stem.Compiler -> quoted E
 ```
 
 `Stem.Expression` translates the contents of each tag into Elixir during the compiler stage.
+Pipeline expressions are represented in that expression AST and lowered into nested helper invocations during compilation.
 
 ## Security
 
 `{{...}}` output is not escaped automatically.
-Apply escaping or sanitization explicitly through helper functions such as `html`, or project-specific helpers.
+Apply escaping or sanitization explicitly through helper functions such as `escape_html`, or project-specific helpers.
 
 ## Command Line
 

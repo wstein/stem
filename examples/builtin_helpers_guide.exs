@@ -16,6 +16,15 @@ defmodule BuiltinHelpersGuide do
 
   deftemplate(:lookup_map, ~s({{lookup person "firstName"}}), [:assigns, :helpers])
   deftemplate(:lookup_list, "{{lookup values 1}}", [:assigns, :helpers])
+  deftemplate(:pipeline_name, "{{name |> trim |> upcase |> truncate(4)}}", [:assigns, :helpers])
+
+  deftemplate(
+    :pipeline_people,
+    "{{people |> sort_by(\"name\") |> map(\"name\") |> join(\", \")}}",
+    [:assigns, :helpers]
+  )
+
+  deftemplate(:pipeline_default, "{{nickname |> default(\"friend\")}}", [:assigns, :helpers])
 end
 
 assigns = [
@@ -25,7 +34,10 @@ assigns = [
   story: %{title: "The Story", author: "A. Writer"},
   map: %{firstName: "Homer"},
   person: %{"firstName" => "Nils"},
-  values: ["a", "b"]
+  values: ["a", "b"],
+  name: "  nina  ",
+  nickname: nil,
+  people: [%{name: "Mila"}, %{name: "Ada"}, %{name: "Nina"}]
 ]
 
 IO.puts(BuiltinHelpersGuide.if_block(assigns))
@@ -36,3 +48,6 @@ IO.puts(BuiltinHelpersGuide.each_key(assigns))
 IO.puts(BuiltinHelpersGuide.with_block(assigns))
 IO.puts(BuiltinHelpersGuide.lookup_map(assigns, []))
 IO.puts(BuiltinHelpersGuide.lookup_list(assigns, []))
+IO.puts(BuiltinHelpersGuide.pipeline_name(assigns, []))
+IO.puts(BuiltinHelpersGuide.pipeline_people(assigns, []))
+IO.puts(BuiltinHelpersGuide.pipeline_default(assigns, []))

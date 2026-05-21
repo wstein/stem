@@ -108,4 +108,27 @@ defmodule Stem.BuiltinHelpersGuideTest do
       assert Stem.TestTemplate.eval_string(template, assigns: []) == ""
     end
   end
+
+  describe "pipeline helper examples" do
+    test "text pipelines compose built-in helpers" do
+      template = "{{name |> trim |> upcase |> truncate(4)}}"
+
+      assert Stem.TestTemplate.eval_string(template, assigns: [name: "  nina  "]) == "NINA"
+    end
+
+    test "collection pipelines stay declarative with selector helpers" do
+      template = "{{people |> sort_by(\"name\") |> map(\"name\") |> join(\", \")}}"
+
+      assigns = [people: [%{name: "Mila"}, %{name: "Ada"}, %{name: "Nina"}]]
+
+      assert Stem.TestTemplate.eval_string(template, assigns: assigns) == "Ada, Mila, Nina"
+    end
+
+    test "default helper fills empty values" do
+      assert Stem.TestTemplate.eval_string("{{nickname |> default(\"friend\")}}",
+               assigns: [nickname: nil]
+             ) ==
+               "friend"
+    end
+  end
 end

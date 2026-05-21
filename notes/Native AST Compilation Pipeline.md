@@ -9,6 +9,7 @@ Stem compiles `{{ }}` templates through a native four-stage pipeline that produc
 
 Compilation flows `source -> Stem.Tokenizer -> Stem.Parser -> Stem.AST -> Stem.Compiler -> quoted Elixir`.
 The tokenizer is purely lexical, the parser matches blocks and expands partials into an AST, and the compiler lowers the AST into quoted Elixir while `Stem.Expression` parses tag contents into its own expression AST.
+That expression AST now also owns helper-pipeline nodes, so `lhs |> trim |> truncate(20)` stays structured until the compiler lowers it into nested helper calls.
 
 ## Why
 
@@ -20,7 +21,7 @@ Owning the pipeline gives precise error positions, a real AST to analyse, and fu
 
 Treat the four stages as the contract: add lexical concerns to the tokenizer, structural concerns to the parser, and lowering concerns to the compiler.
 Keep expression semantics in `Stem.Expression` so the parser stays independent of how tags are interpreted.
-Subexpressions, block parameters, whitespace control, diagnostics, and safe-mode checks all attach to one of those owned stages instead of re-parsing raw template text later.
+Subexpressions, helper pipelines, block parameters, whitespace control, diagnostics, and safe-mode checks all attach to one of those owned stages instead of re-parsing raw template text later.
 
 ## Links
 

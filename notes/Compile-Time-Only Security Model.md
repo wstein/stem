@@ -20,9 +20,11 @@ Keeping runtime APIs while requiring explicit transformations makes dynamic rend
 
 Use compile-time macros for static templates and runtime APIs when templates are selected dynamically.
 Treat runtime template input as untrusted.
-Apply sanitization and escaping through helpers such as `html` or project-specific helper functions at the output boundary.
+Apply sanitization and escaping through helpers such as `escape_html` or project-specific helper functions at the output boundary.
 Use `mode: :safe` when runtime templates should reject arbitrary Elixir fallback expressions and stay within Stem's structured expression model.
 Use `contract: [required: [...]]` when a template needs an explicit assign boundary at call time.
+Helper pipelines fit that safe subset because they only allow structured Stem input on the left-hand side and helper stages on the right-hand side.
+Pipeline stages are intentionally limited to helper names and helper calls so templates cannot escalate into arbitrary module pipelines.
 
 ## Links
 
