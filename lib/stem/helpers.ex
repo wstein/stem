@@ -79,7 +79,7 @@ defmodule Stem.Helpers do
     end
   end
 
-  defp built_in("html") do
+  defp built_in("escape_html") do
     fn [value], _ctx ->
       Stem.Helpers.Sanitize.escape_html(value)
     end

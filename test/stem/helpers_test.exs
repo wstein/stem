@@ -71,8 +71,8 @@ defmodule Stem.HelpersTest do
   end
 
   describe "builtin sanitize helpers" do
-    test "html escapes common HTML-sensitive characters" do
-      assert Helpers.invoke(:html, [~s(<b>&"')], []) == "&lt;b&gt;&amp;&quot;&#39;"
+    test "escape_html escapes common HTML-sensitive characters" do
+      assert Helpers.invoke(:escape_html, [~s(<b>&"')], []) == "&lt;b&gt;&amp;&quot;&#39;"
     end
 
     test "strip_tags and normalize_space are not built-ins" do
