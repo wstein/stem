@@ -3,8 +3,8 @@
 defmodule Stem.Helpers.Sanitize do
   @moduledoc false
 
-  @spec html(term()) :: String.t()
-  def html(value) do
+  @spec escape_html(term()) :: String.t()
+  def escape_html(value) do
     value
     |> String.Chars.to_string()
     |> String.replace("&", "&amp;")
