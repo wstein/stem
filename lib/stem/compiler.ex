@@ -61,8 +61,6 @@ defmodule Stem.Compiler do
     compile_nodes(region_nodes, %{state | region_stack: [name | state.region_stack]})
   end
 
-  defp compile_node({:region, _name, _body, _meta}, _state), do: ""
-
   defp compile_node({:if, expr_ast, body, else_body, meta}, state) do
     warn_on_constant_condition(:if, expr_ast, meta, state)
     condition = compile_truthy_expression(expr_ast, meta, :if, state)
@@ -244,20 +242,12 @@ defmodule Stem.Compiler do
 
     case Code.string_to_quoted(trimmed) do
       {:ok, value} ->
-        case literal_value(value) do
-          :unknown -> trimmed not in ["false", "nil"]
-          literal -> Stem.Runtime.is_truthy(literal)
-        end
+        Stem.Runtime.is_truthy(value)
 
       _ ->
         trimmed not in ["false", "nil"]
     end
   end
-
-  defp literal_value(value) when is_boolean(value) or is_nil(value) or is_number(value), do: value
-  defp literal_value(value) when is_binary(value) or is_list(value), do: value
-  defp literal_value({:%{}, _, []}), do: %{}
-  defp literal_value(_value), do: :unknown
 
   defp warn_on_unused_block_params(_kind, [], _body, _meta, _state), do: :ok
 
@@ -274,8 +264,6 @@ defmodule Stem.Compiler do
   end
 
   defp node_references_identifier?({:text, _text}, _name), do: false
-
-  defp node_references_identifier?({:yield, _region_name, _meta}, _name), do: false
 
   defp node_references_identifier?({:region, _region_name, body, _meta}, name),
     do: body_references_identifier?(body, name)

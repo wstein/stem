@@ -30,6 +30,87 @@ defmodule Stem.CompilerDiagnosticsTest do
     assert stderr =~ "diagnostics.stem:1: if condition is constant"
   end
 
+  test "warns on constant falsey literals" do
+    stderr =
+      capture_io(:stderr, fn ->
+        quoted =
+          Compiler.compile(
+            [
+              {:if, {:literal, "0"}, [{:text, "zero"}], [], %{line: 1, column: 1}},
+              {:if, {:literal, "\"\""}, [{:text, "empty"}], [], %{line: 1, column: 1}},
+              {:if, {:literal, "[]"}, [{:text, "list"}], [], %{line: 1, column: 1}},
+              {:if, {:literal, "%{}"}, [{:text, "map"}], [], %{line: 1, column: 1}}
+            ],
+            file: "diagnostics.stem",
+            warn_on_diagnostics: true
+          )
+
+        Code.eval_quoted(quoted, assigns: %{}, helpers: [])
+      end)
+
+    assert stderr =~ "if condition is constant and will always evaluate falsy"
+  end
+
+  test "warns on invalid literal syntax before compilation fails" do
+    stderr =
+      capture_io(:stderr, fn ->
+        assert_raise TokenMissingError, fn ->
+          Compiler.compile(
+            [
+              {:if, {:literal, "foo("}, [{:text, "x"}], [], %{line: 1, column: 1}}
+            ],
+            file: "diagnostics.stem",
+            warn_on_diagnostics: true
+          )
+        end
+      end)
+
+    assert stderr =~ "if condition is constant"
+  end
+
+  test "region bodies and else branches still count identifier usage" do
+    template = """
+    {{#each rows as |row|}}
+      {{#region body}}{{row.name}}{{/region}}
+      {{#each row.children}}{{else}}{{row.name}}{{/each}}
+      {{#with row.meta}}{{else}}{{row.name}}{{/with}}
+    {{/each}}
+    """
+
+    stderr =
+      capture_io(:stderr, fn ->
+        quoted = compile_template(template)
+
+        Code.eval_quoted(quoted,
+          assigns: %{rows: [%{name: "root", children: [], meta: nil}]},
+          helpers: []
+        )
+      end)
+
+    assert stderr == ""
+  end
+
+  test "else branches alone keep block params marked as used" do
+    template = """
+    {{#each rows as |row|}}
+      {{#each row.children}}{{else}}{{row.name}}{{/each}}
+      {{#with row.meta}}{{else}}{{row.name}}{{/with}}
+    {{/each}}
+    """
+
+    stderr =
+      capture_io(:stderr, fn ->
+        quoted = compile_template(template)
+
+        Code.eval_quoted(quoted,
+          assigns: %{rows: [%{name: "root", children: [], meta: nil}]},
+          helpers: []
+        )
+      end)
+
+    assert stderr == ""
+  end
+
   test "warns on unused block params" do
     stderr =
       capture_io(:stderr, fn ->

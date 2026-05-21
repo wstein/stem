@@ -155,6 +155,13 @@ defmodule Mix.Tasks.StemTest do
       assert output == "foo 7\n"
     end
 
+    test "reads data from standard input when the data source is dash" do
+      template = Path.expand("../fixtures/stem_template_with_bindings.stem", __DIR__)
+
+      output = capture_io([input: ~s({"bar":11})], fn -> Stem.CLI.run(["-", template]) end)
+      assert output == "foo 11\n"
+    end
+
     test "reads data from standard input with trim markers in the template" do
       template_path =
         Path.join(System.tmp_dir!(), "stem-cli-trim-#{System.unique_integer([:positive])}.stem")
@@ -245,6 +252,104 @@ defmodule Mix.Tasks.StemTest do
           Stem.CLI.run(["--escape", "bogus", data_path, template])
         end
       after
+        File.rm_rf!(temp_dir)
+      end
+    end
+
+    test "accepts all supported escape modes" do
+      temp_dir =
+        Path.join(System.tmp_dir!(), "stem-cli-escapes-#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(temp_dir)
+
+      template = Path.join(temp_dir, "template.stem")
+      File.write!(template, "{{value}}")
+
+      original_cwd = System.get_env("EXBAR_CWD")
+      System.put_env("EXBAR_CWD", temp_dir)
+
+      try do
+        assert capture_io([input: ~s({"value":"<tag>"})], fn ->
+                 Stem.CLI.run(["--escape", "none", template])
+               end) == "<tag>"
+
+        assert capture_io([input: ~s({"value":"<tag>"})], fn ->
+                 Stem.CLI.run(["--escape", "html", template])
+               end) == "&lt;tag&gt;"
+
+        assert capture_io([input: ~s({"value":"<tag>"})], fn ->
+                 Stem.CLI.run(["--escape", "xml", template])
+               end) == "&lt;tag&gt;"
+
+        assert capture_io([input: ~s({"value":"<tag>"})], fn ->
+                 Stem.CLI.run(["--escape", "json", template])
+               end) == "<tag>"
+
+        assert capture_io([input: ~s({"value":"<tag>"})], fn ->
+                 Stem.CLI.run(["--escape", "url", template])
+               end) == "%3Ctag%3E"
+      after
+        if original_cwd do
+          System.put_env("EXBAR_CWD", original_cwd)
+        else
+          System.delete_env("EXBAR_CWD")
+        end
+
+        File.rm_rf!(temp_dir)
+      end
+    end
+
+    test "writes output to a file through Stem.CLI.run" do
+      temp_dir =
+        Path.join(System.tmp_dir!(), "stem-cli-write-#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(temp_dir)
+
+      template = Path.join(temp_dir, "template.stem")
+      output = Path.join(temp_dir, "output.txt")
+      File.write!(template, "{{value}}")
+
+      try do
+        assert capture_io([input: ~s({"value":"ok"})], fn ->
+                 Stem.CLI.run(["--output", output, template])
+               end) == ""
+
+        assert File.read!(output) == "ok"
+      after
+        File.rm_rf!(temp_dir)
+      end
+    end
+
+    test "template helper detection ignores helper names without arguments" do
+      assert Stem.CLI.render_template!("{{upcase}}", %{}) == ""
+    end
+
+    test "falls back to cli opts when config loading fails" do
+      temp_dir =
+        Path.join(System.tmp_dir!(), "stem-cli-bad-config-#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(temp_dir)
+
+      config_path = Path.join(temp_dir, ".stem.config.json")
+      template = Path.join(temp_dir, "template.stem")
+
+      File.write!(config_path, "not json")
+      File.write!(template, "{{value}}")
+
+      original_cwd = System.get_env("EXBAR_CWD")
+      System.put_env("EXBAR_CWD", temp_dir)
+
+      try do
+        output = capture_io([input: ~s({"value":"ok"})], fn -> Stem.CLI.run([template]) end)
+
+        assert output == "ok"
+      after
+        if original_cwd do
+          System.put_env("EXBAR_CWD", original_cwd)
+        else
+          System.delete_env("EXBAR_CWD")
+        end
+
         File.rm_rf!(temp_dir)
       end
     end

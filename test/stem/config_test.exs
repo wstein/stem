@@ -75,6 +75,37 @@ defmodule Stem.ConfigTest do
     assert config[:escape] == :html
   end
 
+  test "load_config rejects malformed key value pairs", %{temp_dir: temp_dir} do
+    config_file = Path.join(temp_dir, ".stem.config.json")
+
+    File.write!(config_file, ~S"""
+    {
+      "broken":
+    }
+    """)
+
+    {:error, message} = Stem.Config.load_config(config_file)
+    assert message =~ "invalid JSON"
+  end
+
+  test "load_config ignores unsupported field values", %{temp_dir: temp_dir} do
+    config_file = Path.join(temp_dir, ".stem.config.json")
+
+    File.write!(config_file, ~S"""
+    {
+      "escape": "html",
+      "warn_on_missing_assigns": "yes",
+      "mode": "broken"
+    }
+    """)
+
+    {:ok, config} = Stem.Config.load_config(config_file)
+
+    assert config[:escape] == :html
+    refute Keyword.has_key?(config, :warn_on_missing_assigns)
+    refute Keyword.has_key?(config, :mode)
+  end
+
   test "find_config locates .stem.config.json in current directory", %{temp_dir: temp_dir} do
     config_file = Path.join(temp_dir, ".stem.config.json")
     File.write!(config_file, "{}")

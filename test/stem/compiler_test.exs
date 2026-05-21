@@ -58,4 +58,12 @@ defmodule Stem.CompilerTest do
   test "missing yields render as empty strings" do
     assert render("<main>{{yield body}}</main>", []) == "<main></main>"
   end
+
+  test "recursive region yields raise a compile error" do
+    {:ok, ast} = Parser.parse("{{#region body}}{{yield body}}{{/region}}{{yield body}}")
+
+    assert_raise CompileError, ~r/recursive region yield detected for 'body'/, fn ->
+      Compiler.compile(ast, file: "layout.stem")
+    end
+  end
 end
