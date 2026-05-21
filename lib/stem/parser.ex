@@ -150,9 +150,6 @@ defmodule Stem.Parser do
       [expr_source] ->
         {:ok, String.trim(expr_source), []}
 
-      [expr_source, nil] ->
-        {:ok, String.trim(expr_source), []}
-
       [expr_source, params_source] ->
         params = params_source |> String.split(~r/\s+/, trim: true)
         {:ok, String.trim(expr_source), params}

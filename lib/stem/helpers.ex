@@ -81,7 +81,7 @@ defmodule Stem.Helpers do
 
   defp built_in("html") do
     fn [value], _ctx ->
-      Stem.Helpers.Sanitize.html(value)
+      Stem.Helpers.Sanitize.escape_html(value)
     end
   end
 

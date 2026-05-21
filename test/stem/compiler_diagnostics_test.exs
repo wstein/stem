@@ -109,4 +109,49 @@ defmodule Stem.CompilerDiagnosticsTest do
 
     refute stderr =~ "unused each block parameter"
   end
+
+  test "identifier tracking walks nested unless, each, and with nodes" do
+    template = """
+    {{#each rows as |row|}}
+      {{#unless false}}
+        {{#each row.children}}{{row.name}}{{/each}}
+        {{#with row.meta}}{{row.name}}{{else}}{{row.name}}{{/with}}
+      {{/unless}}
+    {{/each}}
+    """
+
+    stderr =
+      capture_io(:stderr, fn ->
+        quoted = compile_template(template)
+
+        Code.eval_quoted(quoted,
+          assigns: %{rows: [%{name: "root", children: [1], meta: nil}]},
+          helpers: []
+        )
+      end)
+
+    refute stderr =~ "unused each block parameter"
+  end
+
+  test "identifier tracking counts else-only references across block types" do
+    templates = [
+      "{{#each rows as |row|}}{{#unless true}}{{else}}{{row.name}}{{/unless}}{{/each}}",
+      "{{#each rows as |row|}}{{#each row.empty}}{{else}}{{row.name}}{{/each}}{{/each}}",
+      "{{#each rows as |row|}}{{#with row.missing}}{{else}}{{row.name}}{{/with}}{{/each}}"
+    ]
+
+    Enum.each(templates, fn template ->
+      stderr =
+        capture_io(:stderr, fn ->
+          quoted = compile_template(template)
+
+          Code.eval_quoted(quoted,
+            assigns: %{rows: [%{name: "root", empty: [], missing: nil}]},
+            helpers: []
+          )
+        end)
+
+      refute stderr =~ "unused each block parameter"
+    end)
+  end
 end

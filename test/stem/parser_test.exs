@@ -62,6 +62,13 @@ defmodule Stem.ParserTest do
 
     assert {:error, "block parameters must be unique", _} =
              Parser.parse("{{#each items as |item item|}}{{item}}{{/each}}")
+
+    assert {:error, "{{#each}} accepts at most two block parameters", _} =
+             Parser.parse("{{#each items as |item idx extra|}}{{item}}{{/each}}")
+
+    assert {:error,
+            "pipeline stages must be helper names or helper calls like trim or truncate(20)", _} =
+             Parser.parse("{{#if name |> String.trim()}}ok{{/if}}")
   end
 
   test "partials are expanded inline" do

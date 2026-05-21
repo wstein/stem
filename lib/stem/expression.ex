@@ -202,9 +202,6 @@ defmodule Stem.Expression do
     source = String.trim(source)
 
     case strict_expression(source) do
-      {:ok, {:elixir, _raw}} ->
-        {:error, "pipeline input must be a structured Stem expression"}
-
       {:ok, expr} ->
         {:ok, expr}
 

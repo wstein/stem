@@ -31,12 +31,25 @@ defmodule Stem.ExpressionAstTest do
            ) == "wrap value=(uppercase name)"
 
     assert Expression.format(
+             {:helper, "wrap",
+              [
+                {:pipeline, {:identifier, "name"}, [{:stage, "trim", []}]},
+                {:kw, "value", {:pipeline, {:identifier, "name"}, [{:stage, "trim", []}]}}
+              ]}
+           ) == "wrap (name |> trim) value=(name |> trim)"
+
+    assert Expression.format(
              {:pipeline, {:path, :implicit, ["user", "name"]},
               [
                 {:stage, "trim", []},
                 {:stage, "truncate", [{:literal, "20"}]}
               ]}
            ) == "user.name |> trim |> truncate(20)"
+
+    assert Expression.format(
+             {:pipeline, {:identifier, "name"},
+              [{:stage, "default", [{:kw, "fallback", {:literal, ~s("x")}}]}]}
+           ) == "name |> default(fallback=\"x\")"
 
     assert Expression.format({:elixir, "  a + b  "}) == "a + b"
   end
@@ -57,6 +70,17 @@ defmodule Stem.ExpressionAstTest do
 
     assert Expression.references_identifier?(
              {:pipeline, {:identifier, "name"}, [{:stage, "trim", []}]},
+             "name"
+           )
+
+    assert Expression.references_identifier?(
+             {:pipeline, {:literal, ~s("x")}, [{:stage, "default", [{:identifier, "name"}]}]},
+             "name"
+           )
+
+    assert Expression.references_identifier?(
+             {:pipeline, {:literal, ~s("x")},
+              [{:stage, "default", [{:kw, "fallback", {:identifier, "name"}}]}]},
              "name"
            )
 
@@ -93,9 +117,50 @@ defmodule Stem.ExpressionAstTest do
              Expression.parse("user.name |> trim |> upcase |> truncate(20)")
   end
 
+  test "parse supports pipeline keyword args and pipeline subexpressions" do
+    assert {:ok,
+            {:pipeline, {:identifier, "name"},
+             [{:stage, "default", [{:kw, "fallback", {:literal, ~s("x")}}]}]}} =
+             Expression.parse("name |> default(fallback=\"x\")")
+
+    assert {:ok,
+            {:helper, "format", [{:pipeline, {:identifier, "name"}, [{:stage, "trim", []}]}]}} =
+             Expression.parse("format (name |> trim)")
+  end
+
   test "parse rejects non-helper pipeline stages" do
     assert {:error,
             "pipeline stages must be helper names or helper calls like trim or truncate(20)"} =
              Expression.parse("user.name |> String.trim()")
+  end
+
+  test "parse rejects invalid pipeline inputs and malformed arguments" do
+    assert {:error, "pipeline expressions only allow structured Stem syntax"} =
+             Expression.parse("a + b |> trim")
+
+    assert {:error, "pipeline helper calls must use balanced parentheses"} =
+             Expression.parse("name |> truncate((20)")
+
+    assert {:error, "pipeline keyword arguments must use simple identifier keys"} =
+             Expression.parse("name |> default(1=2)")
+
+    assert {:ok, {:pipeline, {:identifier, "name"}, [{:stage, "default", []}]}} =
+             Expression.parse("name |> default(  )")
+
+    assert {:error, "pipeline stages cannot be empty"} =
+             Expression.parse("name |>  |> trim")
+
+    assert {:error, "pipeline expressions only allow structured Stem syntax"} =
+             Expression.parse("name |> default(=1)")
+  end
+
+  test "translate raises for invalid pipelines" do
+    assert_raise ArgumentError, ~r/pipeline stages must be helper names/, fn ->
+      Expression.translate("name |> String.trim()", %{in_each: false, locals: %{}})
+    end
+  end
+
+  test "invalid wrapped non-subexpressions fall back out of helper parsing" do
+    assert {:ok, {:elixir, "format (name)"}} = Expression.parse("format (name)")
   end
 end

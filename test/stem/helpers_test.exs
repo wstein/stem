@@ -87,6 +87,46 @@ defmodule Stem.HelpersTest do
   end
 
   describe "builtin transform helpers" do
+    test "builtins raise helpful arity errors" do
+      cases = [
+        {:default, [1], ~r/default expects 2 arguments/},
+        {:join, [1, 2, 3], ~r/join expects 1 or 2 arguments/},
+        {:inspect, [], ~r/inspect expects 1 argument/},
+        {:json, [1, 2], ~r/json expects 1 argument/},
+        {:escape_json, [], ~r/escape_json expects 1 argument/},
+        {:trim, [1, 2], ~r/trim expects 1 argument/},
+        {:upcase, [1, 2], ~r/upcase expects 1 argument/},
+        {:downcase, [1, 2], ~r/downcase expects 1 argument/},
+        {:capitalize, [1, 2], ~r/capitalize expects 1 argument/},
+        {:truncate, [1], ~r/truncate expects 2 or 3 arguments/},
+        {:replace, [1, 2], ~r/replace expects 3 arguments/},
+        {:starts_with, [1], ~r/starts_with expects 2 arguments/},
+        {:ends_with, [1], ~r/ends_with expects 2 arguments/},
+        {:contains, [1], ~r/contains expects 2 arguments/},
+        {:empty?, [1, 2], ~r/empty\? expects 1 argument/},
+        {:present?, [1, 2], ~r/present\? expects 1 argument/},
+        {:compact, [1, 2], ~r/compact expects 1 argument/},
+        {:map, [1], ~r/map expects 2 arguments/},
+        {:filter, [1, 2, 3], ~r/filter expects 1 or 2 arguments/},
+        {:sort, [1, 2], ~r/sort expects 1 argument/},
+        {:sort_by, [1], ~r/sort_by expects 2 arguments/},
+        {:group_by, [1], ~r/group_by expects 2 arguments/},
+        {:take, [1], ~r/take expects 2 arguments/},
+        {:drop, [1], ~r/drop expects 2 arguments/},
+        {:slice, [1, 2], ~r/slice expects 3 arguments/},
+        {:first, [1, 2], ~r/first expects 1 argument/},
+        {:uniq, [1, 2], ~r/uniq expects 1 argument/},
+        {:flatten, [1, 2], ~r/flatten expects 1 argument/},
+        {:reverse, [1, 2], ~r/reverse expects 1 argument/}
+      ]
+
+      Enum.each(cases, fn {name, args, message} ->
+        assert_raise ArgumentError, message, fn ->
+          Helpers.invoke(name, args, [])
+        end
+      end)
+    end
+
     test "string transforms and defaults" do
       assert Helpers.invoke(:trim, ["  Nina  "], []) == "Nina"
       assert Helpers.invoke(:upcase, ["Nina"], []) == "NINA"
@@ -109,8 +149,10 @@ defmodule Stem.HelpersTest do
       assert Helpers.invoke(:contains, [["a", "b"], "a"], [])
       assert Helpers.invoke(:contains, [%{name: "Nina"}, :name], [])
       assert Helpers.invoke(:contains, ["stem", "te"], [])
+      refute Helpers.invoke(:contains, [123, :name], [])
       assert Helpers.invoke(:empty?, [[]], [])
       refute Helpers.invoke(:empty?, [[1]], [])
+      refute Helpers.invoke(:empty?, [0], [])
       assert Helpers.invoke(:present?, [[1]], [])
       refute Helpers.invoke(:present?, [%{}], [])
       assert Helpers.invoke(:starts_with, ["stem", "st"], [])
@@ -137,16 +179,32 @@ defmodule Stem.HelpersTest do
                false => [%{name: "a", active: false}],
                true => [%{name: "b", active: true}, %{name: "c", active: true}]
              }
+
+      assert Helpers.invoke(:map, [[%{"name" => "nina"}], "name"], []) == ["nina"]
+      assert Helpers.invoke(:map, [[%{name: "nina"}], :name], []) == ["nina"]
+      assert Helpers.invoke(:map, [[%{1 => "one"}], 1], []) == ["one"]
+      assert Helpers.invoke(:map, [[["a", "b"]], "1"], []) == ["b"]
+      assert Helpers.invoke(:map, [[["a", "b"]], 1], []) == ["b"]
+      assert Helpers.invoke(:map, [[["a", "b"]], "x"], []) == [nil]
+      assert Helpers.invoke(:map, [[:atom_entry], "name"], []) == [nil]
+      assert Helpers.invoke(:map, [[%{other: "x"}], "name"], []) == [nil]
     end
 
     test "list and string helpers support common sequence operations" do
       assert Helpers.invoke(:join, [["a", "b"], ","], []) == "a,b"
+      assert Helpers.invoke(:join, [["a", "b"]], []) == "ab"
       assert Helpers.invoke(:compact, [[1, nil, 2]], []) == [1, 2]
+      assert Helpers.invoke(:compact, [nil], []) == []
       assert Helpers.invoke(:sort, [[3, 1, 2]], []) == [1, 2, 3]
+      assert Helpers.invoke(:sort, [%{a: 2, b: 1}], []) == [1, 2]
+      assert Helpers.invoke(:filter, [[true, false, nil, 0, ""]], []) == [true, 0, ""]
       assert Helpers.invoke(:take, [[1, 2, 3], 2], []) == [1, 2]
+      assert Helpers.invoke(:take, [[1, 2, 3], "2"], []) == [1, 2]
+      assert Helpers.invoke(:take, [7, 1], []) == [7]
       assert Helpers.invoke(:drop, [[1, 2, 3], 1], []) == [2, 3]
       assert Helpers.invoke(:slice, [[1, 2, 3], 1, 2], []) == [2, 3]
       assert Helpers.invoke(:first, [[1, 2, 3]], []) == 1
+      assert Helpers.invoke(:first, [7], []) == 7
       assert Helpers.invoke(:uniq, [[1, 1, 2]], []) == [1, 2]
       assert Helpers.invoke(:flatten, [[[1], [2, [3]]]], []) == [1, 2, 3]
       assert Helpers.invoke(:reverse, [[1, 2, 3]], []) == [3, 2, 1]
@@ -155,6 +213,10 @@ defmodule Stem.HelpersTest do
       assert Helpers.invoke(:slice, ["stem", 1, 2], []) == "te"
       assert Helpers.invoke(:first, ["stem"], []) == "s"
       assert Helpers.invoke(:reverse, ["stem"], []) == "mets"
+
+      assert_raise ArgumentError, ~r/take expects integer arguments/, fn ->
+        Helpers.invoke(:take, [[1, 2, 3], "nope"], [])
+      end
     end
   end
 end

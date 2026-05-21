@@ -15,6 +15,12 @@ defmodule Stem.FormatterTest do
              "{{user.name |> trim |> truncate(20)}}"
   end
 
+  test "raises on invalid pipeline expressions" do
+    assert_raise ArgumentError, ~r/pipeline stages must be helper names/, fn ->
+      Stem.Formatter.format_string("{{name |> String.trim()}}")
+    end
+  end
+
   test "preserves whitespace trim markers while normalizing block tags" do
     assert Stem.Formatter.format_string(" {{~ #if ok ~}} yes {{~ /if ~}} ") ==
              " {{~#if ok~}} yes {{~/if~}} "
