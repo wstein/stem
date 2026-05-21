@@ -2,12 +2,12 @@
 
 Stem is a native Handlebars-inspired template compiler for Elixir.
 It compiles double-curly-brace templates directly into Elixir's abstract syntax tree.
-There is no intermediate template language and no runtime evaluation of template source.
+There is no intermediate template language.
 
 ## Why Stem
 
 Templates become ordinary compiled functions, so rendering is fast and type-checked by the compiler.
-Template source is never evaluated at runtime, which keeps untrusted input out of the code path.
+You can choose compile-time macros for static templates or runtime compile/eval APIs for dynamic templates.
 The syntax stays familiar if you know double-curly templating systems.
 
 ## Quick Start
@@ -59,6 +59,20 @@ Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the index, and 
 `{{../name}}` reaches the parent (top-level assign) scope.
 Block conditionals follow Elixir truthiness: only `false` and `nil` are falsey.
 Use helpers or regular Elixir functions when output needs transformation (for example, sanitization, normalization, or formatting).
+Nested brace forms inside expressions are not supported.
+
+## Runtime APIs
+
+Stem supports runtime compilation and evaluation in addition to compile-time macros:
+
+```elixir
+quoted = Stem.compile_string("Hello {{name}}")
+{result, _binding} = Code.eval_quoted(quoted, assigns: [name: "Nina"], helpers: [])
+#=> {"Hello Nina", ...}
+
+Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"])
+#=> "Hello Nina"
+```
 
 ## Pipeline
 
@@ -72,8 +86,8 @@ source -> Stem.Tokenizer -> Stem.Parser -> Stem.AST -> Stem.Compiler -> quoted E
 
 ## Security
 
-The runtime entry points (`Stem.eval_string/3`, `Stem.eval_file/3`, `Stem.compile_string/2`, and `Stem.compile_file/2`) raise `Stem.SecurityError`.
-Stem only compiles templates at compile time, through the macros above.
+`{{...}}` output is not escaped automatically.
+Apply escaping or sanitization explicitly through helper functions such as `html`, or project-specific helpers.
 
 ## Command Line
 

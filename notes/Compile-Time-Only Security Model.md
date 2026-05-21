@@ -3,23 +3,26 @@ id: 20260521120100
 aliases: []
 tags: [security, api]
 ---
-Stem never compiles or evaluates template source at runtime; templates only become code through compile-time macros.
+Stem supports both compile-time and runtime template compilation; security now depends on explicit trust boundaries and explicit output transformations.
 
 ## What
 
-`Stem.eval_string/3`, `Stem.eval_file/3`, `Stem.compile_string/2`, and `Stem.compile_file/2` raise `Stem.SecurityError`.
-Templates are turned into functions only by `Stem.function_from_string/5`, `Stem.function_from_file/5`, and the `Stem.DSL` macros, all of which run during module compilation.
+`Stem.function_from_string/5` and `Stem.function_from_file/5` remain the compile-time APIs.
+`Stem.compile_string/2`, `Stem.compile_file/2`, `Stem.eval_string/3`, and `Stem.eval_file/3` provide runtime equivalents.
+`{{...}}` output is unescaped by default, so escaping/sanitization must be performed via helpers or calling code.
 
 ## Why
 
-Compiling template source at runtime would let untrusted input reach the code path.
-Restricting compilation to build time keeps that boundary closed and makes rendering a plain function call.
+Some use cases need EEx-style runtime template evaluation.
+Keeping runtime APIs while requiring explicit transformations makes dynamic rendering possible without hidden output mutation.
 
 ## How
 
-Author templates as compile-time functions or via the DSL.
-When a tool needs to render a template chosen at runtime, build a module with `Module.create/3` around `function_from_string/5` at the trust boundary, as the CLI does, rather than reaching for an eval entry point.
+Use compile-time macros for static templates and runtime APIs when templates are selected dynamically.
+Treat runtime template input as untrusted.
+Apply sanitization and escaping through helpers such as `html` or project-specific helper functions at the output boundary.
 
 ## Links
 
 - [[Native AST Compilation Pipeline]] - The pipeline these macros drive.
+- [[HTML Escaping Behavior]] - Explicit transformation guidance.
