@@ -7,7 +7,9 @@ Stem resolves helpers and partials through a combination of compile-time expansi
 
 ## What
 
-Helpers are functions registered in `Stem.Helpers` or passed in the `helpers` assign; they are invoked when a tag's first token is a name followed by arguments. Partials (`{{> name}}`) are expanded inline by the parser at compile time using the `:partials` option.
+Helpers are functions registered in `Stem.Helpers` or passed in the `helpers` assign; they are invoked when a tag's first token is a name followed by arguments.
+Partials (`{{> name}}`) are expanded inline by the parser at compile time using the `:partials` option.
+Because `{{ ... }}` output is unescaped by default, helpers are the primary place to apply output transformations such as escaping, normalization, and formatting.
 
 ## Why
 
@@ -15,7 +17,9 @@ Inlining partials at compile time removes recursive calls at runtime and allows 
 
 ## How
 
-Register global helpers with `Stem.Helpers.register/2` or pass local helpers as a map in the function arguments. Provide partials as a map to the `function_from_string` macro.
+Register global helpers with `Stem.Helpers.register/2` or pass local helpers as a map in function arguments.
+Provide partials as a map to `Stem.function_from_string/5` (or the DSL macros).
+Keep transformation helpers focused and explicit so templates make security-sensitive behavior obvious.
 
 ## Links
 

@@ -49,10 +49,8 @@ See `examples/` for runnable scripts via `mix run examples/<name>.exs`.
 
 ## Syntax
 
-- `{{expression}}` evaluates an expression and prints the HTML-escaped result.
-- `{{{expression}}}` prints the raw, unescaped result.
+- `{{expression}}` evaluates an expression and prints the string result without HTML escaping.
 - `{{! comment }}` and `{{!-- comment --}}` are discarded.
-- `{{{{ literal }}}}` emits its contents verbatim.
 - `{{> partial}}` expands a named partial.
 - `{{#if}}`, `{{#unless}}`, `{{#each}}`, and `{{#with}}` open blocks closed by `{{/...}}`, each with an optional `{{else}}`.
 
@@ -60,6 +58,7 @@ Bare identifiers resolve to assigns, so `{{name}}` reads the `:name` assign.
 Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the index, and `{{@key}}` the key when iterating a map.
 `{{../name}}` reaches the parent (top-level assign) scope.
 Block conditionals follow Elixir truthiness: only `false` and `nil` are falsey.
+Use helpers or regular Elixir functions when output needs transformation (for example, sanitization, normalization, or formatting).
 
 ## Pipeline
 
