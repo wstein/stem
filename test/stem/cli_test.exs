@@ -212,7 +212,7 @@ defmodule Mix.Tasks.StemTest do
       config_path = Path.join(temp_dir, ".stem.config.json")
       template_path = Path.join(temp_dir, "template.stem")
 
-      File.write!(config_path, ~s({"mode":"safe"}))
+      File.write!(config_path, ~s({"allow_elixir_expressions":false}))
       File.write!(template_path, "{{value}}")
 
       original_cwd = System.get_env("EXBAR_CWD")
@@ -236,16 +236,19 @@ defmodule Mix.Tasks.StemTest do
       end
     end
 
-    test "loads project config while honoring CLI permissive overrides" do
+    test "loads project config while honoring CLI allow_elixir_expressions overrides" do
       temp_dir =
-        Path.join(System.tmp_dir!(), "stem-cli-permissive-#{System.unique_integer([:positive])}")
+        Path.join(
+          System.tmp_dir!(),
+          "stem-cli-allow-elixir-#{System.unique_integer([:positive])}"
+        )
 
       File.mkdir_p!(temp_dir)
 
       config_path = Path.join(temp_dir, ".stem.config.json")
       template_path = Path.join(temp_dir, "template.stem")
 
-      File.write!(config_path, ~s({"mode":"safe"}))
+      File.write!(config_path, ~s({"allow_elixir_expressions":false}))
       File.write!(template_path, "{{1 + 2}}")
 
       original_cwd = System.get_env("EXBAR_CWD")
@@ -254,7 +257,7 @@ defmodule Mix.Tasks.StemTest do
       try do
         output =
           capture_io(fn ->
-            Stem.CLI.run(["--permissive", template_path])
+            Stem.CLI.run(["--allow-elixir-expressions", template_path])
           end)
 
         assert output == "3"

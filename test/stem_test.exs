@@ -78,12 +78,12 @@ defmodule StemTest do
                    end
     end
 
-    test "compound Elixir expressions resolve assigns in permissive mode" do
-      assert eval("{{a + b}}", [assigns: [a: 1, b: 2]], mode: :permissive) == "3"
+    test "compound Elixir expressions resolve assigns when allow_elixir_expressions: true" do
+      assert eval("{{a + b}}", [assigns: [a: 1, b: 2]], allow_elixir_expressions: true) == "3"
     end
 
-    test "arbitrary Elixir is rejected by default (safe mode)" do
-      assert_raise CompileError, ~r/safe mode forbids arbitrary Elixir expressions/, fn ->
+    test "arbitrary Elixir is rejected by default (allow_elixir_expressions: false)" do
+      assert_raise CompileError, ~r/arbitrary Elixir expressions are not allowed/, fn ->
         eval("{{a + b}}", assigns: [a: 1, b: 2])
       end
     end
@@ -369,13 +369,13 @@ defmodule StemTest do
 
     test "invalid Elixir expression" do
       assert_raise TokenMissingError, fn ->
-        Stem.__compile_string__("{{a + }}", mode: :permissive)
+        Stem.__compile_string__("{{a + }}", allow_elixir_expressions: true)
       end
     end
 
     test "complex parent traversal is rejected at compile time" do
       assert_raise CompileError, ~r/unsupported parent path traversal/, fn ->
-        Stem.__compile_string__("{{#each xs}}{{../a.b}}{{/each}}", mode: :permissive)
+        Stem.__compile_string__("{{#each xs}}{{../a.b}}{{/each}}", allow_elixir_expressions: true)
       end
     end
 

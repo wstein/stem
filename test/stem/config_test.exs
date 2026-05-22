@@ -23,7 +23,7 @@ defmodule Stem.ConfigTest do
     {
       "escape": "html",
       "warn_on_missing_assigns": true,
-      "mode": "safe"
+      "allow_elixir_expressions": false
     }
     """)
 
@@ -31,7 +31,7 @@ defmodule Stem.ConfigTest do
 
     assert config[:escape] == :html
     assert config[:warn_on_missing_assigns] == true
-    assert config[:mode] == :safe
+    assert config[:allow_elixir_expressions] == false
   end
 
   test "load_config handles invalid JSON", %{temp_dir: temp_dir} do
@@ -161,7 +161,7 @@ defmodule Stem.ConfigTest do
     File.write!(config_file, ~S"""
     {
       "escape": "xml",
-      "mode": "safe"
+      "allow_elixir_expressions": false
     }
     """)
 
@@ -172,7 +172,7 @@ defmodule Stem.ConfigTest do
     merged = Stem.Config.merge_with_defaults(config, cli_opts)
 
     assert merged[:escape] == :html
-    assert merged[:mode] == :safe
+    assert merged[:allow_elixir_expressions] == false
     assert merged[:file] == "template.stem"
   end
 
@@ -183,7 +183,7 @@ defmodule Stem.ConfigTest do
     {
       "escape": "json",
       "warn_on_missing_assigns": false,
-      "mode": "permissive"
+      "allow_elixir_expressions": true
     }
     """)
 
@@ -191,7 +191,7 @@ defmodule Stem.ConfigTest do
 
     assert config[:escape] == :json
     assert config[:warn_on_missing_assigns] == false
-    assert config[:mode] == :permissive
+    assert config[:allow_elixir_expressions] == true
   end
 
   test "config file ignores unsupported options", %{temp_dir: temp_dir} do

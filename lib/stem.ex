@@ -85,10 +85,10 @@ defmodule Stem do
     * `:contract` - a keyword list like `[required: [:title], optional:
       [:subtitle]]` used to validate required assigns before rendering.
 
-    * `:mode` - `:safe` (default) allows only structured Stem expressions,
-      helpers, literals, and paths. Pass `:permissive` to allow arbitrary
-      Elixir expressions in tags — only use this with fully trusted template
-      sources.
+    * `:allow_elixir_expressions` - when `false` (default), templates are
+      restricted to structured Stem expressions, helpers, literals, and paths.
+      Pass `true` to allow arbitrary Elixir expressions in tags — only use this
+      with fully trusted template sources.
 
     * `:escape` - the default escape mode for `{{ }}` expressions. One of
       `:html` (default, recommended for security), `:none` (no escaping),
@@ -169,7 +169,7 @@ defmodule Stem do
           | {:warn_on_missing_assigns, boolean()}
           | {:warn_on_falsy_coercion, boolean()}
           | {:contract, keyword()}
-          | {:mode, :permissive | :safe}
+          | {:allow_elixir_expressions, boolean()}
           | {atom(), term()}
 
   @doc """

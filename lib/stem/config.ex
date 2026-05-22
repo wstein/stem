@@ -117,7 +117,7 @@ defmodule Stem.Config do
     []
     |> maybe_add_escape(map)
     |> maybe_add_warn_on_missing_assigns(map)
-    |> maybe_add_mode(map)
+    |> maybe_add_allow_elixir_expressions(map)
   end
 
   defp maybe_add_escape(acc, map) do
@@ -135,16 +135,11 @@ defmodule Stem.Config do
     end
   end
 
-  defp maybe_add_mode(acc, map) do
-    case Map.get(map, "mode") do
-      nil ->
-        acc
-
-      mode_string when mode_string in ["permissive", "safe"] ->
-        Keyword.put(acc, :mode, String.to_atom(mode_string))
-
-      _ ->
-        acc
+  defp maybe_add_allow_elixir_expressions(acc, map) do
+    case Map.get(map, "allow_elixir_expressions") do
+      nil -> acc
+      value when is_boolean(value) -> Keyword.put(acc, :allow_elixir_expressions, value)
+      _ -> acc
     end
   end
 

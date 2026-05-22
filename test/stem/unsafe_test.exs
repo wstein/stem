@@ -61,8 +61,11 @@ defmodule Stem.UnsafeTest do
     assert result == "HELLO"
   end
 
-  test "Unsafe.eval_string with mode: safe" do
-    result = Stem.Unsafe.eval_string("{{name}}", [assigns: [name: "value"]], mode: :safe)
+  test "Unsafe.eval_string with allow_elixir_expressions: false" do
+    result =
+      Stem.Unsafe.eval_string("{{name}}", [assigns: [name: "value"]],
+        allow_elixir_expressions: false
+      )
 
     assert result == "value"
   end
@@ -137,15 +140,16 @@ defmodule Stem.UnsafeTest do
     assert result == "<tag>"
   end
 
-  test "Unsafe.eval_file with mode option" do
+  test "Unsafe.eval_file with allow_elixir_expressions option" do
     temp_file =
-      Path.join(System.tmp_dir!(), "mode_test_#{System.unique_integer([:positive])}.stem")
+      Path.join(System.tmp_dir!(), "allow_elixir_test_#{System.unique_integer([:positive])}.stem")
 
     File.write!(temp_file, "{{x}}")
 
     on_exit(fn -> File.rm_rf!(temp_file) end)
 
-    result = Stem.Unsafe.eval_file(temp_file, [assigns: [x: "y"]], mode: :safe)
+    result =
+      Stem.Unsafe.eval_file(temp_file, [assigns: [x: "y"]], allow_elixir_expressions: false)
 
     assert result == "y"
   end

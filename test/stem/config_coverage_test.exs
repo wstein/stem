@@ -94,13 +94,13 @@ defmodule Stem.ConfigCoverageTest do
     end
 
     test "merge_with_defaults preserves all config keys" do
-      config = [escape: :xml, mode: :safe]
+      config = [escape: :xml, allow_elixir_expressions: false]
       opts = [warn_on_missing_assigns: true]
 
       result = Stem.Config.merge_with_defaults(config, opts)
 
       assert result[:escape] == :xml
-      assert result[:mode] == :safe
+      assert result[:allow_elixir_expressions] == false
       assert result[:warn_on_missing_assigns] == true
     end
 

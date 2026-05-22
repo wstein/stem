@@ -25,34 +25,40 @@ defmodule Stem.RuntimeSecurityTest do
   end
 
   test "default mode rejects arbitrary Elixir fallback expressions" do
-    assert_raise CompileError, ~r/safe mode forbids arbitrary Elixir expressions/, fn ->
+    assert_raise CompileError, ~r/arbitrary Elixir expressions are not allowed/, fn ->
       Stem.Unsafe.eval_string("{{a + b}}", assigns: [a: 1, b: 2])
     end
   end
 
-  test "safe mode rejects arbitrary Elixir fallback expressions" do
-    assert_raise CompileError, ~r/safe mode forbids arbitrary Elixir expressions/, fn ->
-      Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], mode: :safe)
+  test "allow_elixir_expressions: false rejects arbitrary Elixir fallback expressions" do
+    assert_raise CompileError, ~r/arbitrary Elixir expressions are not allowed/, fn ->
+      Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]],
+        allow_elixir_expressions: false
+      )
     end
   end
 
-  test "permissive mode allows arbitrary Elixir fallback expressions" do
-    assert Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], mode: :permissive) ==
+  test "allow_elixir_expressions: true allows arbitrary Elixir fallback expressions" do
+    assert Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]],
+             allow_elixir_expressions: true
+           ) ==
              "3"
   end
 
-  test "safe mode still allows structured Stem expressions" do
-    assert Stem.Unsafe.eval_string("Hello {{name}}", [assigns: [name: "Nina"]], mode: :safe) ==
+  test "allow_elixir_expressions: false still allows structured Stem expressions" do
+    assert Stem.Unsafe.eval_string("Hello {{name}}", [assigns: [name: "Nina"]],
+             allow_elixir_expressions: false
+           ) ==
              "Hello Nina"
   end
 
-  test "safe mode allows helper pipelines" do
+  test "allow_elixir_expressions: false allows helper pipelines" do
     helpers = [trim: fn [value], _ctx -> String.trim(to_string(value)) end]
 
     assert Stem.Unsafe.eval_string(
              "{{name |> trim}}",
              [assigns: [name: " Nina "], helpers: helpers],
-             mode: :safe
+             allow_elixir_expressions: false
            ) == "Nina"
   end
 

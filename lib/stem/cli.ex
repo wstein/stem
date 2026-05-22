@@ -12,12 +12,12 @@ defmodule Stem.CLI do
 
   Options:
 
-    -o, --output FILE         Write the rendered output to FILE
-    --strict                  Warn on missing assigns
-    --permissive              Allow arbitrary Elixir expressions in tags
-    --escape MODE             Escape mode: none, html (default), xml, json, url
-    -h, --help                Show this message
-    -v, --version             Show the Stem version
+    -o, --output FILE                  Write the rendered output to FILE
+    --strict                           Warn on missing assigns
+    --allow-elixir-expressions         Allow arbitrary Elixir expressions in tags
+    --escape MODE                      Escape mode: none, html (default), xml, json, url
+    -h, --help                         Show this message
+    -v, --version                      Show the Stem version
   """
 
   def run(argv) when is_list(argv) do
@@ -28,7 +28,7 @@ defmodule Stem.CLI do
           help: :boolean,
           version: :boolean,
           strict: :boolean,
-          permissive: :boolean,
+          allow_elixir_expressions: :boolean,
           escape: :string
         ],
         aliases: [o: :output, h: :help, v: :version]
@@ -239,7 +239,7 @@ defmodule Stem.CLI do
           file: unquote(file),
           warn_on_missing_assigns: unquote(options[:warn_on_missing_assigns] || false),
           escape: unquote(options[:escape] || :html),
-          mode: unquote(options[:mode] || :safe)
+          allow_elixir_expressions: unquote(options[:allow_elixir_expressions] || false)
         )
       end
 
@@ -332,8 +332,8 @@ defmodule Stem.CLI do
     ]
 
     cli_opts =
-      if opts[:permissive] do
-        Keyword.put(cli_opts, :mode, :permissive)
+      if opts[:allow_elixir_expressions] do
+        Keyword.put(cli_opts, :allow_elixir_expressions, true)
       else
         cli_opts
       end
