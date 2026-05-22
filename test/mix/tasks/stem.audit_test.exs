@@ -14,14 +14,20 @@ defmodule Mix.Tasks.Stem.AuditTest do
     {:ok, tmp: tmp}
   end
 
-  test "passes when no production config files exist" do
-    # Run in a temp dir with no config files — should pass silently
-    output =
-      capture_io(fn ->
-        Mix.Tasks.Stem.Audit.run(["--paths", Path.join(System.tmp_dir!(), "nonexistent.exs")])
-      end)
+  test "passes when the default config files are absent" do
+    # No --paths given: absent defaults are skipped, so the gate stays quiet.
+    # The repository has no config/ dir or .stem.config.json, so this is safe.
+    output = capture_io(fn -> Mix.Tasks.Stem.Audit.run([]) end)
 
     assert output =~ "passed"
+  end
+
+  test "fails when an explicitly listed file does not exist" do
+    missing = Path.join(System.tmp_dir!(), "nonexistent_#{:erlang.unique_integer([:positive])}.exs")
+
+    assert_raise Mix.Error, ~r/Stem audit failed.*1 violation/, fn ->
+      capture_io(:stderr, fn -> Mix.Tasks.Stem.Audit.run(["--paths", missing]) end)
+    end
   end
 
   test "passes when production config contains allow_elixir_expressions: false", %{tmp: tmp} do
