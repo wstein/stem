@@ -19,6 +19,10 @@ maybe_seed_opt = if seed = System.get_env("SEED"), do: [seed: String.to_integer(
 
 ex_unit_opts =
   [
+    # Capture Logger output per test (only printed on failure) so intentional
+    # audit signals — e.g. the Stem.Transformers.Collections "capability group
+    # loaded" warning — do not flood normal test runs.
+    capture_log: true,
     trace: !!System.get_env("TRACE"),
     include: line_include,
     exclude: line_exclude
