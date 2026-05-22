@@ -24,10 +24,21 @@ defmodule Stem.RuntimeSecurityTest do
     assert Stem.RuntimeSecurity.Compiled.render_from_string(name: "Nina") == "Hello Nina"
   end
 
+  test "default mode rejects arbitrary Elixir fallback expressions" do
+    assert_raise CompileError, ~r/safe mode forbids arbitrary Elixir expressions/, fn ->
+      Stem.Unsafe.eval_string("{{a + b}}", assigns: [a: 1, b: 2])
+    end
+  end
+
   test "safe mode rejects arbitrary Elixir fallback expressions" do
     assert_raise CompileError, ~r/safe mode forbids arbitrary Elixir expressions/, fn ->
       Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], mode: :safe)
     end
+  end
+
+  test "permissive mode allows arbitrary Elixir fallback expressions" do
+    assert Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], mode: :permissive) ==
+             "3"
   end
 
   test "safe mode still allows structured Stem expressions" do

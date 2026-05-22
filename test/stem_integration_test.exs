@@ -61,7 +61,7 @@ defmodule Stem.StemTest do
       assert result == "---\nliteral section header\n---\nok\n"
     end
 
-    test "compile_file honors safe mode from project config" do
+    test "compile_file rejects arbitrary Elixir by default (safe mode)" do
       temp_dir =
         Path.join(
           System.tmp_dir!(),
@@ -70,19 +70,38 @@ defmodule Stem.StemTest do
 
       File.mkdir_p!(temp_dir)
 
-      config_file = Path.join(temp_dir, ".stem.config.json")
       template_file = Path.join(temp_dir, "safe_mode.stem")
+      File.write!(template_file, "{{1 + 1}}")
 
-      File.write!(config_file, ~s({"mode":"safe"}))
+      on_exit(fn -> File.rm_rf!(temp_dir) end)
+
+      assert_raise CompileError, ~r/safe mode forbids arbitrary Elixir expressions/, fn ->
+        Stem.compile_file(template_file)
+      end
+    end
+
+    test "compile_file config can override mode to permissive" do
+      temp_dir =
+        Path.join(
+          System.tmp_dir!(),
+          "permissive_mode_compile_#{System.unique_integer([:positive])}"
+        )
+
+      File.mkdir_p!(temp_dir)
+
+      config_file = Path.join(temp_dir, ".stem.config.json")
+      template_file = Path.join(temp_dir, "permissive.stem")
+
+      File.write!(config_file, ~s({"mode":"permissive"}))
       File.write!(template_file, "{{1 + 1}}")
 
       original_cwd = System.get_env("EXBAR_CWD")
       System.put_env("EXBAR_CWD", temp_dir)
 
       try do
-        assert_raise CompileError, ~r/safe mode forbids arbitrary Elixir expressions/, fn ->
-          Stem.compile_file(template_file)
-        end
+        quoted = Stem.compile_file(template_file)
+        {result, _} = Code.eval_quoted(quoted, assigns: [], helpers: [])
+        assert result == "2"
       after
         if original_cwd do
           System.put_env("EXBAR_CWD", original_cwd)

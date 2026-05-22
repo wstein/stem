@@ -57,7 +57,9 @@ defmodule Stem.StemMigrationTest do
 
     render_output = fn value, fallback ->
       String.trim(
-        Stem.TestTemplate.eval_file(template, assigns: [render: value, fallback: fallback])
+        Stem.TestTemplate.eval_file(template, [assigns: [render: value, fallback: fallback]],
+          mode: :permissive
+        )
       )
     end
 
