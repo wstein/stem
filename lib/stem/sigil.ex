@@ -29,17 +29,37 @@ defmodule Stem.Sigil do
     template = extract_literal!(template_ast)
     compiled = Stem.__compile_string__(template, file: __CALLER__.file, line: __CALLER__.line)
 
-    quote do
-      _ = var!(transformers) = Keyword.get(binding(), :transformers, %{})
+    # Resolve dictionaries at macro-expansion time using the same
+    # __stem_dictionary_assigns__/0 snapshot produced by @before_compile
+    # in Stem.DSL. If the module has no dictionary (e.g. plain import of
+    # Stem.Sigil), the merge is a no-op at runtime.
+    dictionaries = Stem.DSL.dictionary_assigns_ast(__CALLER__.module)
+    escaped_dicts = Macro.escape(dictionaries)
 
-      var!(assigns) =
-        Stem.merge_dictionary_assigns(var!(assigns), Stem.Sigil.dictionary_assigns(__MODULE__))
+    if map_size(dictionaries) == 0 do
+      quote do
+        var!(transformers) = Keyword.get(binding(), :transformers, %{})
+        _ = var!(transformers)
+        unquote(compiled)
+      end
+    else
+      quote do
+        var!(transformers) = Keyword.get(binding(), :transformers, %{})
+        _ = var!(transformers)
 
-      unquote(compiled)
+        var!(assigns) =
+          Stem.merge_dictionary_assigns(
+            var!(assigns),
+            Stem.__resolve_dict_refs__(__MODULE__, unquote(escaped_dicts))
+          )
+
+        unquote(compiled)
+      end
     end
   end
 
   @doc false
+  @deprecated "Use Stem.DSL.__before_compile__ snapshot; kept for runtime reflection only."
   def dictionary_assigns(module) when is_atom(module) do
     if function_exported?(module, :__stem_dictionary_assigns__, 0) do
       module.__stem_dictionary_assigns__()

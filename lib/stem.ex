@@ -217,9 +217,15 @@ defmodule Stem do
         if :assigns in original_args, do: [quote(do: _ = var!(assigns)) | noops], else: noops
 
       noops =
-        if :transformers in original_args,
-          do: [quote(do: _ = var!(transformers)) | noops],
-          else: [quote(do: _ = var!(transformers) = %{}) | noops]
+        if :transformers in original_args do
+          [quote(do: _ = var!(transformers)) | noops]
+        else
+          [
+            quote(do: _ = var!(transformers)),
+            quote(do: var!(transformers) = %{})
+            | noops
+          ]
+        end
 
       noops =
         if dictionary_assigns != %{} and :assigns in original_args,
@@ -229,7 +235,10 @@ defmodule Stem do
                 var!(assigns) =
                   Stem.merge_dictionary_assigns(
                     var!(assigns),
-                    unquote(Macro.escape(dictionary_assigns))
+                    Stem.__resolve_dict_refs__(
+                      __MODULE__,
+                      unquote(Macro.escape(dictionary_assigns))
+                    )
                   )
             )
             | noops
@@ -307,9 +316,15 @@ defmodule Stem do
         if :assigns in original_args, do: [quote(do: _ = var!(assigns)) | noops], else: noops
 
       noops =
-        if :transformers in original_args,
-          do: [quote(do: _ = var!(transformers)) | noops],
-          else: [quote(do: _ = var!(transformers) = %{}) | noops]
+        if :transformers in original_args do
+          [quote(do: _ = var!(transformers)) | noops]
+        else
+          [
+            quote(do: _ = var!(transformers)),
+            quote(do: var!(transformers) = %{})
+            | noops
+          ]
+        end
 
       noops =
         if dictionary_assigns != %{} and :assigns in original_args,
@@ -319,7 +334,10 @@ defmodule Stem do
                 var!(assigns) =
                   Stem.merge_dictionary_assigns(
                     var!(assigns),
-                    unquote(Macro.escape(dictionary_assigns))
+                    Stem.__resolve_dict_refs__(
+                      __MODULE__,
+                      unquote(Macro.escape(dictionary_assigns))
+                    )
                   )
             )
             | noops
@@ -473,6 +491,19 @@ defmodule Stem do
   end
 
   def merge_dictionary_assigns(assigns, _dictionary_assigns), do: assigns
+
+  @doc false
+  # Resolves deferred dictionary references. A `@attr`-backed dictionary cannot
+  # be read at macro-expansion time (Module.get_attribute returns nil inside
+  # Code.compile_string), so its name is registered with a `{:__stem_attr_ref__,
+  # _}` sentinel and the real value is fetched here at render time via the
+  # module's compiled `__stem_dictionary__/1` lookup.
+  def __resolve_dict_refs__(module, dictionary_assigns) when is_map(dictionary_assigns) do
+    Map.new(dictionary_assigns, fn
+      {name, {:__stem_attr_ref__, _attr}} -> {name, module.__stem_dictionary__(name)}
+      pair -> pair
+    end)
+  end
 
   defp code_snippet(source, line, column, end_line, end_column) do
     line_start = max(line - 2, 1)
