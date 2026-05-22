@@ -116,7 +116,7 @@ Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 * `{{yield name}}` renders a named region from the current expanded template scope.
 * Helper calls support nested subexpressions such as `{{format (uppercase name)}}`.
 * Elixir-style helper pipelines such as `{{user.name |> trim |> upcase |> truncate(20)}}` compile to nested helper calls.
-* `{{#each items as |item idx|}}` and `{{#with story as |article|}}` introduce block parameters. `{{#each}}` also accepts a three-parameter form `as |item i0 i1|` binding the item, zero-based index, and one-based index.
+* `{{#each items as |item key|}}` and `{{#with story as |article|}}` introduce block parameters. For `{{#each}}` the second parameter is the iteration key — the map key when iterating a map, or the index for a list. `{{#each}}` also accepts a three-parameter form `as |item i0 i1|` binding the item, zero-based index, and one-based index.
 * `{{~ ... ~}}`, `{{~ ...}}`, and `{{... ~}}` trim surrounding literal whitespace around a tag on both or one side.
 
 Bare identifiers resolve to assigns, so `{{name}}` reads the `:name` assign.

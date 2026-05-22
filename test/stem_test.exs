@@ -195,6 +195,16 @@ defmodule StemTest do
       end
     end
 
+    test "each over a map binds the value and key via block params" do
+      assert eval("{{#each m as |val key|}}{{key}} => {{val}};{{/each}}", assigns: [m: %{a: 1}]) ==
+               "a => 1;"
+    end
+
+    test "each over a list binds the index as the second block param" do
+      assert eval("{{#each xs as |val key|}}{{key}}:{{val}};{{/each}}", assigns: [xs: ["x", "y"]]) ==
+               "0:x;1:y;"
+    end
+
     test "with block params bind the subject" do
       assigns = [story: %{title: "Deep Work", author: "N"}]
 

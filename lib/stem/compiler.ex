@@ -112,7 +112,7 @@ defmodule Stem.Compiler do
           )
         ),
         fn {unquote(current), unquote(stem_key)}, unquote(stem_index) ->
-          unquote_splicing(block_param_assignments(:each, params, current, stem_index))
+          unquote_splicing(block_param_assignments(:each, params, current, stem_key, stem_index))
           unquote(body_ast)
         end,
         fn -> unquote(else_ast) end
@@ -138,7 +138,7 @@ defmodule Stem.Compiler do
          ),
          do:
            (
-             unquote_splicing(block_param_assignments(:with, params, this, nil))
+             unquote_splicing(block_param_assignments(:with, params, this, nil, nil))
              unquote(compile_nodes(body, body_state))
            ),
          else: unquote(compile_nodes(else_body, state))
@@ -208,20 +208,24 @@ defmodule Stem.Compiler do
   defp block_param_locals(:with, []), do: %{}
   defp block_param_locals(:with, [item]), do: %{item => item}
 
-  defp block_param_assignments(:each, [], _current, _stem_index), do: []
+  defp block_param_assignments(:each, [], _current, _stem_key, _stem_index), do: []
 
-  defp block_param_assignments(:each, [item], current, _stem_index) do
+  defp block_param_assignments(:each, [item], current, _stem_key, _stem_index) do
     [quote(do: unquote(local_var(item)) = unquote(current))]
   end
 
-  defp block_param_assignments(:each, [item, index], current, stem_index) do
+  # Two-param form `as |value key|`: the second param is the iteration key —
+  # the map key when iterating a map, the numeric index when iterating a list
+  # (stem_key is nil for lists), matching Handlebars `{{#each obj as |v k|}}`.
+  defp block_param_assignments(:each, [item, key], current, stem_key, stem_index) do
     [
       quote(do: unquote(local_var(item)) = unquote(current)),
-      quote(do: unquote(local_var(index)) = unquote(stem_index))
+      quote(do: unquote(local_var(key)) = unquote(stem_key) || unquote(stem_index))
     ]
   end
 
-  defp block_param_assignments(:each, [item, index0, index1], current, stem_index) do
+  # Three-param form `as |item i0 i1|`: explicit zero- and one-based positions.
+  defp block_param_assignments(:each, [item, index0, index1], current, _stem_key, stem_index) do
     [
       quote(do: unquote(local_var(item)) = unquote(current)),
       quote(do: unquote(local_var(index0)) = unquote(stem_index)),
@@ -229,9 +233,9 @@ defmodule Stem.Compiler do
     ]
   end
 
-  defp block_param_assignments(:with, [], _this, _unused), do: []
+  defp block_param_assignments(:with, [], _this, _stem_key, _stem_index), do: []
 
-  defp block_param_assignments(:with, [item], this, _unused) do
+  defp block_param_assignments(:with, [item], this, _stem_key, _stem_index) do
     [quote(do: unquote(local_var(item)) = unquote(this))]
   end
 

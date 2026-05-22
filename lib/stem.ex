@@ -110,9 +110,10 @@ defmodule Stem do
       expanded template scope.
     * `{{format (uppercase name)}}` style helper subexpressions.
     * `{{name |> trim |> upcase |> truncate(20)}}` helper pipelines.
-    * `{{#each items as |item idx|}}` / `{{#with story as |article|}}`
-      block parameters. `{{#each}}` also accepts `as |item i0 i1|`, binding the
-      item, zero-based index, and one-based index.
+    * `{{#each items as |item key|}}` / `{{#with story as |article|}}`
+      block parameters. For `{{#each}}` the second parameter is the iteration
+      key (the map key for maps, the index for lists). `{{#each}}` also accepts
+      `as |item i0 i1|`, binding the item, zero-based index, and one-based index.
     * `{{~ ... ~}}` whitespace control around any tag.
 
   Bare identifiers resolve to assigns: `{{name}}` reads the `:name` assign.
