@@ -190,38 +190,34 @@ defmodule Stem.FuzzTest do
   defp helper_expression_generator(depth) do
     child_depth = max(depth - 1, 0)
 
-    fixed_list([
-      member_of(@helpers),
-      list_of(helper_argument_generator(child_depth), max_length: 3)
-    ])
-    |> map(fn [name, args] -> Enum.join([name | args], " ") end)
+    bind(helper_argument_list_generator(child_depth), fn args ->
+      bind(member_of(@helpers), fn name ->
+        constant(Enum.join([name | args], " "))
+      end)
+    end)
   end
 
-  defp helper_argument_generator(depth) when depth <= 0 do
-    one_of([
-      expression_generator(0),
-      fixed_list([identifier_generator(), expression_generator(0)])
-      |> map(fn [key, value] -> "#{key}=#{wrap_pipeline_arg(value)}" end)
-    ])
-  end
-
-  defp helper_argument_generator(depth) do
+  defp helper_argument_list_generator(depth) do
     child_depth = max(depth - 1, 0)
 
-    one_of([
-      expression_generator(child_depth),
-      fixed_list([identifier_generator(), expression_generator(child_depth)])
-      |> map(fn [key, value] -> "#{key}=#{wrap_pipeline_arg(value)}" end),
-      helper_subexpression_generator(child_depth)
-    ])
+    bind(integer(0..3), fn pos_count ->
+      bind(
+        list_of(expression_generator(child_depth), min_length: pos_count, max_length: pos_count),
+        fn pos_args ->
+          bind(
+            list_of(keyword_argument_generator(child_depth), max_length: 3 - pos_count),
+            fn kw_args ->
+              constant(pos_args ++ kw_args)
+            end
+          )
+        end
+      )
+    end)
   end
 
-  defp helper_subexpression_generator(depth) do
-    one_of([
-      helper_expression_generator(max(depth - 1, 0)),
-      pipeline_expression_generator(max(depth - 1, 0))
-    ])
-    |> map(fn expr -> "(#{expr})" end)
+  defp keyword_argument_generator(depth) do
+    fixed_list([identifier_generator(), expression_generator(depth)])
+    |> map(fn [key, value] -> "#{key}=#{wrap_pipeline_arg(value)}" end)
   end
 
   defp pipeline_expression_generator(depth) do
@@ -237,15 +233,33 @@ defmodule Stem.FuzzTest do
 
     one_of([
       member_of(@helpers),
-      fixed_list([
-        member_of(@helpers),
-        list_of(pipeline_arg_generator(child_depth), max_length: 3)
-      ])
-      |> map(fn
-        [name, []] -> "#{name}()"
-        [name, args] -> "#{name}(#{Enum.join(args, ", ")})"
+      bind(pipeline_argument_list_generator(child_depth), fn args ->
+        bind(member_of(@helpers), fn name ->
+          constant("#{name}(#{Enum.join(args, ", ")})")
+        end)
       end)
     ])
+  end
+
+  defp pipeline_argument_list_generator(depth) do
+    child_depth = max(depth - 1, 0)
+
+    bind(integer(0..3), fn pos_count ->
+      bind(
+        list_of(pipeline_arg_generator(child_depth),
+          min_length: pos_count,
+          max_length: pos_count
+        ),
+        fn pos_args ->
+          bind(
+            list_of(keyword_argument_generator(child_depth), max_length: 3 - pos_count),
+            fn kw_args ->
+              constant(pos_args ++ kw_args)
+            end
+          )
+        end
+      )
+    end)
   end
 
   defp pipeline_arg_generator(depth) do
@@ -253,8 +267,7 @@ defmodule Stem.FuzzTest do
 
     one_of([
       expression_generator(child_depth),
-      fixed_list([identifier_generator(), expression_generator(child_depth)])
-      |> map(fn [key, value] -> "#{key}=#{wrap_pipeline_arg(value)}" end)
+      keyword_argument_generator(child_depth)
     ])
   end
 
