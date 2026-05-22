@@ -212,7 +212,9 @@ defmodule Stem do
         if :assigns in original_args, do: [quote(do: _ = var!(assigns)) | noops], else: noops
 
       noops =
-        if :helpers in original_args, do: [quote(do: _ = var!(helpers)) | noops], else: noops
+        if :transformers in original_args,
+          do: [quote(do: _ = var!(transformers)) | noops],
+          else: noops
 
       case kind do
         :def ->
@@ -280,7 +282,9 @@ defmodule Stem do
         if :assigns in original_args, do: [quote(do: _ = var!(assigns)) | noops], else: noops
 
       noops =
-        if :helpers in original_args, do: [quote(do: _ = var!(helpers)) | noops], else: noops
+        if :transformers in original_args,
+          do: [quote(do: _ = var!(transformers)) | noops],
+          else: noops
 
       @external_resource file
       @file file

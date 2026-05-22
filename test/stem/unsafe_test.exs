@@ -52,13 +52,13 @@ defmodule Stem.UnsafeTest do
     assert result == "123"
   end
 
-  test "Unsafe.eval_string with helpers" do
-    helpers = [upcase: fn [v], _ctx -> String.upcase(to_string(v)) end]
+  test "Unsafe.eval_string with functions" do
+    functions = %{"shout" => fn [v], _ctx -> String.upcase(to_string(v)) <> "!" end}
 
     result =
-      Stem.Unsafe.eval_string("{{upcase name}}", [assigns: [name: "hello"]], helpers: helpers)
+      Stem.Unsafe.eval_string("{{shout name}}", assigns: [name: "hello"], functions: functions)
 
-    assert result == "HELLO"
+    assert result == "HELLO!"
   end
 
   test "Unsafe.eval_string with allow_elixir_expressions: false" do

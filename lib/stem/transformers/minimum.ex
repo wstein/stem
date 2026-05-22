@@ -1,24 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Stem.Helpers.Minimum do
+defmodule Stem.Transformers.Minimum do
   @moduledoc """
-  Secure minimum helpers: essential functions required for XSS protection and basic output.
+  Secure minimum transformers: essential functions required for XSS protection and basic output.
 
-  These helpers form the default, always-available capability set. They are focused on:
+  These transformers form the default, always-available capability set. They are focused on:
   - Output escaping for XSS prevention (`escape_html`, `escape_json`, `json`)
   - Safe fallback handling (`default`)
   - Basic introspection (`inspect`)
   - Essential collection operations (`lookup`, `join`)
   - Debugging support (`log`)
 
-  This minimal set can be extended by loading additional capability groups via
-  `Stem.Helpers.Strings`, `Stem.Helpers.Collections`, and `Stem.Helpers.Predicates`.
+  Load additional transformer groups via
+  `Stem.Transformers.Strings`, `Stem.Transformers.Collections`, and `Stem.Transformers.Predicates`.
   """
 
-  @type helper :: ([term()], map() -> term())
+  @type transformer :: ([term()], map() -> term())
 
-  @doc "Return all minimum helpers as a map keyed by name."
-  @spec all() :: %{String.t() => helper()}
+  @doc "Return all minimum transformers as a map keyed by name."
+  @spec all() :: %{String.t() => transformer()}
   def all do
     %{
       "escape_html" => &escape_html/2,

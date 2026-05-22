@@ -107,13 +107,13 @@ defmodule Stem.CLI do
       when is_binary(template) and is_map(bindings) do
     args = template_binding_args(template)
     module = build_renderer_module(template, args, options)
-    apply(module, :render, runtime_binding_values(args, bindings))
+    apply(module, :render, runtime_binding_values(args, bindings, options))
   end
 
   defp template_binding_args(template) when is_binary(template) do
     []
     |> maybe_add_binding(template, :assigns, &template_uses_assigns?/1)
-    |> maybe_add_binding(template, :helpers, &template_uses_helpers?/1)
+    |> maybe_add_binding(template, :functions, &template_uses_helpers?/1)
   end
 
   defp maybe_add_binding(args, template, binding, predicate) do
@@ -124,10 +124,10 @@ defmodule Stem.CLI do
     end
   end
 
-  defp runtime_binding_values(args, bindings) do
+  defp runtime_binding_values(args, bindings, options) do
     Enum.map(args, fn
       :assigns -> bindings
-      :helpers -> []
+      :functions -> Keyword.get(options, :functions, %{})
     end)
   end
 
@@ -342,8 +342,8 @@ defmodule Stem.CLI do
 
     cli_opts =
       if opts[:helper_groups] do
-        groups = parse_helper_groups(opts[:helper_groups])
-        Keyword.put(cli_opts, :helper_groups, groups)
+        functions = expand_groups_to_functions(opts[:helper_groups])
+        Keyword.put(cli_opts, :functions, functions)
       else
         cli_opts
       end
@@ -363,12 +363,15 @@ defmodule Stem.CLI do
     end
   end
 
-  defp parse_helper_groups(groups_string) when is_binary(groups_string) do
+  defp expand_groups_to_functions(groups_string) when is_binary(groups_string) do
     groups_string
     |> String.split(",")
     |> Enum.map(&String.trim/1)
     |> Enum.map(&parse_module_name/1)
-    |> Enum.filter(fn g -> g != nil end)
+    |> Enum.filter(&(!is_nil(&1)))
+    |> Enum.reduce(%{}, fn mod, acc ->
+      if function_exported?(mod, :all, 0), do: Map.merge(acc, mod.all()), else: acc
+    end)
   end
 
   defp parse_module_name(module_string) when is_binary(module_string) do

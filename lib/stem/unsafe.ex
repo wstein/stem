@@ -13,23 +13,35 @@ defmodule Stem.Unsafe do
   Pass `allow_elixir_expressions: true` explicitly to allow arbitrary Elixir expressions
   inside tags — only do this when the template source is fully controlled by your team.
 
-  ## Helper Capability Groups
+  ## Functions
 
-  Stem enforces a capability management system to reduce SSTI attack surface. By default,
-  only a secure minimum of helpers are available (`escape_html`, `default`, `lookup`, etc.).
-  Complex data operations require explicit opt-in via capability groups:
+  Pass a map of named functions via the `:transformers` binding to make them available inside
+  templates. Built-in helpers (`escape_html`, `default`, `join`, etc.) are always available
+  without passing anything.
+
+  Use the pre-built capability groups to load curated sets of helpers and merge in any
+  custom functions you need:
 
       Stem.Unsafe.eval_string(
         template_source,
-        [assigns: data],
-        helper_groups: [Stem.Helpers.Collections]
+        assigns: data,
+        transformers: Stem.Transformers.Collections.all()
       )
 
-  Available groups:
-  - `Stem.Helpers.Minimum` — Essential helpers (always available)
-  - `Stem.Helpers.Strings` — String manipulation
-  - `Stem.Helpers.Collections` — Data transformation and filtering
-  - `Stem.Helpers.Predicates` — Boolean tests
+      Stem.Unsafe.eval_string(
+        template_source,
+        assigns: data,
+        transformers: Map.merge(
+          Stem.Transformers.Strings.all(),
+          %{"currency" => fn [n], _ -> "$\#{n}" end}
+        )
+      )
+
+  Available capability groups (call `.all()` to get their function map):
+  - `Stem.Transformers.Minimum` — Essential helpers (escaping, defaults, lookup)
+  - `Stem.Transformers.Strings` — String manipulation
+  - `Stem.Transformers.Collections` — Data transformation and filtering
+  - `Stem.Transformers.Predicates` — Boolean tests
 
   **When to use**:
   - Command-line tools (controlled boundary)
@@ -85,8 +97,7 @@ defmodule Stem.Unsafe do
   defp normalize_runtime_bindings(bindings) do
     bindings
     |> Keyword.put_new(:assigns, [])
-    |> Keyword.put_new(:helpers, [])
-    |> Keyword.put_new(:helper_groups, [])
+    |> Keyword.put_new(:transformers, %{})
   end
 
   defp load_and_merge_config(options) do

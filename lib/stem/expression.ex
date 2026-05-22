@@ -124,7 +124,7 @@ defmodule Stem.Expression do
           | {:special, :index | :key | :this}
           | {:parent, binary()}
           | {:path, :implicit | :this, [binary()]}
-          | {:helper, binary(), [helper_arg_t()]}
+          | {:transformer, binary(), [helper_arg_t()]}
           | {:pipeline, expr_t(), [pipeline_stage_t()]}
           | {:elixir, binary()}
 
@@ -185,7 +185,7 @@ defmodule Stem.Expression do
     end
   end
 
-  def to_source({:helper, name, args}, context) do
+  def to_source({:transformer, name, args}, context) do
     helper_call_source(name, args, context)
   end
 
@@ -209,13 +209,13 @@ defmodule Stem.Expression do
   def format({:path, :this, segments}), do: Enum.join(["this" | segments], ".")
   def format({:path, :implicit, segments}), do: Enum.join(segments, ".")
 
-  def format({:helper, name, args}) do
+  def format({:transformer, name, args}) do
     formatted_args =
       Enum.map(args, fn
-        {:kw, key, {:helper, _, _} = value} -> "#{key}=(#{format(value)})"
+        {:kw, key, {:transformer, _, _} = value} -> "#{key}=(#{format(value)})"
         {:kw, key, {:pipeline, _, _} = value} -> "#{key}=(#{format(value)})"
         {:kw, key, value} -> "#{key}=#{format(value)}"
-        {:helper, _, _} = value -> "(#{format(value)})"
+        {:transformer, _, _} = value -> "(#{format(value)})"
         {:pipeline, _, _} = value -> "(#{format(value)})"
         value -> format(value)
       end)
@@ -253,7 +253,7 @@ defmodule Stem.Expression do
   def references_identifier?({:identifier, _}, _name), do: false
   def references_identifier?({:path, _, [root | _]}, name), do: root == name
 
-  def references_identifier?({:helper, _name, args}, name) do
+  def references_identifier?({:transformer, _name, args}, name) do
     Enum.any?(args, fn
       {:kw, _key, value} -> references_identifier?(value, name)
       value -> references_identifier?(value, name)
@@ -291,7 +291,7 @@ defmodule Stem.Expression do
       end)
       |> Enum.join(", ")
 
-    "Stem.Helpers.invoke(:#{name}, [#{compiled_args}], #{helper_context_expression(context)})"
+    "Stem.Transformers.invoke(:#{name}, [#{compiled_args}], #{helper_context_expression(context)})"
   end
 
   defp format_pipeline_arg({:kw, key, value}), do: "#{key}=#{format(value)}"
@@ -507,7 +507,7 @@ defmodule Stem.Expression do
       [name | args] when args != [] ->
         if helper_name?(name) do
           with {:ok, parsed_args} <- parse_helper_args(args) do
-            {:ok, {:helper, name, parsed_args}}
+            {:ok, {:transformer, name, parsed_args}}
           end
         else
           :error
@@ -593,7 +593,7 @@ defmodule Stem.Expression do
       |> String.trim_trailing(")")
 
     case strict_expression(token) do
-      {:ok, {:helper, _, _} = helper} -> {:ok, helper}
+      {:ok, {:transformer, _, _} = helper} -> {:ok, helper}
       {:ok, {:pipeline, _, _} = pipeline} -> {:ok, pipeline}
       _ -> :error
     end
@@ -608,7 +608,7 @@ defmodule Stem.Expression do
   defp parse_path(expr), do: {:path, :implicit, :binary.split(expr, ".", [:global])}
 
   defp helper_context_expression(context) do
-    base = ["assigns: assigns", "helpers: helpers"]
+    base = ["assigns: assigns", "transformers: transformers"]
 
     entries =
       if context.in_each do

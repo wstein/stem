@@ -118,7 +118,7 @@ defmodule Stem.Config do
     |> maybe_add_escape(map)
     |> maybe_add_warn_on_missing_assigns(map)
     |> maybe_add_allow_elixir_expressions(map)
-    |> maybe_add_helper_groups(map)
+    |> maybe_add_functions(map)
   end
 
   defp maybe_add_escape(acc, map) do
@@ -144,23 +144,26 @@ defmodule Stem.Config do
     end
   end
 
-  defp maybe_add_helper_groups(acc, map) do
+  defp maybe_add_functions(acc, map) do
     case Map.get(map, "helper_groups") do
       nil ->
         acc
 
       groups_string when is_binary(groups_string) ->
-        groups =
+        functions =
           groups_string
           |> String.split(",")
           |> Enum.map(&String.trim/1)
           |> Enum.map(&parse_module_name/1)
-          |> Enum.filter(fn g -> g != nil end)
+          |> Enum.filter(&(!is_nil(&1)))
+          |> Enum.reduce(%{}, fn mod, acc ->
+            if function_exported?(mod, :all, 0), do: Map.merge(acc, mod.all()), else: acc
+          end)
 
-        if groups == [] do
+        if functions == %{} do
           acc
         else
-          Keyword.put(acc, :helper_groups, groups)
+          Keyword.put(acc, :functions, functions)
         end
 
       _ ->

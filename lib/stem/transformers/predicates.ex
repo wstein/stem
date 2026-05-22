@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Stem.Helpers.Predicates do
+defmodule Stem.Transformers.Predicates do
   @moduledoc """
-  Predicate helpers: boolean tests for conditionals and filtering.
+  Predicate transformers: boolean tests for conditionals and filtering.
 
   Load this capability group when templates use predicates in block conditions or
   filter operations beyond what built-in Handlebars truthiness provides:
@@ -15,14 +15,14 @@ defmodule Stem.Helpers.Predicates do
       Stem.Unsafe.eval_string(
         template,
         assigns: data,
-        helper_groups: [Stem.Helpers.Predicates]
+        transformers: Stem.Transformers.Predicates.all()
       )
   """
 
-  @type helper :: ([term()], map() -> term())
+  @type transformer :: ([term()], map() -> term())
 
-  @doc "Return all predicate helpers as a map keyed by name."
-  @spec all() :: %{String.t() => helper()}
+  @doc "Return all predicate transformers as a map keyed by name."
+  @spec all() :: %{String.t() => transformer()}
   def all do
     %{
       "contains" => &contains/2,

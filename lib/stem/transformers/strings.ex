@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Stem.Helpers.Strings do
+defmodule Stem.Transformers.Strings do
   @moduledoc """
-  String manipulation helpers: case conversion, trimming, truncation, replacement, and pattern matching.
+  String transformers: case conversion, trimming, truncation, replacement, and pattern matching.
 
   Load this capability group when templates need to perform text transformations:
   - Case conversion: `trim`, `upcase`, `downcase`, `capitalize`
@@ -14,14 +14,14 @@ defmodule Stem.Helpers.Strings do
       Stem.Unsafe.eval_string(
         template,
         assigns: data,
-        helper_groups: [Stem.Helpers.Strings]
+        transformers: Stem.Transformers.Strings.all()
       )
   """
 
-  @type helper :: ([term()], map() -> term())
+  @type transformer :: ([term()], map() -> term())
 
-  @doc "Return all string helpers as a map keyed by name."
-  @spec all() :: %{String.t() => helper()}
+  @doc "Return all string transformers as a map keyed by name."
+  @spec all() :: %{String.t() => transformer()}
   def all do
     %{
       "trim" => &trim/2,

@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Stem.Helpers.Collections do
+defmodule Stem.Transformers.Collections do
   @moduledoc """
-  Collection manipulation helpers: filtering, sorting, grouping, slicing, and transformation.
+  Collection transformers: filtering, sorting, grouping, slicing, and transformation.
 
   Load this capability group when templates perform complex data operations:
   - Filtering and selection: `filter`, `compact`, `uniq`
@@ -12,23 +12,23 @@ defmodule Stem.Helpers.Collections do
   - Slicing: `take`, `drop`, `slice`, `first`
   - Flattening: `flatten`, `reverse`
 
-  **Security Note:** These helpers enable powerful data transformations. In an SSTI attack,
+  **Security Note:** These transformers enable powerful data transformations. In an SSTI attack,
   an attacker with access to this group could chain operations to extract internal states.
-  Only expose this group when the template source is trusted.
+  Only load this group when the template source is trusted.
 
   ## Example
 
       Stem.Unsafe.eval_string(
         template,
         assigns: data,
-        helper_groups: [Stem.Helpers.Collections]
+        transformers: Stem.Transformers.Collections.all()
       )
   """
 
-  @type helper :: ([term()], map() -> term())
+  @type transformer :: ([term()], map() -> term())
 
-  @doc "Return all collection helpers as a map keyed by name."
-  @spec all() :: %{String.t() => helper()}
+  @doc "Return all collection transformers as a map keyed by name."
+  @spec all() :: %{String.t() => transformer()}
   def all do
     %{
       "map" => &map/2,

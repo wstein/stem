@@ -1,12 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
-defmodule Stem.Helpers do
+defmodule Stem.Transformers do
   @moduledoc false
 
   @registry_key {__MODULE__, :registry}
-  @type helper :: ([term()], map() -> term())
+  @type transformer :: ([term()], map() -> term())
 
-  @spec register(atom() | String.t(), helper()) :: :ok
+  @spec register(atom() | String.t(), transformer()) :: :ok
   def register(name, fun) when is_function(fun, 2) do
     key = normalize_name(name)
     registry = registry() |> Map.put(key, fun)
@@ -34,16 +34,13 @@ defmodule Stem.Helpers do
     helper_key = normalize_name(name)
     assigns = binding_env |> Keyword.get(:assigns, []) |> Enum.into(%{})
     this = Keyword.get(binding_env, :this)
-    local_helpers = binding_env |> Keyword.get(:helpers, []) |> normalize_helpers()
-    capability_groups = Keyword.get(binding_env, :helper_groups, [])
-    group_helpers = load_group_helpers(capability_groups)
+    transformers = normalize_transformers(Keyword.get(binding_env, :transformers, %{}))
 
     helper =
-      Map.get(local_helpers, helper_key) ||
-        Map.get(group_helpers, helper_key) ||
+      Map.get(transformers, helper_key) ||
         Map.get(registry(), helper_key) ||
         built_in(helper_key) ||
-        raise Stem.SyntaxError, "unknown helper '#{helper_key}'"
+        raise Stem.SyntaxError, "unknown transformer '#{helper_key}'"
 
     helper.(args, %{assigns: assigns, this: this, binding: binding_env})
   end
@@ -51,30 +48,17 @@ defmodule Stem.Helpers do
   defp normalize_name(name) when is_atom(name), do: Atom.to_string(name)
   defp normalize_name(name) when is_binary(name), do: name
 
-  defp normalize_helpers(helpers) when is_map(helpers) do
-    Map.new(helpers, fn {name, fun} -> {normalize_name(name), fun} end)
+  defp normalize_transformers(functions) when is_map(functions) do
+    Map.new(functions, fn {name, fun} -> {normalize_name(name), fun} end)
   end
 
-  defp normalize_helpers(helpers) when is_list(helpers) do
-    helpers |> Enum.into(%{}) |> normalize_helpers()
+  defp normalize_transformers(functions) when is_list(functions) do
+    functions |> Enum.into(%{}) |> normalize_transformers()
   end
 
   defp registry do
     :persistent_term.get(@registry_key, %{})
   end
-
-  defp load_group_helpers(groups) when is_list(groups) do
-    groups
-    |> Enum.reduce(%{}, fn group, acc ->
-      if function_exported?(group, :all, 0) do
-        Map.merge(acc, group.all())
-      else
-        acc
-      end
-    end)
-  end
-
-  defp load_group_helpers(_), do: %{}
 
   defp built_in("lookup") do
     fn [collection, key], _ctx ->
