@@ -7,48 +7,60 @@ tags: ['security', 'transformers', 'api', 'capabilities']
 
 ## What
 
-Stem uses helper capability groups to keep runtime template evaluation secure by default. Only a small minimum set is always available; richer string, collection, and predicate helpers must be opted into explicitly.
+Stem enforces **capability management** for transformer functions to reduce Server-Side Template Injection (SSTI) attack surface. Rather than exposing all transformers globally, Stem provides a secure minimum and requires explicit opt-in to capability groups for complex data operations.
 
 ## Why
 
-The goal is to reduce SSTI blast radius. If a template source is less trusted, it should not automatically receive helpers that can reshape collections or expose internal data. The opt-in model also makes security review easier because enabled helper groups are visible at the call site or in config.
+An SSTI attacker with access to powerful helpers can chain operations to extract internal state or manipulate data. Restricting available helpers per execution context raises the exploitation barrier:
 
-## Groups
+- **Secure by default**: only essential output-escaping and basic helpers are always available
+- **Explicit opt-in**: complex data transformation must be deliberately declared in code or config
+- **Auditable surface**: enabling a capability group is a visible review flag
 
-- `Stem.Transformers.Minimum`: always available; escaping, `default`, `lookup`, `join`, `log`, `inspect`, `json`
-- `Stem.Transformers.Strings`: text helpers such as `trim`, `upcase`, `truncate`, `replace`, `take`, `drop`, `slice`, `first`, `reverse`
-- `Stem.Transformers.Collections`: collection helpers such as `map`, `filter`, `sort_by`, `group_by`, `compact`, `uniq`, `flatten`, `take`, `drop`, `slice`, `first`, `reverse`
-- `Stem.Transformers.Predicates`: boolean helpers such as `contains`, `empty?`, `present?`
+This mirrors the `allow_elixir_expressions` flag: intentional friction makes dangerous choices visible.
 
-## Loading
+## How
 
-At runtime, pass a flat `transformers:` map to `Stem.Unsafe.eval_string/3` or `Stem.Unsafe.eval_file/3`. Build that map from one or more `.all()` calls and merge them when needed.
+### Capability Groups
+
+- **`Stem.Transformers.Minimum`** (always on, cannot be disabled): `escape_html`, `escape_json`, `json`, `inspect`, `default`, `lookup`, `join`, `log`. Never exposes dangerous operations.
+- **`Stem.Transformers.Strings`**: `trim`, `upcase`, `downcase`, `capitalize`, `truncate`, `replace`, `take`, `drop`, `slice`, `first`, `reverse`, `starts_with`, `ends_with`.
+- **`Stem.Transformers.Collections`**: `map`, `filter`, `compact`, `uniq`, `sort`, `sort_by`, `group_by`, `take`, `drop`, `slice`, `first`, `flatten`, `reverse`. ⚠️ Powerful — an attacker could chain these to extract internal state; enable only for trusted sources.
+- **`Stem.Transformers.Predicates`**: `contains`, `empty?`, `present?`. For `{{#if}}` blocks and `filter`.
+
+### Loading groups
+
+Runtime APIs take a flat `transformers:` function map; call `.all()` on each group and `Map.merge/2` to combine:
 
 ```elixir
-Stem.Unsafe.eval_string(
-  "{{name |> trim |> upcase}}",
+# Explicit opt-in for Strings
+Stem.Unsafe.eval_string("{{name |> trim |> upcase}}",
   assigns: [name: "nina"],
-  transformers: Stem.Transformers.Strings.all()
-)
+  transformers: Stem.Transformers.Strings.all())
 
-Stem.Unsafe.eval_string(
-  "{{items |> map(author) |> take(5)}}",
+# Multiple groups
+Stem.Unsafe.eval_string("{{items |> map(author) |> take(5)}}",
   assigns: [items: books],
-  transformers: Map.merge(
-    Stem.Transformers.Collections.all(),
-    Stem.Transformers.Strings.all()
-  )
-)
+  transformers: Map.merge(Stem.Transformers.Collections.all(), Stem.Transformers.Strings.all()))
 ```
 
-In `.stem.config.json`, enable groups with a comma-separated module list:
+Pin defaults in `.stem.config.json` as comma-separated module names:
 
 ```json
-{"transformers": "Stem.Transformers.Strings,Stem.Transformers.Collections"}
+{ "transformers": "Stem.Transformers.Strings,Stem.Transformers.Collections" }
 ```
 
-Custom transformers can still be registered globally with `Stem.Transformers.register/2` or merged into the runtime map.
+### Custom transformers
+
+Register globally with `Stem.Transformers.register/2`, or pass per-call by merging into the `transformers:` map. Custom entries are available regardless of built-in groups.
 
 ## Migration
 
-Existing code that already uses `Stem.Transformers` is unaffected. To adopt capability groups, choose the smallest helper set each template needs, merge the required groups at runtime, and pin defaults in config for recurring cases.
+Module-level access to all `Stem.Transformers` helpers is unchanged; the capability system is opt-in for runtime eval. To adopt: identify which templates need which operations, add `transformers: SomeGroup.all()` (or `Map.merge/2`) to `eval_string/3`/`eval_file/3`, and pin defaults in `.stem.config.json`. Compile-time templates need no changes — the compiler inlines operations into AST at build time.
+
+## Links
+
+- [[Execution Modes Overview]] - allow_elixir_expressions alongside capability groups
+- [[Compile-Time-Only Security Model]] - Why compile-time templates are safer
+- [[Runtime Evaluation and Sandboxing]] - Runtime API details
+- [[Universal Architecture Principles]] - Capability management as a portable design principle
