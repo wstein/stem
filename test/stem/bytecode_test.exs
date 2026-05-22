@@ -83,8 +83,12 @@ defmodule Stem.BytecodeTest do
       assert [{:emit, {:call, "default", [{:assign, :x}, {:lit, true}], []}, :html}] =
                compile("{{default x true}}").instructions
 
-      assert [{:emit, {:call, "default", [{:assign, :x}, {:lit, ~c"abc"}], []}, :html}] =
-               compile("{{default x 'abc'}}").instructions
+      # Single-quoted template literals are charlists; Elixir's parser emits a
+      # deprecation warning for them, captured here to keep test output clean.
+      ExUnit.CaptureIO.capture_io(:stderr, fn ->
+        assert [{:emit, {:call, "default", [{:assign, :x}, {:lit, ~c"abc"}], []}, :html}] =
+                 compile("{{default x 'abc'}}").instructions
+      end)
     end
 
     test "rejects a non-literal source in argument position" do
