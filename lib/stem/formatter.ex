@@ -45,11 +45,36 @@ defmodule Stem.Formatter do
 
   # ── Public API ────────────────────────────────────────────────────────────
 
+  # Matches raw triple-stash tags before regular double-stash ones, so a
+  # `{{{ ... }}}` tag is never mis-parsed as `{{` + `{ ...` + `}}`.
+  @tag_regex ~r/\{\{\{(.*?)\}\}\}|\{\{(.*?)\}\}/s
+
   @spec format_string(binary()) :: binary()
   def format_string(source) when is_binary(source) do
-    Regex.replace(~r/\{\{(.*?)\}\}/s, source, fn _, inner ->
-      format_tag(inner)
+    Regex.replace(@tag_regex, source, fn full, triple_inner, double_inner ->
+      if String.starts_with?(full, "{{{") do
+        format_raw_tag(triple_inner)
+      else
+        format_tag(double_inner)
+      end
     end)
+  end
+
+  # Raw (unescaped) tags only carry an expression — no comments, blocks, or
+  # partials — so format the inner expression and re-wrap with triple braces.
+  defp format_raw_tag(inner) do
+    trimmed = String.trim(inner)
+    {left_trim, core} = extract_trim(trimmed, :leading)
+    {right_trim, core} = extract_trim(core, :trailing)
+    core = String.trim(core)
+
+    formatted =
+      case Expression.parse(core) do
+        {:ok, expr} -> Expression.format(expr)
+        {:error, message} -> raise ArgumentError, message
+      end
+
+    "{{{" <> left_trim <> formatted <> right_trim <> "}}}"
   end
 
   defp format_tag(inner) do

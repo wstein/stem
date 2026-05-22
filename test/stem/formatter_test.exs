@@ -58,4 +58,21 @@ defmodule Stem.FormatterTest do
     assert Stem.Formatter.format_string("{{ #if }}") == "{{#if}}"
     assert Stem.Formatter.format_string("{{}}") == "{{}}"
   end
+
+  # ── Raw triple-stash tags ──────────────────────────────────────────────────
+
+  test "normalizes raw triple-stash expressions without mangling braces" do
+    assert Stem.Formatter.format_string("{{{ raw }}}") == "{{{raw}}}"
+    assert Stem.Formatter.format_string("{{{  user.name  }}}") == "{{{user.name}}}"
+  end
+
+  test "formats pipelines inside raw triple-stash tags" do
+    assert Stem.Formatter.format_string("{{{ name |> trim |> upcase }}}") ==
+             "{{{name |> trim |> upcase}}}"
+  end
+
+  test "leaves escaped and raw tags side by side intact" do
+    assert Stem.Formatter.format_string("{{ name }} and {{{ rawHtml }}}") ==
+             "{{name}} and {{{rawHtml}}}"
+  end
 end
