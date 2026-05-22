@@ -119,7 +119,7 @@ defmodule Stem.DSLTest do
     assert Stem.DSLTest.DictionaryViews.render_inline_template(current_status: "12") == "Inactive"
 
     assert Stem.DSLTest.DictionaryViews.render_file_template(current_status: "99") ==
-             "File Status: Archived"
+             "File Status: Archived\n"
 
     assert Stem.DSLTest.DictionaryViews.render_inline_sigil(current_status: "1") ==
              "Inline Active"
@@ -184,5 +184,249 @@ defmodule Stem.DSLTest do
       end
       """)
     end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Static-dictionary tests
+  # ---------------------------------------------------------------------------
+
+  test "defdictionary rejects function calls (non-literal expression)" do
+    assert_raise ArgumentError, ~r/must be a literal/, fn ->
+      Code.compile_string("""
+      defmodule Stem.DSLTest.NonLiteralDict do
+        use Stem.DSL
+        defdictionary :bad, File.read!("mymap.yaml")
+      end
+      """)
+    end
+  end
+
+  test "defdictionary rejects variable references (non-literal expression)" do
+    assert_raise ArgumentError, ~r/must be a literal/, fn ->
+      Code.compile_string("""
+      defmodule Stem.DSLTest.NonLiteralDictVar do
+        use Stem.DSL
+        some_var = %{"k" => "v"}
+        defdictionary :bad, some_var
+      end
+      """)
+    end
+  end
+
+  test "defdictionary rejects nested side-effectful expressions inside literals" do
+    assert_raise ArgumentError, ~r/must be a literal/, fn ->
+      Code.compile_string("""
+      defmodule Stem.DSLTest.NonLiteralNested do
+        use Stem.DSL
+        defdictionary :bad, %{"now" => DateTime.utc_now()}
+      end
+      """)
+    end
+  end
+
+  test "defdictionary rejects tuple literals" do
+    assert_raise ArgumentError, ~r/must be a literal/, fn ->
+      Code.compile_string("""
+      defmodule Stem.DSLTest.TupleDict do
+        use Stem.DSL
+        defdictionary :bad, {:ok, 1}
+      end
+      """)
+    end
+  end
+
+  test "defdictionary accepts a module attribute whose value is a literal map" do
+    [{mod, _}] =
+      Code.compile_string("""
+      defmodule Stem.DSLTest.AttrDictOk do
+        use Stem.DSL
+        @my_data %{"a" => "Alpha"}
+        defdictionary :letters, @my_data
+        deftemplate :render, "{{lookup letters k}}", [:assigns]
+      end
+      """)
+
+    assert mod.render(k: "a") == "Alpha"
+  end
+
+  test "defdictionary rejects a module attribute whose value is not a literal" do
+    # self() stores a PID at attribute-set time — a PID is not a literal value.
+    assert_raise ArgumentError, ~r/must be a literal/, fn ->
+      Code.compile_string("""
+      defmodule Stem.DSLTest.AttrDictBad do
+        use Stem.DSL
+        @bad_data self()
+        defdictionary :data, @bad_data
+      end
+      """)
+    end
+  end
+
+  test "defdictionary rejects a module attribute that is not yet set" do
+    assert_raise ArgumentError, ~r/is not set/, fn ->
+      Code.compile_string("""
+      defmodule Stem.DSLTest.AttrNotSet do
+        use Stem.DSL
+        defdictionary :data, @undefined_attr
+      end
+      """)
+    end
+  end
+
+  test "declaration order: template before dictionary sees no injection" do
+    # A deftemplate declared BEFORE defdictionary must NOT receive the dictionary.
+    [{mod, _}] =
+      Code.compile_string("""
+      defmodule Stem.DSLTest.OrderCheck do
+        use Stem.DSL
+        deftemplate :before_dict, "{{lookup status_map s}}", [:assigns]
+        defdictionary :status_map, %{"1" => "Active"}
+        deftemplate :after_dict, "{{lookup status_map s}}", [:assigns]
+      end
+      """)
+
+    # Declared after: injection present, lookup finds the value
+    assert mod.after_dict(s: "1") == "Active"
+    # Declared before: no injection; caller must supply the map manually
+    assert mod.before_dict(s: "1", status_map: %{"1" => "Manual"}) == "Manual"
+  end
+
+  test "duplicate defdictionary names: last one wins" do
+    [{mod, _}] =
+      Code.compile_string("""
+      defmodule Stem.DSLTest.DuplicateDict do
+        use Stem.DSL
+        defdictionary :map, %{"k" => "first"}
+        defdictionary :map, %{"k" => "second"}
+        deftemplate :render, "{{lookup map k}}", [:assigns]
+      end
+      """)
+
+    assert mod.render(k: "k") == "second"
+  end
+
+  test "defdictionary_merge combines two dictionaries in declaration order" do
+    [{mod, _}] =
+      Code.compile_string("""
+      defmodule Stem.DSLTest.MergeDict do
+        use Stem.DSL
+        defdictionary :base,  %{"a" => "Alpha", "c" => "Base-C"}
+        defdictionary :extra, %{"b" => "Beta",  "c" => "Extra-C"}
+        defdictionary_merge :combined, [:base, :extra]
+        deftemplate :render, "{{lookup combined k}}", [:assigns]
+      end
+      """)
+
+    assert mod.render(k: "a") == "Alpha"
+    assert mod.render(k: "b") == "Beta"
+    # extra wins on conflict
+    assert mod.render(k: "c") == "Extra-C"
+  end
+
+  test "defdictionary_merge raises when source is not declared" do
+    assert_raise ArgumentError, ~r/unknown dictionary/, fn ->
+      Code.compile_string("""
+      defmodule Stem.DSLTest.MergeMissing do
+        use Stem.DSL
+        defdictionary :base, %{"a" => "A"}
+        defdictionary_merge :combined, [:base, :ghost]
+      end
+      """)
+    end
+  end
+
+  test "defdictionary_merge raises when source name is not an atom" do
+    assert_raise ArgumentError, ~r/expected source names to be atoms/, fn ->
+      Code.compile_string("""
+      defmodule Stem.DSLTest.MergeNonAtom do
+        use Stem.DSL
+        defdictionary :base, %{"a" => "A"}
+        defdictionary_merge :combined, [:base, "ghost"]
+      end
+      """)
+    end
+  end
+
+  test "multiple dictionaries are all injected" do
+    [{mod, _}] =
+      Code.compile_string("""
+      defmodule Stem.DSLTest.MultiDict do
+        use Stem.DSL
+        defdictionary :colors, %{"r" => "Red", "g" => "Green"}
+        defdictionary :sizes,  %{"s" => "Small", "l" => "Large"}
+        deftemplate :render, "{{lookup colors c}} / {{lookup sizes z}}", [:assigns]
+      end
+      """)
+
+    assert mod.render(c: "r", z: "l") == "Red / Large"
+  end
+
+  test "defdictionary with empty map is accepted and injects nothing useful" do
+    [{mod, _}] =
+      Code.compile_string("""
+      defmodule Stem.DSLTest.EmptyDict do
+        use Stem.DSL
+        defdictionary :empty_map, %{}
+        deftemplate :render, "{{name}}", [:assigns]
+      end
+      """)
+
+    # Empty dictionary should not break rendering; assigns still work normally
+    assert mod.render(name: "ok") == "ok"
+  end
+
+  test "defdictionary accepts numbers, booleans, nil, and list literals" do
+    [{mod, _}] =
+      Code.compile_string("""
+      defmodule Stem.DSLTest.MixedLiteralDict do
+        use Stem.DSL
+        defdictionary :data, %{
+          "n" => 42,
+          "t" => true,
+          "f" => false,
+          "z" => nil,
+          "list" => [1, 2, 3]
+        }
+        deftemplate :render, "{{lookup data k}}", [:assigns]
+      end
+      """)
+
+    assert mod.render(k: "n") == "42"
+    assert mod.render(k: "t") == "true"
+    assert mod.render(k: "f") == "false"
+  end
+
+  test "defdictionary accepts a module attribute with mixed literal types" do
+    [{mod, _}] =
+      Code.compile_string("""
+      defmodule Stem.DSLTest.AttrMixedDict do
+        use Stem.DSL
+        @data %{"n" => 7, "t" => true, "f" => false, "z" => nil, "list" => [1, 2]}
+        defdictionary :data, @data
+        deftemplate :render, "{{lookup data k}}", [:assigns]
+      end
+      """)
+
+    assert mod.render(k: "n") == "7"
+    assert mod.render(k: "t") == "true"
+  end
+
+  test "defdictionary compilation produces no unused-variable warnings" do
+    # Compile with the same capture mechanism as ExUnit warning checks:
+    # if the compile emits warnings they would surface via Erlang logger or
+    # via the :stderr redirect below.
+    captured =
+      ExUnit.CaptureIO.capture_io(:stderr, fn ->
+        Code.compile_string("""
+        defmodule Stem.DSLTest.WarnFreeDict do
+          use Stem.DSL
+          defdictionary :m, %{"a" => "A"}
+          deftemplate :render, "{{lookup m k}}", [:assigns]
+          def sigil_render(assigns), do: ~STEM"{{lookup m k}}"
+        end
+        """)
+      end)
+
+    refute captured =~ "unused variable"
   end
 end

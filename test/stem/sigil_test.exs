@@ -47,4 +47,23 @@ defmodule Stem.SigilTest do
       """)
     end
   end
+
+  describe "dictionary_assigns/1 (deprecated reflection)" do
+    test "returns the compiled snapshot for a Stem.DSL module" do
+      [{mod, _}] =
+        Code.compile_string("""
+        defmodule Stem.SigilTest.ReflectDict do
+          use Stem.DSL
+          defdictionary :d, %{"a" => "A"}
+        end
+        """)
+
+      # apply/3 avoids the static deprecation warning while still exercising the path.
+      assert apply(Stem.Sigil, :dictionary_assigns, [mod]) == %{d: %{"a" => "A"}}
+    end
+
+    test "returns an empty map for a module without the snapshot" do
+      assert apply(Stem.Sigil, :dictionary_assigns, [Enum]) == %{}
+    end
+  end
 end

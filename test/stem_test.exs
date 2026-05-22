@@ -426,5 +426,24 @@ defmodule StemTest do
     end
   end
 
+  describe "merge_dictionary_assigns/2" do
+    test "keyword assigns win over keyword dictionary entries" do
+      assert Stem.merge_dictionary_assigns([b: 2], a: 1, b: 1) == [a: 1, b: 2]
+    end
+
+    test "keyword assigns win over a map dictionary" do
+      merged = Stem.merge_dictionary_assigns([b: 2], %{a: 1})
+      assert Enum.sort(merged) == [a: 1, b: 2]
+    end
+
+    test "map assigns win over a map dictionary" do
+      assert Stem.merge_dictionary_assigns(%{b: 2}, %{a: 1, b: 1}) == %{a: 1, b: 2}
+    end
+
+    test "returns assigns unchanged for unsupported shapes" do
+      assert Stem.merge_dictionary_assigns(nil, %{a: 1}) == nil
+    end
+  end
+
   defp normalize(string), do: String.replace(string, "\r\n", "\n")
 end
