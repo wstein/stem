@@ -201,6 +201,10 @@ defmodule Stem.Compiler do
   defp block_param_locals(:each, []), do: %{}
   defp block_param_locals(:each, [item]), do: %{item => item}
   defp block_param_locals(:each, [item, index]), do: %{item => item, index => index}
+
+  defp block_param_locals(:each, [item, index0, index1]),
+    do: %{item => item, index0 => index0, index1 => index1}
+
   defp block_param_locals(:with, []), do: %{}
   defp block_param_locals(:with, [item]), do: %{item => item}
 
@@ -214,6 +218,14 @@ defmodule Stem.Compiler do
     [
       quote(do: unquote(local_var(item)) = unquote(current)),
       quote(do: unquote(local_var(index)) = unquote(stem_index))
+    ]
+  end
+
+  defp block_param_assignments(:each, [item, index0, index1], current, stem_index) do
+    [
+      quote(do: unquote(local_var(item)) = unquote(current)),
+      quote(do: unquote(local_var(index0)) = unquote(stem_index)),
+      quote(do: unquote(local_var(index1)) = unquote(stem_index) + 1)
     ]
   end
 

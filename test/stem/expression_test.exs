@@ -22,12 +22,14 @@ defmodule Stem.ExpressionTest do
 
   test "special variables outside each keep their literal form" do
     assert t("@index") == "@index"
+    assert t("@index1") == "@index1"
     assert t("@key") == "@key"
     assert t("this") == "this"
   end
 
   test "special variables inside each map to loop bindings" do
     assert t("@index", true) == "stem_index"
+    assert t("@index1", true) == "stem_index + 1"
     assert t("@key", true) == "stem_key"
     assert t("this", true) == "current"
   end

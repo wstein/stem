@@ -177,6 +177,24 @@ defmodule StemTest do
                "0:a;1:b;"
     end
 
+    test "each exposes one-based @index1 alongside zero-based @index" do
+      assert eval("{{#each xs}}{{@index}}/{{@index1}};{{/each}}", assigns: [xs: ["a", "b", "c"]]) ==
+               "0/1;1/2;2/3;"
+    end
+
+    test "each block params bind item, zero-based, and one-based index" do
+      assert eval("{{#each xs as |el i0 i1|}}{{i1}}.{{el}}({{i0}}) {{/each}}",
+               assigns: [xs: ["a", "b"]]
+             ) ==
+               "1.a(0) 2.b(1) "
+    end
+
+    test "each rejects more than three block parameters" do
+      assert_raise Stem.SyntaxError, ~r/at most three block parameters/, fn ->
+        eval("{{#each xs as |a b c d|}}{{a}}{{/each}}", assigns: [xs: [1]])
+      end
+    end
+
     test "with block params bind the subject" do
       assigns = [story: %{title: "Deep Work", author: "N"}]
 

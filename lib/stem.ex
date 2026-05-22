@@ -111,13 +111,15 @@ defmodule Stem do
     * `{{format (uppercase name)}}` style helper subexpressions.
     * `{{name |> trim |> upcase |> truncate(20)}}` helper pipelines.
     * `{{#each items as |item idx|}}` / `{{#with story as |article|}}`
-      block parameters.
+      block parameters. `{{#each}}` also accepts `as |item i0 i1|`, binding the
+      item, zero-based index, and one-based index.
     * `{{~ ... ~}}` whitespace control around any tag.
 
   Bare identifiers resolve to assigns: `{{name}}` reads the `:name` assign.
   Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the
-  zero-based index, and `{{@key}}` the key when iterating a map. `{{../name}}`
-  reaches the parent (top-level assign) scope.
+  zero-based index, `{{@index1}}` the one-based index (mirroring
+  StringTemplate's `i0`/`i`), and `{{@key}}` the key when iterating a map.
+  `{{../name}}` reaches the parent (top-level assign) scope.
 
   Pipelines are restricted to helper stages so templates stay declarative.
   `{{lhs |> helper(a, b)}}` compiles as if the helper had been called with

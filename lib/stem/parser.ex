@@ -665,11 +665,11 @@ defmodule Stem.Parser do
   defp validate_block_params(:with, _params),
     do: {:error, "{{#with}} accepts at most one block parameter"}
 
-  defp validate_block_params(:each, params) when length(params) <= 2,
+  defp validate_block_params(:each, params) when length(params) <= 3,
     do: validate_identifier_list(params)
 
   defp validate_block_params(:each, _params),
-    do: {:error, "{{#each}} accepts at most two block parameters"}
+    do: {:error, "{{#each}} accepts at most three block parameters"}
 
   defp validate_identifier_list(params) do
     cond do

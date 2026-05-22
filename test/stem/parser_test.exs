@@ -75,8 +75,11 @@ defmodule Stem.ParserTest do
     assert {:error, "block parameters must be unique", _} =
              Parser.parse("{{#each items as |item item|}}{{item}}{{/each}}")
 
-    assert {:error, "{{#each}} accepts at most two block parameters", _} =
-             Parser.parse("{{#each items as |item idx extra|}}{{item}}{{/each}}")
+    assert {:ok, [{:each, _, ["item", "i0", "i1"], _, _, _}]} =
+             Parser.parse("{{#each items as |item i0 i1|}}{{item}}{{/each}}")
+
+    assert {:error, "{{#each}} accepts at most three block parameters", _} =
+             Parser.parse("{{#each items as |item idx a b|}}{{item}}{{/each}}")
 
     assert {:error,
             "pipeline stages must be helper names or helper calls like trim or truncate(20)", _} =

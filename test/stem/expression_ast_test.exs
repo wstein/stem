@@ -10,6 +10,7 @@ defmodule Stem.ExpressionAstTest do
   test "format renders all structured expression node forms" do
     assert Expression.format({:literal, ~s("x")}) == ~s("x")
     assert Expression.format({:special, :index}) == "@index"
+    assert Expression.format({:special, :index1}) == "@index1"
     assert Expression.format({:special, :key}) == "@key"
     assert Expression.format({:special, :this}) == "this"
     assert Expression.format({:parent, "title"}) == "../title"

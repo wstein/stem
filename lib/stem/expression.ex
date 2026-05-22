@@ -121,7 +121,7 @@ defmodule Stem.Expression do
   @type expr_t ::
           {:literal, binary()}
           | {:identifier, binary()}
-          | {:special, :index | :key | :this}
+          | {:special, :index | :index1 | :key | :this}
           | {:parent, binary()}
           | {:path, :implicit | :this, [binary()]}
           | {:transformer, binary(), [helper_arg_t()]}
@@ -159,6 +159,9 @@ defmodule Stem.Expression do
 
   def to_source({:special, :index}, context),
     do: if(context.in_each, do: "stem_index", else: "@index")
+
+  def to_source({:special, :index1}, context),
+    do: if(context.in_each, do: "stem_index + 1", else: "@index1")
 
   def to_source({:special, :key}, context),
     do: if(context.in_each, do: "stem_key", else: "@key")
@@ -203,6 +206,7 @@ defmodule Stem.Expression do
   def format({:literal, source}), do: source
   def format({:identifier, name}), do: name
   def format({:special, :index}), do: "@index"
+  def format({:special, :index1}), do: "@index1"
   def format({:special, :key}), do: "@key"
   def format({:special, :this}), do: "this"
   def format({:parent, name}), do: "../#{name}"
@@ -460,6 +464,9 @@ defmodule Stem.Expression do
       trimmed == "@index" ->
         {:ok, {:special, :index}}
 
+      trimmed == "@index1" ->
+        {:ok, {:special, :index1}}
+
       trimmed == "@key" ->
         {:ok, {:special, :key}}
 
@@ -565,6 +572,9 @@ defmodule Stem.Expression do
 
       trimmed == "@index" ->
         {:ok, {:special, :index}}
+
+      trimmed == "@index1" ->
+        {:ok, {:special, :index1}}
 
       trimmed == "@key" ->
         {:ok, {:special, :key}}

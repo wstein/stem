@@ -1,13 +1,14 @@
 ---
 id: 20260521131400
 aliases: [Scoping, Context]
-tags: [semantics, compiler]
+tags: ['semantics', 'compiler']
 ---
+
 Stem manages context scoping and iteration through local bindings that unify with template-parsed variables.
 
 ## What
 
-`{{#each list}}` binds the current item to `this` (and bare identifiers), the index to `@index`, and the key (for maps) to `@key`. `{{#with object}}` pushes the object as the current scope. `../name` allows reaching out of the current iteration/context to the parent (top-level) assigns. `{{#each list as |item idx|}}` and `{{#with object as |value|}}` expose those same scopes through explicit block parameters.
+`{{#each list}}` binds the current item to `this` (and bare identifiers), the zero-based index to `@index`, the one-based index to `@index1`, and the key (for maps) to `@key`. `{{#with object}}` pushes the object as the current scope. `../name` allows reaching out of the current iteration/context to the parent (top-level) assigns. `{{#each list as |item idx|}}` (or `as |item i0 i1|` for both indices) and `{{#with object as |value|}}` expose those same scopes through explicit block parameters.
 
 ## Why
 
@@ -15,10 +16,12 @@ Consistent scoping makes it easy to work with nested data structures while maint
 
 ## How
 
-Iterate over lists or maps using `{{#each}}`. Use `{{#with}}` to clean up deep property access. Reference `@index` for list positions and `../` for external assignments. Use block parameters when a template should name its scope explicitly instead of relying on `this`. If an iteration list is `nil` or empty, the `{{else}}` block (if present) is rendered based on Elixir truthiness.
+Iterate over lists or maps using `{{#each}}`. Use `{{#with}}` to clean up deep property access. Reference `@index`/`@index1` for list positions and `../` for external assignments. Use block parameters when a template should name its scope explicitly instead of relying on `this`. If an iteration list is `nil` or empty, the `{{else}}` block (if present) is rendered based on Elixir truthiness.
+
 
 ## Links
 
+- [[Each Index Variables and Block Params]] - Zero- vs one-based indices and the three-param block form.
 - [[Template Variable Hygiene]] - How these bindings are implemented in the compiler.
 - [[Handlebars Truthiness Semantics]] - How empty collections are handled in iteration.
 - [[Handlebars Expression Resolution]] - The resolution order for these tokens.

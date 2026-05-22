@@ -116,11 +116,11 @@ Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 * `{{yield name}}` renders a named region from the current expanded template scope.
 * Helper calls support nested subexpressions such as `{{format (uppercase name)}}`.
 * Elixir-style helper pipelines such as `{{user.name |> trim |> upcase |> truncate(20)}}` compile to nested helper calls.
-* `{{#each items as |item idx|}}` and `{{#with story as |article|}}` introduce block parameters.
+* `{{#each items as |item idx|}}` and `{{#with story as |article|}}` introduce block parameters. `{{#each}}` also accepts a three-parameter form `as |item i0 i1|` binding the item, zero-based index, and one-based index.
 * `{{~ ... ~}}`, `{{~ ...}}`, and `{{... ~}}` trim surrounding literal whitespace around a tag on both or one side.
 
 Bare identifiers resolve to assigns, so `{{name}}` reads the `:name` assign.
-Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the index, and `{{@key}}` the key when iterating a map.
+Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the zero-based index, `{{@index1}}` the one-based index (mirroring StringTemplate's `i0`/`i`), and `{{@key}}` the key when iterating a map.
 `{{../name}}` reaches the parent (top-level assign) scope.
 Block conditionals follow Handlebars truthiness: `false`, `nil`, `0`, `""`, `[]`, and `{}` (empty map) are falsey.
 Use helpers or regular Elixir functions when output needs transformation (for example, sanitization, normalization, or formatting).
