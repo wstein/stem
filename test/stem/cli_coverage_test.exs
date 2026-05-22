@@ -198,7 +198,7 @@ defmodule Stem.CLICoverageTest do
 
     test "identifier classification" do
       # Special identifiers should be recognized
-      special_tokens = ["true", "false", "nil", "this", "@index", "@key"]
+      special_tokens = ["true", "false", "nil", "this", "@index", "@index1", "@key"]
 
       Enum.each(special_tokens, fn token ->
         assert is_binary(token)

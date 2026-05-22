@@ -437,6 +437,11 @@ defmodule Mix.Tasks.StemTest do
       assert Stem.CLI.render_template!(template, %{xs: ["a", "b"]}) == "0:a;1:b;"
     end
 
+    test "renders one-based @index1 as a loop variable, not an assign" do
+      template = "{{#each xs}}{{@index1}}:{{this}};{{/each}}"
+      assert Stem.CLI.render_template!(template, %{xs: ["a", "b"]}) == "1:a;2:b;"
+    end
+
     test "detects parent-scope assigns in nested expressions" do
       template = "{{#each items}}{{../prefix}}:{{this}};{{/each}}"
       assert Stem.CLI.render_template!(template, %{items: ["a", "b"], prefix: "P"}) == "P:a;P:b;"
