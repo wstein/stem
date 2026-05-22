@@ -205,6 +205,14 @@ defmodule StemTest do
                "0:x;1:y;"
     end
 
+    test "single block param binds the value when iterating a map" do
+      assert eval("{{#each m as |val|}}{{val}};{{/each}}", assigns: [m: %{a: 1}]) == "1;"
+    end
+
+    test "single block param binds the element when iterating a list" do
+      assert eval("{{#each xs as |val|}}{{val}};{{/each}}", assigns: [xs: ["a", "b"]]) == "a;b;"
+    end
+
     test "with block params bind the subject" do
       assigns = [story: %{title: "Deep Work", author: "N"}]
 
