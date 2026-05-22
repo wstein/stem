@@ -236,6 +236,39 @@ defmodule Mix.Tasks.StemTest do
       end
     end
 
+    test "loads project config while honoring CLI permissive overrides" do
+      temp_dir =
+        Path.join(System.tmp_dir!(), "stem-cli-permissive-#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(temp_dir)
+
+      config_path = Path.join(temp_dir, ".stem.config.json")
+      template_path = Path.join(temp_dir, "template.stem")
+
+      File.write!(config_path, ~s({"mode":"safe"}))
+      File.write!(template_path, "{{1 + 2}}")
+
+      original_cwd = System.get_env("EXBAR_CWD")
+      System.put_env("EXBAR_CWD", temp_dir)
+
+      try do
+        output =
+          capture_io(fn ->
+            Stem.CLI.run(["--permissive", template_path])
+          end)
+
+        assert output == "3"
+      after
+        if original_cwd do
+          System.put_env("EXBAR_CWD", original_cwd)
+        else
+          System.delete_env("EXBAR_CWD")
+        end
+
+        File.rm_rf!(temp_dir)
+      end
+    end
+
     test "raises on invalid escape mode" do
       temp_dir =
         Path.join(System.tmp_dir!(), "stem-cli-escape-#{System.unique_integer([:positive])}")

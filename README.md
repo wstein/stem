@@ -54,6 +54,9 @@ bin/stem data.json template.stem
 
 # Or pipe JSON data into it
 echo '{"name": "Nina"}' | bin/stem template.stem
+
+# Allow arbitrary Elixir in a trusted template
+echo '{"name":"Jim","id":123}' | bin/stem examples/templates/card.stem --permissive
 ```
 
 ## Compilation Strategies
@@ -194,7 +197,7 @@ Create a `.stem.config.json` file in your project root to set default options fo
 **Option precedence** (highest to lowest):
 
 1. Explicit compile/eval options
-2. CLI flags (via `--escape`, `--strict`)
+2. CLI flags (via `--escape`, `--strict`, `--permissive`)
 3. Config file (`.stem.config.json`)
 4. Defaults
 

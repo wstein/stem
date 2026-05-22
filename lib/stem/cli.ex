@@ -14,6 +14,7 @@ defmodule Stem.CLI do
 
     -o, --output FILE         Write the rendered output to FILE
     --strict                  Warn on missing assigns
+    --permissive              Allow arbitrary Elixir expressions in tags
     --escape MODE             Escape mode: none, html (default), xml, json, url
     -h, --help                Show this message
     -v, --version             Show the Stem version
@@ -27,6 +28,7 @@ defmodule Stem.CLI do
           help: :boolean,
           version: :boolean,
           strict: :boolean,
+          permissive: :boolean,
           escape: :string
         ],
         aliases: [o: :output, h: :help, v: :version]
@@ -236,7 +238,8 @@ defmodule Stem.CLI do
         Stem.function_from_string(:def, :render, unquote(template), unquote(args),
           file: unquote(file),
           warn_on_missing_assigns: unquote(options[:warn_on_missing_assigns] || false),
-          escape: unquote(options[:escape] || :html)
+          escape: unquote(options[:escape] || :html),
+          mode: unquote(options[:mode] || :safe)
         )
       end
 
@@ -327,6 +330,13 @@ defmodule Stem.CLI do
       warn_on_missing_assigns: !!opts[:strict],
       escape: parse_escape_mode(opts[:escape])
     ]
+
+    cli_opts =
+      if opts[:permissive] do
+        Keyword.put(cli_opts, :mode, :permissive)
+      else
+        cli_opts
+      end
 
     case Stem.Config.find_config(cwd) do
       {:ok, config_path} ->
