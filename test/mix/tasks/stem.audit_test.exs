@@ -16,9 +16,11 @@ defmodule Mix.Tasks.Stem.AuditTest do
 
   test "passes when no production config files exist" do
     # Run in a temp dir with no config files — should pass silently
-    output = capture_io(fn ->
-      Mix.Tasks.Stem.Audit.run(["--paths", Path.join(System.tmp_dir!(), "nonexistent.exs")])
-    end)
+    output =
+      capture_io(fn ->
+        Mix.Tasks.Stem.Audit.run(["--paths", Path.join(System.tmp_dir!(), "nonexistent.exs")])
+      end)
+
     assert output =~ "passed"
   end
 

@@ -30,6 +30,8 @@ defmodule Stem.Transformers.Collections do
   @doc "Return all collection transformers as a map keyed by name."
   @spec all() :: %{String.t() => transformer()}
   def all do
+    emit_capability_loaded_event()
+
     %{
       "map" => &map/2,
       "filter" => &filter/2,
@@ -257,5 +259,30 @@ defmodule Stem.Transformers.Collections do
 
   defp normalize_integer(value, helper) do
     raise ArgumentError, "#{helper} expects integer arguments, got: #{inspect(value)}"
+  end
+
+  # ── Telemetry / audit event ────────────────────────────────────────────────
+
+  # Emits a [:stem, :capability_group, :loaded] telemetry event when the
+  # Collections group is loaded dynamically. This event can be used to audit
+  # which processes are using the most powerful transformer set.
+  #
+  # If the :telemetry application is not available (it is an optional dep),
+  # falls back to a Logger warning so no crash occurs.
+  defp emit_capability_loaded_event do
+    metadata = %{group: __MODULE__, caller: Process.info(self(), :current_stacktrace)}
+
+    if Code.ensure_loaded?(:telemetry) do
+      apply(:telemetry, :execute, [[:stem, :capability_group, :loaded], %{count: 1}, metadata])
+    else
+      require Logger
+
+      Logger.warning(
+        "[Stem] #{inspect(__MODULE__)} capability group loaded. " <>
+          "This group contains powerful data-manipulation transformers " <>
+          "(map, group_by, sort_by, filter, etc.). " <>
+          "Ensure the template source is fully trusted."
+      )
+    end
   end
 end
