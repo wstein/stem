@@ -26,7 +26,7 @@ defmodule Stem.Compiler do
       escape: Keyword.get(opts, :escape, :html),
       in_each: false,
       locals: %{},
-      mode: Keyword.get(opts, :mode, :permissive),
+      mode: Keyword.get(opts, :mode, :safe),
       region_stack: [],
       regions: %{}
     }

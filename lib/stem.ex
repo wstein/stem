@@ -83,9 +83,10 @@ defmodule Stem do
     * `:contract` - a keyword list like `[required: [:title], optional:
       [:subtitle]]` used to validate required assigns before rendering.
 
-    * `:mode` - `:permissive` (default) keeps the current fallback to
-      arbitrary Elixir expressions. `:safe` only allows structured Stem
-      expressions, helpers, literals, and paths.
+    * `:mode` - `:safe` (default) allows only structured Stem expressions,
+      helpers, literals, and paths. Pass `:permissive` to allow arbitrary
+      Elixir expressions in tags — only use this with fully trusted template
+      sources.
 
     * `:escape` - the default escape mode for `{{ }}` expressions. One of
       `:html` (default, recommended for security), `:none` (no escaping),

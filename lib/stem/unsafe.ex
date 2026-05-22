@@ -8,6 +8,11 @@ defmodule Stem.Unsafe do
   can be dangerous when templates come from untrusted sources, as users could exploit
   template syntax to execute arbitrary code.
 
+  Both `eval_string/3` and `eval_file/3` default to `mode: :safe`, which allows only
+  structured Stem expressions (variable paths, helper calls, literals). Pass
+  `mode: :permissive` explicitly to allow arbitrary Elixir expressions inside tags
+  — only do this when the template source is fully controlled by your team.
+
   **When to use**:
   - Command-line tools (controlled boundary)
   - Render templates where you control all sources
