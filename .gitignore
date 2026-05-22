@@ -21,3 +21,6 @@ bundle/
 repomix-output.xml
 .cx/
 tmp/
+
+### Rust native PoC build artifacts ###
+native/stem_native/target/

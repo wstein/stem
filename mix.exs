@@ -19,7 +19,13 @@ defmodule Stem.MixProject do
       deps: deps(),
       test_coverage: [
         summary: [threshold: 98],
-        ignore_modules: [Stem.CoverageMetrics, Mix.Tasks.Coveralls.Branchcov]
+        ignore_modules: [
+          Stem.CoverageMetrics,
+          Mix.Tasks.Coveralls.Branchcov,
+          # PoC verifier: needs the Rust/WASM toolchain + Node, so it runs via
+          # `mix stem.native.verify`, not the unit suite.
+          Mix.Tasks.Stem.Native.Verify
+        ]
       ]
     ]
   end
