@@ -320,6 +320,17 @@ mix stem.format "lib/**/*.stem"
 mix stem.format --check-formatted lib/my_template.stem
 ```
 
+## Testing
+
+Run the full suite with:
+
+```sh
+mix test
+```
+
+Stem combines example-based unit tests with property-based fuzzing of the parse and compile pipeline (`test/stem/fuzz_test.exs`, powered by `StreamData`).
+The fuzz generators produce random but structurally valid templates and assert that parsing and compilation never raise — they must return `{:ok, _}` or a structured `{:error, ...}` tuple — exercising edge cases such as nested blocks, recursive partial expansion, and pipeline-argument escaping.
+
 ## Documentation
 
 The repository includes an Antora documentation site under `docs/` with onboarding, manual, and arc42 architecture surfaces.

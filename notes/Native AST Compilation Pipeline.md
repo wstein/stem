@@ -1,8 +1,9 @@
 ---
 id: 20260521120000
 aliases: []
-tags: [architecture, compiler]
+tags: ['architecture', 'compiler']
 ---
+
 Stem compiles `{{ }}` templates through a native three-stage pipeline that produces Elixir AST directly, without translating to EEx first.
 
 ## What
@@ -31,12 +32,12 @@ Keep expression semantics in `Stem.Expression` so the parser stays independent o
 Subexpressions, helper pipelines, block parameters, whitespace control, diagnostics, and safe-mode checks all attach to one of these owned stages instead of re-parsing raw template text later.
 Whitespace control includes the one-sided variants `{{~ ...}}` and `{{... ~}}` as well as the symmetric `{{~ ... ~}}` form.
 
+
 ## Links
 
-- [[Project Configuration Defaults]] - How project defaults feed the pipeline.
-- [[Handlebars Expression Resolution]] - How tag contents become Elixir.
 - [[Project Configuration Defaults]] - How project defaults feed the pipeline.
 - [[Handlebars Expression Resolution]] - How tag contents become Elixir.
 - [[Template Variable Hygiene]] - Why generated and parsed variables unify.
 - [[Compile-Time-Only Security Model]] - Runtime trust-boundary guidance for this pipeline.
 - [[NimbleParsec Migration Strategy]] - How the tokenizer was migrated and then fused into the parser.
+- [[Property and Fuzz Testing Strategy]] - How this pipeline is fuzzed for parse/compile robustness.
