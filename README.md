@@ -59,6 +59,28 @@ echo '{"name": "Nina"}' | bin/stem template.stem
 echo '{"name":"Jim","id":123}' | bin/stem examples/templates/card.stem --allow-elixir-expressions
 ```
 
+### Presentation-Only Static Dictionaries
+
+When a view needs a small, trusted lookup table, use `defdictionary/2` with a
+literal map or list of literals. These dictionaries are presentation data only:
+they are validated at compile time, merged into assigns in declaration order,
+and are not a general-purpose data-loading mechanism.
+
+```elixir
+defmodule StatusView do
+  use Stem.DSL
+
+  defdictionary :status_map, %{"1" => "Active", "2" => "Inactive"}
+  defdictionary :priority_map, %{"high" => 1, "low" => 2}
+  defdictionary_merge :all_statuses, [:status_map, :priority_map]
+
+  deftemplate :render, "{{lookup status_map id}}", [:assigns]
+end
+```
+
+Module attributes are allowed only when they expand to literals. Explicit
+caller-supplied assigns still win at render time.
+
 ## Compilation Strategies
 
 ### Performance: Compile-Time Macros
