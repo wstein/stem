@@ -127,9 +127,19 @@ defmodule Stem.Conformance do
       transformers: []
     },
     %{
+      name: "each with one-based index",
+      template: "{{#each items as |item i0 i1|}}{{i0}}/{{i1}}:{{item}} {{/each}}",
+      data: %{items: ["a", "b"]},
+      transformers: []
+    },
+    # A single-entry map keeps the stored `:expected` deterministic — multi-key
+    # map iteration order is not stable across BEAM instances, which would make
+    # the checked-in vector flap. (In-process differential parity still holds for
+    # any map, since both backends iterate the same map identically.)
+    %{
       name: "each over a map with key",
       template: "{{#each rows}}{{@key}}={{this}} {{/each}}",
-      data: %{rows: %{a: 1, b: 2}},
+      data: %{rows: %{role: "admin"}},
       transformers: []
     },
     %{
