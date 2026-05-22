@@ -167,14 +167,39 @@ Additional features:
 - `contract:` lets templates declare required assigns at the call boundary
 - Helper pipelines are allowed by default because they lower to helper invocations instead of arbitrary Elixir
 
-## Built-In Helpers
+## Helper Capability Groups
 
-Stem ships pipeline-friendly builtins for common presentation and collection work:
+Stem enforces **capability management** for helpers to reduce SSTI attack surface. Only a secure minimum of helpers is available by default; complex operations require explicit opt-in via capability groups.
 
-* `default`, `join`, `inspect`, `json`, `escape_json`, `escape_html`
-* `trim`, `upcase`, `downcase`, `capitalize`, `replace`, `truncate`
-* `contains`, `empty?`, `present?`, `starts_with`, `ends_with`
-* `map`, `filter`, `sort`, `sort_by`, `group_by`, `take`, `drop`, `slice`, `first`, `compact`, `uniq`, `flatten`, `reverse`
+**Secure Minimum** (always available):
+
+* Output escaping: `escape_html`, `escape_json`, `json`, `inspect`
+* Safe defaults: `default`
+* Essential: `lookup`, `join`, `log`
+
+**Optional Groups** (explicit opt-in):
+
+* `Stem.Helpers.Strings` — Text manipulation (`trim`, `upcase`, `truncate`, etc.)
+* `Stem.Helpers.Collections` — Data operations (`map`, `filter`, `sort_by`, `group_by`, etc.)
+* `Stem.Helpers.Predicates` — Boolean tests (`contains`, `empty?`, `present?`)
+
+Load groups at runtime:
+
+```elixir
+Stem.Unsafe.eval_string(
+  template,
+  assigns: data,
+  helper_groups: [Stem.Helpers.Collections, Stem.Helpers.Strings]
+)
+```
+
+Or pin defaults in `.stem.config.json`:
+
+```json
+{
+  "helper_groups": "Stem.Helpers.Strings,Stem.Helpers.Collections"
+}
+```
 
 Selector-based helpers such as `map`, `filter`, `sort_by`, and `group_by` accept a simple dotted path string like `"author.name"` so templates can stay declarative without anonymous functions.
 

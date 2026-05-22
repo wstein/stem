@@ -15,6 +15,7 @@ defmodule Stem.CLI do
     -o, --output FILE                  Write the rendered output to FILE
     --strict                           Warn on missing assigns
     --allow-elixir-expressions         Allow arbitrary Elixir expressions in tags
+    --helper-groups GROUPS             Enable helper capability groups (comma-separated)
     --escape MODE                      Escape mode: none, html (default), xml, json, url
     -h, --help                         Show this message
     -v, --version                      Show the Stem version
@@ -29,6 +30,7 @@ defmodule Stem.CLI do
           version: :boolean,
           strict: :boolean,
           allow_elixir_expressions: :boolean,
+          helper_groups: :string,
           escape: :string
         ],
         aliases: [o: :output, h: :help, v: :version]
@@ -338,6 +340,14 @@ defmodule Stem.CLI do
         cli_opts
       end
 
+    cli_opts =
+      if opts[:helper_groups] do
+        groups = parse_helper_groups(opts[:helper_groups])
+        Keyword.put(cli_opts, :helper_groups, groups)
+      else
+        cli_opts
+      end
+
     case Stem.Config.find_config(cwd) do
       {:ok, config_path} ->
         case Stem.Config.load_config(config_path) do
@@ -350,6 +360,26 @@ defmodule Stem.CLI do
 
       :not_found ->
         cli_opts
+    end
+  end
+
+  defp parse_helper_groups(groups_string) when is_binary(groups_string) do
+    groups_string
+    |> String.split(",")
+    |> Enum.map(&String.trim/1)
+    |> Enum.map(&parse_module_name/1)
+    |> Enum.filter(fn g -> g != nil end)
+  end
+
+  defp parse_module_name(module_string) when is_binary(module_string) do
+    if String.match?(module_string, ~r/^[A-Z][\w\.]*$/) do
+      try do
+        String.to_atom("Elixir." <> module_string)
+      rescue
+        _ -> nil
+      end
+    else
+      nil
     end
   end
 end

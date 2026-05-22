@@ -76,7 +76,53 @@ Stem.Unsafe.eval_string("{{a + b}}", assigns: [a: 1, b: 2], allow_elixir_express
 Always use `allow_elixir_expressions: false` (the default) for production templates.
 Only pass `allow_elixir_expressions: true` when the template source is entirely controlled by your team and arbitrary code execution is necessary.
 
-For full API reference, see xref:architecture:index.adoc[Architecture] documentation.
+== Helper Capability Groups
+
+Stem enforces capability management for helpers to minimize SSTI attack surface.
+By default, only a secure minimum of helpers is available.
+Complex data operations require explicit opt-in via capability groups.
+
+=== Available Groups
+
+* **Minimum (always available)** — Escaping, defaults, lookup
+* **Strings** — Text manipulation (`trim`, `upcase`, `truncate`, `replace`, etc.)
+* **Collections** — Data operations (`map`, `filter`, `sort_by`, `group_by`, `compact`, etc.)
+* **Predicates** — Boolean tests (`contains`, `empty?`, `present?`)
+
+=== Loading Groups
+
+*At the call site:*
+[source,elixir]
+----
+Stem.Unsafe.eval_string(
+  "{{items |> map(author.name) |> take(5)}}",
+  assigns: [items: books],
+  helper_groups: [Stem.Helpers.Collections, Stem.Helpers.Strings]
+)
+----
+
+*From configuration:*
+[source,json]
+----
+{
+  "helper_groups": "Stem.Helpers.Collections,Stem.Helpers.Strings"
+}
+----
+
+*From CLI:*
+[source,sh]
+----
+bin/stem data.json template.stem --helper-groups Stem.Helpers.Collections,Stem.Helpers.Strings
+----
+
+=== Why Capability Groups?
+
+* **Secure by default** — Only essential helpers available
+* **Explicit boundaries** — Developers declare what power templates need
+* **Auditable surface** — Code review sees exactly which operations are enabled
+* **Reduced attack surface** — SSTI attackers face limited operations
+
+For complete details, see xref:architecture:index.adoc[Architecture] documentation.
 
 == Security Best Practices
 

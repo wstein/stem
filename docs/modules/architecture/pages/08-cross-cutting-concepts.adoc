@@ -28,6 +28,38 @@ Stem enforces control over arbitrary Elixir expression execution via the `allow_
 Runtime evaluation APIs (`Stem.Unsafe.eval_string/3` and `Stem.Unsafe.eval_file/3`) default to `allow_elixir_expressions: false`, requiring explicit opt-in to use `allow_elixir_expressions: true`.
 If you feel forced to enable arbitrary expressions in production, this indicates an architectural flaw: business logic is leaking into the presentation layer and should be refactored into helpers or backend services.
 
+== Helper Capability Groups
+
+Beyond restricting arbitrary Elixir code, Stem also enforces capability management for helper functions.
+A template has access only to the helpers it explicitly needs, reducing Server-Side Template Injection (SSTI) attack surface through **principle of least privilege**.
+
+The secure minimum (`Stem.Helpers.Minimum`) is always available and contains only essential helpers for XSS protection and output formatting.
+Complex data operations (filtering, sorting, grouping, transformation) are organized into optional capability groups:
+
+* `Stem.Helpers.Strings` — Text manipulation
+* `Stem.Helpers.Collections` — Data transformation and filtering
+* `Stem.Helpers.Predicates` — Boolean predicates for conditionals
+
+Templates must explicitly declare which groups they need via the `:helper_groups` parameter:
+
+[source,elixir]
+----
+Stem.Unsafe.eval_string(template, assigns: data, helper_groups: [Stem.Helpers.Collections])
+----
+
+Or via `.stem.config.json` defaults:
+
+[source,json]
+----
+{
+  "helper_groups": "Stem.Helpers.Collections,Stem.Helpers.Strings"
+}
+----
+
+*Rationale:* In an SSTI attack, an attacker can chain powerful operations (map, filter, group_by) to extract internal state or manipulate data.
+By restricting access to only approved groups, Stem minimizes the "gadget chains" available for exploitation.
+The requirement to explicitly declare which operations are needed makes dangerous choices visible during code review.
+
 == Explicit Data Boundaries
 
 Stem preserves an explicit boundary between data and templates at all levels.
