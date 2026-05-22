@@ -8,6 +8,9 @@ defmodule Stem.FormatterTest do
   # ── Formatter plugin behaviour ─────────────────────────────────────────────
 
   test "implements Mix.Tasks.Format behaviour" do
+    # function_exported?/3 is false for a not-yet-loaded module under async
+    # tests, so ensure it is loaded before introspecting.
+    Code.ensure_loaded!(Stem.Formatter)
     assert function_exported?(Stem.Formatter, :features, 1)
     assert function_exported?(Stem.Formatter, :format, 2)
   end
