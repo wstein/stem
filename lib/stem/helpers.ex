@@ -35,9 +35,12 @@ defmodule Stem.Helpers do
     assigns = binding_env |> Keyword.get(:assigns, []) |> Enum.into(%{})
     this = Keyword.get(binding_env, :this)
     local_helpers = binding_env |> Keyword.get(:helpers, []) |> normalize_helpers()
+    capability_groups = Keyword.get(binding_env, :helper_groups, [])
+    group_helpers = load_group_helpers(capability_groups)
 
     helper =
       Map.get(local_helpers, helper_key) ||
+        Map.get(group_helpers, helper_key) ||
         Map.get(registry(), helper_key) ||
         built_in(helper_key) ||
         raise Stem.SyntaxError, "unknown helper '#{helper_key}'"
@@ -59,6 +62,19 @@ defmodule Stem.Helpers do
   defp registry do
     :persistent_term.get(@registry_key, %{})
   end
+
+  defp load_group_helpers(groups) when is_list(groups) do
+    groups
+    |> Enum.reduce(%{}, fn group, acc ->
+      if function_exported?(group, :all, 0) do
+        Map.merge(acc, group.all())
+      else
+        acc
+      end
+    end)
+  end
+
+  defp load_group_helpers(_), do: %{}
 
   defp built_in("lookup") do
     fn [collection, key], _ctx ->

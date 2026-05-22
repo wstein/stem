@@ -118,6 +118,7 @@ defmodule Stem.Config do
     |> maybe_add_escape(map)
     |> maybe_add_warn_on_missing_assigns(map)
     |> maybe_add_allow_elixir_expressions(map)
+    |> maybe_add_helper_groups(map)
   end
 
   defp maybe_add_escape(acc, map) do
@@ -140,6 +141,42 @@ defmodule Stem.Config do
       nil -> acc
       value when is_boolean(value) -> Keyword.put(acc, :allow_elixir_expressions, value)
       _ -> acc
+    end
+  end
+
+  defp maybe_add_helper_groups(acc, map) do
+    case Map.get(map, "helper_groups") do
+      nil ->
+        acc
+
+      groups_string when is_binary(groups_string) ->
+        groups =
+          groups_string
+          |> String.split(",")
+          |> Enum.map(&String.trim/1)
+          |> Enum.map(&parse_module_name/1)
+          |> Enum.filter(fn g -> g != nil end)
+
+        if groups == [] do
+          acc
+        else
+          Keyword.put(acc, :helper_groups, groups)
+        end
+
+      _ ->
+        acc
+    end
+  end
+
+  defp parse_module_name(module_string) when is_binary(module_string) do
+    if String.match?(module_string, ~r/^[A-Z][\w\.]*$/) do
+      try do
+        String.to_atom("Elixir." <> module_string)
+      rescue
+        _ -> nil
+      end
+    else
+      nil
     end
   end
 

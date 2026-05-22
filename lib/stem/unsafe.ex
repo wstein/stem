@@ -13,6 +13,24 @@ defmodule Stem.Unsafe do
   Pass `allow_elixir_expressions: true` explicitly to allow arbitrary Elixir expressions
   inside tags — only do this when the template source is fully controlled by your team.
 
+  ## Helper Capability Groups
+
+  Stem enforces a capability management system to reduce SSTI attack surface. By default,
+  only a secure minimum of helpers are available (`escape_html`, `default`, `lookup`, etc.).
+  Complex data operations require explicit opt-in via capability groups:
+
+      Stem.Unsafe.eval_string(
+        template_source,
+        [assigns: data],
+        helper_groups: [Stem.Helpers.Collections]
+      )
+
+  Available groups:
+  - `Stem.Helpers.Minimum` — Essential helpers (always available)
+  - `Stem.Helpers.Strings` — String manipulation
+  - `Stem.Helpers.Collections` — Data transformation and filtering
+  - `Stem.Helpers.Predicates` — Boolean tests
+
   **When to use**:
   - Command-line tools (controlled boundary)
   - Render templates where you control all sources
@@ -68,6 +86,7 @@ defmodule Stem.Unsafe do
     bindings
     |> Keyword.put_new(:assigns, [])
     |> Keyword.put_new(:helpers, [])
+    |> Keyword.put_new(:helper_groups, [])
   end
 
   defp load_and_merge_config(options) do
