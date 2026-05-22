@@ -5,11 +5,11 @@ defmodule Stem.Bytecode.UnsupportedError do
   Raised when a `Stem.AST` construct cannot be lowered to the portable bytecode
   target.
 
-  The bytecode backend (`Stem.Bytecode`) is additive and currently covers the
-  text-and-expression core of the language. Constructs outside that scope —
-  block helpers (`{{#if}}`, `{{#each}}`, …), regions/yields, and arbitrary
-  Elixir expressions — raise this error rather than emit a program that would
-  silently diverge from the compiled backend. Render such templates with the
+  The bytecode backend (`Stem.Bytecode`) covers the structured Stem language —
+  text, expressions, block helpers, regions, and yields. The remaining
+  exclusion is **arbitrary Elixir expressions** (`allow_elixir_expressions:
+  true`), which depend on the BEAM compiler; such templates raise this error
+  rather than emit a program that would silently diverge. Render them with the
   default backend (`Stem.compile_string/2`).
   """
 
@@ -21,10 +21,10 @@ defmodule Stem.Bytecode.Program do
   A compiled, host-independent Stem template.
 
   A `Program` is the portable artifact produced by `Stem.Bytecode.compile/2`:
-  a flat list of structured instructions plus the metadata a non-BEAM consumer
-  needs to render it safely. It is a plain data structure (no closures, no
-  quoted Elixir), so it can be inspected, cached, and — in a later phase —
-  serialized to a wire format such as MessagePack.
+  a list of structured instructions plus the metadata a non-BEAM consumer needs
+  to render it safely. It is a plain data structure (no closures, no quoted
+  Elixir), so it can be inspected, cached, and — in a later phase — serialized
+  to a wire format such as MessagePack.
 
   Fields:
 
@@ -36,18 +36,15 @@ defmodule Stem.Bytecode.Program do
       built-in group. They resolve through the host's `transformers:` binding
       at render time; a non-BEAM core that cannot call host closures must
       reject a program that lists any.
-    * `:instructions` — the ordered render instructions.
+    * `:instructions` — the ordered render instructions. Block instructions
+      (`:if`, `:each`, `:with`) carry their bodies as nested instruction lists.
   """
-
-  @type instruction ::
-          {:text, binary()}
-          | {:emit, Stem.Bytecode.value_op(), atom()}
 
   @type t :: %__MODULE__{
           version: binary(),
           capabilities: [atom()],
           host_transformers: [binary()],
-          instructions: [instruction()]
+          instructions: [Stem.Bytecode.instruction()]
         }
 
   @enforce_keys [:version, :capabilities, :host_transformers, :instructions]
@@ -60,19 +57,20 @@ defmodule Stem.Bytecode do
 
   `Stem.Bytecode` is a second backend that sits beside `Stem.Compiler`: both
   consume the same `Stem.AST`, but where the compiler lowers the tree into
-  quoted Elixir, this module lowers it into a `Stem.Bytecode.Program` — a flat,
-  inspectable, host-independent instruction list. `Stem.Bytecode.VM` renders a
-  program with the same semantics as the compiled backend.
+  quoted Elixir, this module lowers it into a `Stem.Bytecode.Program` — a
+  structured, inspectable, host-independent instruction list. `Stem.Bytecode.VM`
+  renders a program with the same semantics as the compiled backend.
 
-  ## Scope (v1)
+  ## Scope
 
-  The bytecode target covers the text-and-expression core: literal text, `{{ }}`
-  and `{{{ }}}` expressions, assign and dotted-path resolution, parent paths
-  (`{{../name}}`), transformer calls, and pipelines. Block helpers, regions,
-  yields, block-scoped references (`this`, `@index`, `@key`), and arbitrary
-  Elixir expressions are out of scope and raise `Stem.Bytecode.UnsupportedError`
-  at compile time — the bytecode never silently diverges from the compiled
-  backend.
+  The bytecode target covers the structured Stem language: literal text, `{{ }}`
+  and `{{{ }}}` expressions, assign/dotted-path/parent-path resolution, block
+  helpers (`{{#if}}`, `{{#unless}}`, `{{#each}}`, `{{#with}}`) with block
+  parameters and `{{else}}`, block-scoped references (`this`, `@index`, `@key`),
+  regions, and `{{yield}}`. Arbitrary Elixir expressions
+  (`allow_elixir_expressions: true`) are out of scope and raise
+  `Stem.Bytecode.UnsupportedError` at compile time; a top-level `this` reference
+  (which the compiled backend rejects as unbound) raises the same error.
 
   ## Transformers and capabilities
 
@@ -95,6 +93,25 @@ defmodule Stem.Bytecode do
 
   @version "stem-bc/v1"
 
+  @typedoc "An expression evaluation plan within an instruction."
+  @type value_op ::
+          {:lit, term()}
+          | {:assign, atom()}
+          | {:local, atom()}
+          | {:this}
+          | {:index}
+          | {:index1}
+          | {:key}
+          | {:get, value_op(), [atom()]}
+          | {:call, binary(), [value_op()], [{atom(), value_op()}]}
+
+  @type instruction ::
+          {:text, binary()}
+          | {:emit, value_op(), atom()}
+          | {:if, value_op(), [instruction()], [instruction()]}
+          | {:each, value_op(), [atom()], [instruction()], [instruction()]}
+          | {:with, value_op(), [atom()], [instruction()], [instruction()]}
+
   @doc "The bytecode format version this module emits."
   @spec version() :: binary()
   def version, do: @version
@@ -106,17 +123,20 @@ defmodule Stem.Bytecode do
   `:html`); the per-expression escape mode is resolved against it at compile
   time so the program is self-contained.
 
-  Raises `Stem.Bytecode.UnsupportedError` for constructs outside the v1 scope.
+  Raises `Stem.Bytecode.UnsupportedError` for constructs outside the bytecode
+  scope (arbitrary Elixir expressions, top-level `this`).
   """
   @spec compile(Stem.AST.t(), keyword()) :: Program.t()
   def compile(nodes, opts \\ []) when is_list(nodes) and is_list(opts) do
     escape_default = Keyword.get(opts, :escape, :html)
-    instructions = Enum.map(nodes, &compile_node(&1, escape_default))
+    scope = %{in_each: false, has_this: false, locals: MapSet.new()}
+    instructions = compile_nodes(nodes, scope, %{}, [], escape_default)
+    names = transformer_names(instructions)
 
     %Program{
       version: @version,
-      capabilities: instructions |> collect_transformer_names() |> capabilities(),
-      host_transformers: instructions |> collect_transformer_names() |> host_transformers(),
+      capabilities: capabilities(names),
+      host_transformers: host_transformers(names),
       instructions: instructions
     }
   end
@@ -128,104 +148,199 @@ defmodule Stem.Bytecode do
   """
   @spec disasm(Program.t()) :: binary()
   def disasm(%Program{instructions: instructions, version: version}) do
-    header = "; #{version}"
-    body = Enum.map(instructions, &disasm_instruction/1)
-    Enum.join([header | body], "\n") <> "\n"
+    lines = ["; #{version}" | Enum.flat_map(instructions, &disasm_instruction(&1, 0))]
+    Enum.join(lines, "\n") <> "\n"
   end
 
-  # ── Node lowering ──────────────────────────────────────────────────────────
+  # ── Node lowering ────────────────────────────────────────────────────────────
 
-  defp compile_node({:text, text}, _escape_default), do: {:text, text}
-
-  defp compile_node({:expr, expr_ast, escape_mode, _meta}, escape_default) do
-    {:emit, compile_value(expr_ast), resolve_escape(escape_mode, escape_default)}
+  defp compile_nodes(nodes, scope, regions, region_stack, escape_default) do
+    {node_regions, visible} = extract_regions(nodes)
+    regions = Map.merge(regions, node_regions)
+    Enum.flat_map(visible, &compile_node(&1, scope, regions, region_stack, escape_default))
   end
 
-  defp compile_node({node_kind, _, _, _, _, _}, _escape_default)
-       when node_kind in [:each, :with] do
-    unsupported_block(node_kind)
+  defp compile_node({:text, text}, _scope, _regions, _stack, _escape_default), do: [{:text, text}]
+
+  defp compile_node(
+         {:expr, expr_ast, escape_mode, _meta},
+         scope,
+         _regions,
+         _stack,
+         escape_default
+       ) do
+    [{:emit, compile_value(expr_ast, scope), resolve_escape(escape_mode, escape_default)}]
   end
 
-  defp compile_node({node_kind, _, _, _, _}, _escape_default) when node_kind in [:if, :unless] do
-    unsupported_block(node_kind)
+  defp compile_node({:if, expr, body, else_body, _meta}, scope, regions, stack, escape_default) do
+    [
+      {:if, compile_value(expr, scope),
+       compile_nodes(body, scope, regions, stack, escape_default),
+       compile_nodes(else_body, scope, regions, stack, escape_default)}
+    ]
   end
 
-  defp compile_node({:region, _name, _body, _meta}, _escape_default) do
-    unsupported_block(:region)
+  # `unless` is `if` with the branches swapped — the same lowering the compiled
+  # backend uses — so the VM needs only one conditional instruction.
+  defp compile_node(
+         {:unless, expr, body, else_body, _meta},
+         scope,
+         regions,
+         stack,
+         escape_default
+       ) do
+    [
+      {:if, compile_value(expr, scope),
+       compile_nodes(else_body, scope, regions, stack, escape_default),
+       compile_nodes(body, scope, regions, stack, escape_default)}
+    ]
   end
 
-  defp compile_node({:yield, _name, _meta}, _escape_default) do
-    raise UnsupportedError,
-      message:
-        "{{yield}} is not supported by the bytecode target (v1 covers text and expressions); " <>
-          "render this template with Stem.compile_string/2"
+  defp compile_node(
+         {:each, expr, params, body, else_body, _meta},
+         scope,
+         regions,
+         stack,
+         escape_default
+       ) do
+    body_scope = %{
+      scope
+      | in_each: true,
+        has_this: true,
+        locals: MapSet.union(scope.locals, MapSet.new(params))
+    }
+
+    [
+      {:each, compile_value(expr, scope), Enum.map(params, &String.to_atom/1),
+       compile_nodes(body, body_scope, regions, stack, escape_default),
+       compile_nodes(else_body, %{scope | in_each: false}, regions, stack, escape_default)}
+    ]
   end
 
-  defp unsupported_block(kind) do
-    raise UnsupportedError,
-      message:
-        "block helper {{##{kind}}} is not supported by the bytecode target (v1 covers " <>
-          "text and expressions); render this template with Stem.compile_string/2"
+  defp compile_node(
+         {:with, expr, params, body, else_body, _meta},
+         scope,
+         regions,
+         stack,
+         escape_default
+       ) do
+    body_scope = %{scope | has_this: true, locals: MapSet.union(scope.locals, MapSet.new(params))}
+
+    [
+      {:with, compile_value(expr, scope), Enum.map(params, &String.to_atom/1),
+       compile_nodes(body, body_scope, regions, stack, escape_default),
+       compile_nodes(else_body, scope, regions, stack, escape_default)}
+    ]
+  end
+
+  # Region nodes never reach compile_node: extract_regions/1 removes them from
+  # every node list before its visible nodes are compiled. A yield inlines the
+  # region's compiled instructions at the yield site, with a recursion guard,
+  # mirroring the compiled backend.
+  defp compile_node({:yield, name, _meta}, scope, regions, stack, escape_default) do
+    if name in stack do
+      raise UnsupportedError, message: "recursive region yield detected for '#{name}'"
+    end
+
+    regions
+    |> Map.get(name, [])
+    |> compile_nodes(scope, regions, [name | stack], escape_default)
+  end
+
+  defp extract_regions(nodes) do
+    {regions, visible} =
+      Enum.reduce(nodes, {%{}, []}, fn
+        {:region, name, body, _meta}, {regions, visible} ->
+          {Map.put(regions, name, body), visible}
+
+        node, {regions, visible} ->
+          {regions, [node | visible]}
+      end)
+
+    {regions, Enum.reverse(visible)}
   end
 
   # ── Expression lowering ──────────────────────────────────────────────────────
 
-  defp compile_value({:literal, source}), do: {:lit, literal_value!(source)}
+  defp compile_value({:literal, source}, _scope), do: {:lit, literal_value!(source)}
 
-  # A bare identifier and a parent path both resolve to a top-level assign, the
-  # same way `Stem.Expression.to_source/2` lowers them outside a block.
-  defp compile_value({:identifier, name}), do: {:assign, String.to_atom(name)}
-  defp compile_value({:parent, name}), do: {:assign, String.to_atom(name)}
-
-  defp compile_value({:path, :implicit, [root | rest]}) do
-    {:get, {:assign, String.to_atom(root)}, Enum.map(rest, &String.to_atom/1)}
+  defp compile_value({:identifier, name}, scope) do
+    cond do
+      MapSet.member?(scope.locals, name) -> {:local, String.to_atom(name)}
+      scope.in_each -> {:get, {:this}, [String.to_atom(name)]}
+      true -> {:assign, String.to_atom(name)}
+    end
   end
 
-  defp compile_value({:transformer, name, args}) do
-    {positional, keyword} = split_args(args)
+  # A parent path always resolves to a top-level assign, like `to_source/2`.
+  defp compile_value({:parent, name}, _scope), do: {:assign, String.to_atom(name)}
+
+  # `@index`/`@index1` resolve to the loop index inside an each (zero- and
+  # one-based), and to the like-named top-level assigns outside one, mirroring
+  # `Stem.Expression.to_source/2`.
+  defp compile_value({:special, :index}, %{in_each: true}), do: {:index}
+  defp compile_value({:special, :index}, _scope), do: {:assign, :index0}
+  defp compile_value({:special, :index1}, %{in_each: true}), do: {:index1}
+  defp compile_value({:special, :index1}, _scope), do: {:assign, :index1}
+  defp compile_value({:special, :key}, %{in_each: true}), do: {:key}
+  defp compile_value({:special, :key}, _scope), do: {:assign, :key}
+
+  defp compile_value({:special, :this}, %{has_this: true}), do: {:this}
+
+  defp compile_value({:special, :this}, _scope) do
+    unsupported("'this' is only bound inside a block helper")
+  end
+
+  defp compile_value({:path, :this, segments}, %{has_this: true}) do
+    {:get, {:this}, Enum.map(segments, &String.to_atom/1)}
+  end
+
+  defp compile_value({:path, :this, _segments}, _scope) do
+    unsupported("'this' paths are only valid inside a block helper")
+  end
+
+  defp compile_value({:path, :implicit, [root | rest]}, scope) do
+    rest_atoms = Enum.map(rest, &String.to_atom/1)
+    root_atom = String.to_atom(root)
+
+    cond do
+      MapSet.member?(scope.locals, root) -> {:get, {:local, root_atom}, rest_atoms}
+      scope.in_each -> {:get, {:this}, [root_atom | rest_atoms]}
+      true -> {:get, {:assign, root_atom}, rest_atoms}
+    end
+  end
+
+  defp compile_value({:transformer, name, args}, scope) do
+    {positional, keyword} = split_args(args, scope)
     {:call, name, positional, keyword}
   end
 
-  defp compile_value({:pipeline, lhs, stages}) do
-    Enum.reduce(stages, compile_value(lhs), fn {:stage, name, args}, acc ->
-      {positional, keyword} = split_args(args)
+  defp compile_value({:pipeline, lhs, stages}, scope) do
+    Enum.reduce(stages, compile_value(lhs, scope), fn {:stage, name, args}, acc ->
+      {positional, keyword} = split_args(args, scope)
       {:call, name, [acc | positional], keyword}
     end)
   end
 
-  defp compile_value({:special, special}) do
-    unsupported_expression(
-      "block-scoped reference '#{special_source(special)}' is only valid inside a block helper"
-    )
+  defp compile_value({:elixir, raw}, _scope) do
+    unsupported("arbitrary Elixir expression #{inspect(String.trim(raw))}")
   end
 
-  defp compile_value({:path, :this, _segments}) do
-    unsupported_expression("'this' paths are only valid inside a block helper")
-  end
-
-  defp compile_value({:elixir, raw}) do
-    unsupported_expression("arbitrary Elixir expression #{inspect(String.trim(raw))}")
-  end
-
-  defp unsupported_expression(detail) do
+  defp unsupported(detail) do
     raise UnsupportedError,
       message:
-        "#{detail} is not supported by the bytecode target (v1 covers text and expressions); " <>
+        "#{detail} is not supported by the bytecode target; " <>
           "render this template with Stem.compile_string/2"
   end
 
-  defp special_source(:index), do: "@index"
-  defp special_source(:key), do: "@key"
-  defp special_source(:this), do: "this"
-
-  defp split_args(args) do
+  defp split_args(args, scope) do
     {positional, keyword} =
       Enum.reduce(args, {[], []}, fn
         {:kw, key, value}, {positional, keyword} ->
-          {positional, [{String.to_atom(key), compile_value(value)} | keyword]}
+          {positional, [{String.to_atom(key), compile_value(value, scope)} | keyword]}
 
         value, {positional, keyword} ->
-          {[compile_value(value) | positional], keyword}
+          {[compile_value(value, scope) | positional], keyword}
       end)
 
     {Enum.reverse(positional), Enum.reverse(keyword)}
@@ -242,7 +357,7 @@ defmodule Stem.Bytecode do
       {value, _binding} = Code.eval_quoted(quoted)
       value
     else
-      unsupported_expression("non-literal expression #{inspect(source)} in argument position")
+      unsupported("non-literal expression #{inspect(source)} in argument position")
     end
   end
 
@@ -250,15 +365,10 @@ defmodule Stem.Bytecode do
        when is_number(term) or is_binary(term) or is_boolean(term) or is_nil(term),
        do: true
 
-  # Charlist literal, e.g. 'abc'.
   defp literal_term?(term) when is_list(term), do: Enum.all?(term, &is_integer/1)
-  # Negated numeric literal, e.g. -5.
   defp literal_term?({:-, _meta, [number]}) when is_number(number), do: true
   defp literal_term?(_term), do: false
 
-  # `{{ }}` resolves its escape mode against the configured default at compile
-  # time, mirroring `Stem.Compiler`. `{{{ }}}` (`:none`) and any explicit mode
-  # pass through unchanged.
   defp resolve_escape(:default, escape_default), do: escape_default
   defp resolve_escape(escape_mode, _escape_default), do: escape_mode
 
@@ -272,37 +382,43 @@ defmodule Stem.Bytecode do
     i18n: Stem.Transformers.I18n
   }
 
-  defp collect_transformer_names(instructions) do
-    instructions
-    |> Enum.flat_map(&value_ops/1)
-    |> Enum.flat_map(fn
-      {:call, name, _positional, _keyword} -> [name]
-      _ -> []
-    end)
-    |> Enum.uniq()
+  defp transformer_names(instructions) do
+    instructions |> Enum.flat_map(&instruction_calls/1) |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
   end
 
-  defp value_ops({:emit, value_op, _escape}), do: walk_value_op(value_op)
-  defp value_ops(_instruction), do: []
+  defp instruction_calls({:emit, value_op, _escape}), do: value_calls(value_op)
 
-  defp walk_value_op({:call, _name, positional, keyword} = op) do
+  defp instruction_calls({:if, cond_op, then_branch, else_branch}) do
+    value_calls(cond_op) ++ branch_calls(then_branch) ++ branch_calls(else_branch)
+  end
+
+  defp instruction_calls({block, value_op, _params, body, else_branch})
+       when block in [:each, :with] do
+    value_calls(value_op) ++ branch_calls(body) ++ branch_calls(else_branch)
+  end
+
+  defp instruction_calls({:text, _text}), do: []
+
+  defp branch_calls(instructions), do: Enum.flat_map(instructions, &instruction_calls/1)
+
+  defp value_calls({:call, _name, positional, keyword} = op) do
     nested =
-      Enum.flat_map(positional, &walk_value_op/1) ++
-        Enum.flat_map(keyword, fn {_key, value} -> walk_value_op(value) end)
+      Enum.flat_map(positional, &value_calls/1) ++
+        Enum.flat_map(keyword, fn {_key, value} -> value_calls(value) end)
 
     [op | nested]
   end
 
-  defp walk_value_op({:get, base, _segments}), do: walk_value_op(base)
-  defp walk_value_op(op), do: [op]
+  defp value_calls({:get, base, _segments}), do: value_calls(base)
+  defp value_calls(_op), do: []
 
   defp capabilities(transformer_names) do
-    group_membership = group_membership()
+    membership = group_membership()
 
     @group_modules
     |> Map.keys()
     |> Enum.filter(fn group ->
-      Enum.any?(transformer_names, &(&1 in Map.get(group_membership, group, [])))
+      Enum.any?(transformer_names, &(&1 in Map.get(membership, group, [])))
     end)
     |> Enum.sort()
   end
@@ -318,14 +434,47 @@ defmodule Stem.Bytecode do
 
   # ── Disassembly ──────────────────────────────────────────────────────────────
 
-  defp disasm_instruction({:text, text}), do: "EMIT_TEXT #{inspect(text)}"
+  defp disasm_instruction({:text, text}, depth),
+    do: [indent(depth) <> "EMIT_TEXT #{inspect(text)}"]
 
-  defp disasm_instruction({:emit, value_op, escape}) do
-    "EMIT #{disasm_value(value_op)} ESCAPE=#{escape}"
+  defp disasm_instruction({:emit, value_op, escape}, depth) do
+    [indent(depth) <> "EMIT #{disasm_value(value_op)} ESCAPE=#{escape}"]
   end
+
+  defp disasm_instruction({:if, cond_op, then_branch, else_branch}, depth) do
+    [indent(depth) <> "IF #{disasm_value(cond_op)}"] ++
+      disasm_branch("THEN", then_branch, depth) ++ disasm_branch("ELSE", else_branch, depth)
+  end
+
+  defp disasm_instruction({block, value_op, params, body, else_branch}, depth)
+       when block in [:each, :with] do
+    head =
+      indent(depth) <>
+        "#{block |> Atom.to_string() |> String.upcase()} #{disasm_value(value_op)}" <>
+        params_suffix(params)
+
+    [head] ++ disasm_branch("DO", body, depth) ++ disasm_branch("ELSE", else_branch, depth)
+  end
+
+  defp disasm_branch(_label, [], _depth), do: []
+
+  defp disasm_branch(label, instructions, depth) do
+    [indent(depth + 1) <> label] ++
+      Enum.flat_map(instructions, &disasm_instruction(&1, depth + 2))
+  end
+
+  defp params_suffix([]), do: ""
+  defp params_suffix(params), do: " AS |#{Enum.join(params, " ")}|"
+
+  defp indent(depth), do: String.duplicate("  ", depth)
 
   defp disasm_value({:lit, value}), do: "LIT #{inspect(value)}"
   defp disasm_value({:assign, name}), do: "ASSIGN #{name}"
+  defp disasm_value({:local, name}), do: "LOCAL #{name}"
+  defp disasm_value({:this}), do: "THIS"
+  defp disasm_value({:index}), do: "INDEX0"
+  defp disasm_value({:index1}), do: "INDEX1"
+  defp disasm_value({:key}), do: "KEY"
 
   defp disasm_value({:get, base, segments}) do
     "GET #{disasm_value(base)} #{Enum.map_join(segments, ".", &to_string/1)}"

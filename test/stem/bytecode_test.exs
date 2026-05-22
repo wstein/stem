@@ -123,31 +123,66 @@ defmodule Stem.BytecodeTest do
     end
   end
 
+  describe "compile/2 block helpers" do
+    test "lowers if/else; unless is if with swapped branches" do
+      assert compile("{{#if ok}}Y{{else}}N{{/if}}").instructions ==
+               [{:if, {:assign, :ok}, [{:text, "Y"}], [{:text, "N"}]}]
+
+      assert compile("{{#unless ok}}Y{{else}}N{{/unless}}").instructions ==
+               [{:if, {:assign, :ok}, [{:text, "N"}], [{:text, "Y"}]}]
+    end
+
+    test "lowers each with block params and resolves block-scoped references" do
+      program = compile("{{#each items as |item idx|}}{{item}}:{{@index}}{{/each}}")
+
+      assert program.instructions == [
+               {:each, {:assign, :items}, [:item, :idx],
+                [{:emit, {:local, :item}, :html}, {:text, ":"}, {:emit, {:index}, :html}], []}
+             ]
+    end
+
+    test "resolves bare identifiers to the current item inside each" do
+      program = compile("{{#each users}}{{name}}{{/each}}")
+
+      assert program.instructions ==
+               [{:each, {:assign, :users}, [], [{:emit, {:get, {:this}, [:name]}, :html}], []}]
+    end
+
+    test "lowers with, binding this for this-references" do
+      program = compile("{{#with user}}{{this.name}}{{/with}}")
+
+      assert program.instructions ==
+               [{:with, {:assign, :user}, [], [{:emit, {:get, {:this}, [:name]}, :html}], []}]
+    end
+
+    test "inlines a yielded region at the yield site" do
+      program = compile("{{#region body}}hi {{name}}{{/region}}<main>{{yield body}}</main>")
+
+      assert program.instructions == [
+               {:text, "<main>"},
+               {:text, "hi "},
+               {:emit, {:assign, :name}, :html},
+               {:text, "</main>"}
+             ]
+    end
+
+    test "@index/@index1 and @key outside each resolve to top-level assigns" do
+      assert compile("{{@index}}").instructions == [{:emit, {:assign, :index0}, :html}]
+      assert compile("{{@index1}}").instructions == [{:emit, {:assign, :index1}, :html}]
+      assert compile("{{@key}}").instructions == [{:emit, {:assign, :key}, :html}]
+    end
+  end
+
   describe "compile/2 rejects out-of-scope constructs" do
-    test "block helpers raise UnsupportedError" do
-      for source <- [
-            "{{#if ok}}y{{/if}}",
-            "{{#unless ok}}y{{/unless}}",
-            "{{#each items}}{{this}}{{/each}}",
-            "{{#with user}}{{name}}{{/with}}"
-          ] do
-        assert_raise UnsupportedError, ~r/block helper/, fn -> compile(source) end
+    test "recursive region yields raise UnsupportedError" do
+      assert_raise UnsupportedError, ~r/recursive region yield/, fn ->
+        compile("{{#region a}}{{yield a}}{{/region}}{{yield a}}")
       end
     end
 
-    test "regions and yields raise UnsupportedError" do
-      assert_raise UnsupportedError, ~r/region/, fn ->
-        compile("{{#region body}}x{{/region}}")
-      end
-
-      assert_raise UnsupportedError, ~r/yield/, fn ->
-        compile("{{yield body}}")
-      end
-    end
-
-    test "block-scoped references raise UnsupportedError" do
-      for source <- ["{{this}}", "{{@index}}", "{{@key}}", "{{this.name}}"] do
-        assert_raise UnsupportedError, ~r/block/, fn -> compile(source) end
+    test "a top-level this reference raises UnsupportedError" do
+      for source <- ["{{this}}", "{{this.name}}"] do
+        assert_raise UnsupportedError, ~r/this/, fn -> compile(source) end
       end
     end
 
@@ -175,6 +210,34 @@ defmodule Stem.BytecodeTest do
 
       assert disasm =~ "GET ASSIGN user name"
       assert disasm =~ "CALL format(ASSIGN x, sep=LIT \"-\")"
+    end
+
+    test "renders block helpers with nested branches" do
+      disasm =
+        "{{#each items as |item|}}{{#if item}}{{item}}{{else}}-{{/if}}{{/each}}"
+        |> compile()
+        |> Bytecode.disasm()
+
+      assert disasm =~ "EACH ASSIGN items AS |item|"
+      assert disasm =~ "DO"
+      assert disasm =~ "IF LOCAL item"
+      assert disasm =~ "THEN"
+      assert disasm =~ "ELSE"
+    end
+
+    test "renders loops and with, including block-scoped values" do
+      disasm =
+        "{{#each xs}}{{@index}}{{@index1}}{{@key}}{{this}}{{/each}}{{#with u}}ok{{/with}}"
+        |> compile()
+        |> Bytecode.disasm()
+
+      assert disasm =~ "EACH ASSIGN xs\n"
+      assert disasm =~ "INDEX0"
+      assert disasm =~ "INDEX1"
+      assert disasm =~ "KEY"
+      assert disasm =~ "THIS"
+      assert disasm =~ "WITH ASSIGN u\n"
+      refute disasm =~ "WITH ASSIGN u AS"
     end
   end
 end
