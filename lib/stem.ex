@@ -456,7 +456,10 @@ defmodule Stem do
   end
 
   defp maybe_apply_contract(quoted, options) do
-    case Stem.Contract.normalize(options[:contract]) do
+    raw_contract = options[:contract]
+    Stem.Contract.validate_types!(raw_contract)
+
+    case Stem.Contract.normalize(raw_contract) do
       nil ->
         quoted
 
