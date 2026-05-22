@@ -48,6 +48,12 @@ defmodule Stem.FormatterTest do
     end
   end
 
+  test "raises on an invalid expression inside a raw triple-stash tag" do
+    assert_raise ArgumentError, ~r/pipeline stages must be helper names/, fn ->
+      Stem.Formatter.format_string("{{{name |> String.trim()}}}")
+    end
+  end
+
   test "preserves whitespace trim markers while normalizing block tags" do
     assert Stem.Formatter.format_string(" {{~ #if ok ~}} yes {{~ /if ~}} ") ==
              " {{~#if ok~}} yes {{~/if~}} "
