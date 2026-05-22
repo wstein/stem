@@ -128,7 +128,7 @@ Stem supports runtime compilation and evaluation in addition to compile-time mac
 
 ```elixir
 quoted = Stem.compile_string("Hello {{name}}")
-{result, _binding} = Code.eval_quoted(quoted, assigns: [name: "Nina"], helpers: [])
+{result, _binding} = Code.eval_quoted(quoted, assigns: [name: "Nina"], transformers: %{})
 #=> {"Hello Nina", ...}
 
 Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"])
@@ -165,13 +165,13 @@ Stem.Unsafe.eval_string("{{a + b}}", assigns: [a: 1, b: 2], allow_elixir_express
 
 Additional features:
 - `contract:` lets templates declare required assigns at the call boundary
-- Helper pipelines are allowed by default because they lower to helper invocations instead of arbitrary Elixir
+- Transformer pipelines are allowed by default because they lower to transformer invocations instead of arbitrary Elixir
 
-## Helper Capability Groups
+## Transformer Capability Groups
 
-Stem enforces **capability management** for helpers to reduce SSTI attack surface. Only a secure minimum of helpers is available by default; complex operations require explicit opt-in via capability groups.
+Stem enforces **capability management** for transformers to reduce SSTI attack surface. Only a secure minimum of built-in transformers is available by default; complex operations require explicit opt-in via the `transformers:` map.
 
-**Secure Minimum** (always available):
+**Secure Minimum** (always available as built-ins):
 
 * Output escaping: `escape_html`, `escape_json`, `json`, `inspect`
 * Safe defaults: `default`
@@ -179,17 +179,17 @@ Stem enforces **capability management** for helpers to reduce SSTI attack surfac
 
 **Optional Groups** (explicit opt-in):
 
-* `Stem.Helpers.Strings` — Text manipulation (`trim`, `upcase`, `truncate`, etc.)
-* `Stem.Helpers.Collections` — Data operations (`map`, `filter`, `sort_by`, `group_by`, etc.)
-* `Stem.Helpers.Predicates` — Boolean tests (`contains`, `empty?`, `present?`)
+* `Stem.Transformers.Strings` — Text manipulation (`trim`, `upcase`, `truncate`, etc.)
+* `Stem.Transformers.Collections` — Data operations (`map`, `filter`, `sort_by`, `group_by`, etc.)
+* `Stem.Transformers.Predicates` — Boolean tests (`contains`, `empty?`, `present?`)
 
-Load groups at runtime:
+Load groups at runtime by calling `.all()` and merging:
 
 ```elixir
 Stem.Unsafe.eval_string(
   template,
   assigns: data,
-  helper_groups: [Stem.Helpers.Collections, Stem.Helpers.Strings]
+  transformers: Map.merge(Stem.Transformers.Collections.all(), Stem.Transformers.Strings.all())
 )
 ```
 
@@ -197,11 +197,11 @@ Or pin defaults in `.stem.config.json`:
 
 ```json
 {
-  "helper_groups": "Stem.Helpers.Strings,Stem.Helpers.Collections"
+  "transformers": "Stem.Transformers.Strings,Stem.Transformers.Collections"
 }
 ```
 
-Selector-based helpers such as `map`, `filter`, `sort_by`, and `group_by` accept a simple dotted path string like `"author.name"` so templates can stay declarative without anonymous functions.
+Selector-based transformers such as `map`, `filter`, `sort_by`, and `group_by` accept a simple dotted path string like `"author.name"` so templates can stay declarative without anonymous functions.
 
 ## Tooling
 

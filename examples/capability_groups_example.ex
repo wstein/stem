@@ -4,13 +4,13 @@ defmodule Examples.CapabilityGroupsExample do
   @moduledoc """
   Demonstrates Stem's capability management system for reducing SSTI attack surface.
 
-  The capability model requires explicit opt-in to helper function groups, making
+  The capability model requires explicit opt-in to transformer groups, making
   the security boundary visible and auditable.
   """
 
   def example_secure_minimum do
-    # Only Stem.Helpers.Minimum is available by default
-    # This includes escaping and basic operations, but not data manipulation
+    # Only built-in transformers (Stem.Transformers.Minimum) are available by default.
+    # This includes escaping and basic operations, but not data manipulation.
 
     template = "User: {{name}}, Status: {{status}}"
 
@@ -24,14 +24,14 @@ defmodule Examples.CapabilityGroupsExample do
   end
 
   def example_with_strings do
-    # Add string manipulation by loading Stem.Helpers.Strings
+    # Add string manipulation by loading Stem.Transformers.Strings.
 
     template = "Welcome, {{name |> trim |> upcase}}!"
 
     Stem.Unsafe.eval_string(
       template,
       assigns: [name: " alice "],
-      helper_groups: [Stem.Helpers.Strings]
+      transformers: Stem.Transformers.Strings.all()
     )
 
     # Output: "Welcome, ALICE!"
@@ -39,7 +39,7 @@ defmodule Examples.CapabilityGroupsExample do
   end
 
   def example_with_collections do
-    # Enable collection operations for filtering and transformation
+    # Enable collection operations for filtering and transformation.
 
     template = """
     {{#each authors}}
@@ -57,19 +57,19 @@ defmodule Examples.CapabilityGroupsExample do
     Stem.Unsafe.eval_string(
       template,
       assigns: assigns,
-      helper_groups: [Stem.Helpers.Collections, Stem.Helpers.Strings]
+      transformers: Map.merge(Stem.Transformers.Collections.all(), Stem.Transformers.Strings.all())
     )
 
-    # Output includes author names capitalized and book counts
+    # Output includes author names capitalized and book counts.
     # Adds: map, filter, sort_by, group_by, compact, uniq, etc.
   end
 
   def example_with_config do
-    # Load helper groups from .stem.config.json instead of repeating in each call
+    # Load transformer groups from .stem.config.json instead of repeating in each call.
 
     # .stem.config.json:
     # {
-    #   "helper_groups": "Stem.Helpers.Strings,Stem.Helpers.Collections"
+    #   "transformers": "Stem.Transformers.Strings,Stem.Transformers.Collections"
     # }
 
     template = """
@@ -85,23 +85,23 @@ defmodule Examples.CapabilityGroupsExample do
       ]
     ]
 
-    # No need to pass helper_groups - loaded from config
+    # No need to pass transformers: — loaded from config.
     Stem.Unsafe.eval_string(template, assigns: assigns)
   end
 
-  def example_custom_helpers do
-    # Combine capability groups with custom helpers for domain-specific operations
+  def example_custom_transformers do
+    # Combine a group with custom transformers for domain-specific operations.
 
     template = "{{user |> format_name}} - Rating: {{rating |> star_rating}}"
 
-    custom_helpers = [
-      star_rating: fn [rating], _ctx ->
+    custom = %{
+      "star_rating" => fn [rating], _ctx ->
         String.duplicate("⭐", min(rating, 5))
       end,
-      format_name: fn [user], _ctx ->
+      "format_name" => fn [user], _ctx ->
         "#{user["first_name"]} #{user["last_name"]}"
       end
-    ]
+    }
 
     assigns = [
       user: %{"first_name" => "Jane", "last_name" => "Doe"},
@@ -110,9 +110,8 @@ defmodule Examples.CapabilityGroupsExample do
 
     Stem.Unsafe.eval_string(
       template,
-      [assigns: assigns],
-      helpers: custom_helpers,
-      helper_groups: [Stem.Helpers.Strings]
+      assigns: assigns,
+      transformers: Map.merge(Stem.Transformers.Strings.all(), custom)
     )
 
     # Output: "Jane Doe - Rating: ⭐⭐⭐⭐"
@@ -120,36 +119,38 @@ defmodule Examples.CapabilityGroupsExample do
 
   def security_principle do
     # The capability model enforces the principle of least privilege:
-    # Templates only have access to the minimum helpers they need.
+    # templates only have access to the transformers they actually need.
 
-    # ❌ BAD: Expose all helpers by default
+    # ❌ BAD: Expose all transformers by default
     # risk = high
     # audit trail = invisible
 
-    # ✅ GOOD: Explicit opt-in to capability groups
+    # ✅ GOOD: Explicit opt-in via transformers: map
     # risk = minimized
     # audit trail = visible (developer must declare groups in code or config)
 
     # This makes dangerous choices visible during code review:
-    # If you see `helper_groups: [Stem.Helpers.Collections]`, you know
+    # If you see `transformers: Stem.Transformers.Collections.all()`, you know
     # the template has access to powerful data operations.
+    :ok
   end
 
   def migration_strategy do
-    # For existing applications using Stem helpers:
+    # For existing applications:
 
-    # 1. Identify which templates need which helpers
-    # 2. Add :helper_groups to eval_string/3 calls that need them
+    # 1. Identify which templates need which transformers
+    # 2. Add `transformers:` to eval_string/3 calls that need them
     # 3. Pin defaults in .stem.config.json to reduce boilerplate
     # 4. For compile-time templates: no changes needed
     #    (the compiler inlines all operations at build time)
 
     # Before:
     # Stem.Unsafe.eval_string(template, assigns: data)
-    # (All helpers available)
+    # (All built-in transformers available)
 
-    # After:
-    # Stem.Unsafe.eval_string(template, assigns: data, helper_groups: [Stem.Helpers.Strings])
-    # (Only Strings helpers available, plus the Minimum set)
+    # After (adding Strings group):
+    # Stem.Unsafe.eval_string(template, assigns: data,
+    #   transformers: Stem.Transformers.Strings.all())
+    :ok
   end
 end

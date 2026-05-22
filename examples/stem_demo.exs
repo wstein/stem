@@ -13,14 +13,14 @@ defmodule StemDemo do
     Items: {{#each items}}[{{this}}]{{/each}}
     Partial: {{> signature}}
     """,
-    [:assigns, :helpers],
+    [:assigns, :transformers],
     partials: %{signature: "Kind regards, {{name}}"}
   )
 end
 
-# Helpers resolve at render time, so registering before the call is enough.
-Stem.Helpers.register(:upcase, fn [value], _ctx ->
+# Transformers resolve at render time, so registering before the call is enough.
+Stem.Transformers.register(:upcase, fn [value], _ctx ->
   String.upcase(to_string(value))
 end)
 
-IO.puts(StemDemo.render([name: "nina", admin: true, items: ["a", "b"]], []))
+IO.puts(StemDemo.render([name: "nina", admin: true, items: ["a", "b"]], %{}))

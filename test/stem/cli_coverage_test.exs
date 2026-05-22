@@ -192,7 +192,7 @@ defmodule Stem.CLICoverageTest do
       # Templates with assigns need :assigns binding
       assert String.contains?(template_with_assigns, "{{")
 
-      # Templates with helpers need :helpers binding
+      # Templates with transformers need :transformers binding
       assert String.contains?(template_with_helper, "upcase")
     end
 
@@ -228,12 +228,12 @@ defmodule Stem.CLICoverageTest do
       assert values == [bindings]
     end
 
-    test "runtime_binding_values with helpers" do
-      _args = [:assigns, :helpers]
+    test "runtime_binding_values with transformers" do
+      _args = [:assigns, :transformers]
       bindings = %{name: "value"}
 
-      # Should create values for both assigns and helpers
-      values = [bindings, []]
+      # Should create values for both assigns and transformers
+      values = [bindings, %{}]
 
       assert length(values) == 2
     end

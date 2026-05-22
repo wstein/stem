@@ -97,7 +97,7 @@ Complex data operations require explicit opt-in via capability groups.
 Stem.Unsafe.eval_string(
   "{{items |> map(author.name) |> take(5)}}",
   assigns: [items: books],
-  helper_groups: [Stem.Helpers.Collections, Stem.Helpers.Strings]
+  transformers: Map.merge(Stem.Transformers.Collections.all(), Stem.Transformers.Strings.all())
 )
 ----
 
@@ -105,14 +105,14 @@ Stem.Unsafe.eval_string(
 [source,json]
 ----
 {
-  "helper_groups": "Stem.Helpers.Collections,Stem.Helpers.Strings"
+  "transformers": "Stem.Transformers.Collections,Stem.Transformers.Strings"
 }
 ----
 
 *From CLI:*
 [source,sh]
 ----
-bin/stem data.json template.stem --helper-groups Stem.Helpers.Collections,Stem.Helpers.Strings
+bin/stem data.json template.stem --transformers Stem.Transformers.Collections,Stem.Transformers.Strings
 ----
 
 === Why Capability Groups?

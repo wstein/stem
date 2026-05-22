@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# Each built-in helper and block is compiled into a named function.
+# Each built-in transformer and block is compiled into a named function.
 # Stem also supports runtime eval/compile APIs, but this guide demonstrates
 # compiled functions through the Stem DSL.
 defmodule BuiltinHelpersGuide do
@@ -14,17 +14,17 @@ defmodule BuiltinHelpersGuide do
 
   deftemplate(:with_block, "{{#with story}}{{this.title}} by {{this.author}}{{/with}}", [:assigns])
 
-  deftemplate(:lookup_map, ~s({{lookup person "firstName"}}), [:assigns, :helpers])
-  deftemplate(:lookup_list, "{{lookup values 1}}", [:assigns, :helpers])
-  deftemplate(:pipeline_name, "{{name |> trim |> upcase |> truncate(4)}}", [:assigns, :helpers])
+  deftemplate(:lookup_map, ~s({{lookup person "firstName"}}), [:assigns, :transformers])
+  deftemplate(:lookup_list, "{{lookup values 1}}", [:assigns, :transformers])
+  deftemplate(:pipeline_name, "{{name |> trim |> upcase |> truncate(4)}}", [:assigns, :transformers])
 
   deftemplate(
     :pipeline_people,
     "{{people |> sort_by(\"name\") |> map(\"name\") |> join(\", \")}}",
-    [:assigns, :helpers]
+    [:assigns, :transformers]
   )
 
-  deftemplate(:pipeline_default, "{{nickname |> default(\"friend\")}}", [:assigns, :helpers])
+  deftemplate(:pipeline_default, "{{nickname |> default(\"friend\")}}", [:assigns, :transformers])
 end
 
 assigns = [
@@ -46,8 +46,8 @@ IO.puts(BuiltinHelpersGuide.unless_block(assigns))
 IO.puts(BuiltinHelpersGuide.each_index(assigns))
 IO.puts(BuiltinHelpersGuide.each_key(assigns))
 IO.puts(BuiltinHelpersGuide.with_block(assigns))
-IO.puts(BuiltinHelpersGuide.lookup_map(assigns, []))
-IO.puts(BuiltinHelpersGuide.lookup_list(assigns, []))
-IO.puts(BuiltinHelpersGuide.pipeline_name(assigns, []))
-IO.puts(BuiltinHelpersGuide.pipeline_people(assigns, []))
-IO.puts(BuiltinHelpersGuide.pipeline_default(assigns, []))
+IO.puts(BuiltinHelpersGuide.lookup_map(assigns, %{}))
+IO.puts(BuiltinHelpersGuide.lookup_list(assigns, %{}))
+IO.puts(BuiltinHelpersGuide.pipeline_name(assigns, %{}))
+IO.puts(BuiltinHelpersGuide.pipeline_people(assigns, %{}))
+IO.puts(BuiltinHelpersGuide.pipeline_default(assigns, %{}))

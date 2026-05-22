@@ -28,23 +28,24 @@ Stem enforces control over arbitrary Elixir expression execution via the `allow_
 Runtime evaluation APIs (`Stem.Unsafe.eval_string/3` and `Stem.Unsafe.eval_file/3`) default to `allow_elixir_expressions: false`, requiring explicit opt-in to use `allow_elixir_expressions: true`.
 If you feel forced to enable arbitrary expressions in production, this indicates an architectural flaw: business logic is leaking into the presentation layer and should be refactored into helpers or backend services.
 
-== Helper Capability Groups
+== Transformer Capability Groups
 
-Beyond restricting arbitrary Elixir code, Stem also enforces capability management for helper functions.
-A template has access only to the helpers it explicitly needs, reducing Server-Side Template Injection (SSTI) attack surface through **principle of least privilege**.
+Beyond restricting arbitrary Elixir code, Stem also enforces capability management for transformer functions.
+A template has access only to the transformers it explicitly needs, reducing Server-Side Template Injection (SSTI) attack surface through **principle of least privilege**.
 
-The secure minimum (`Stem.Helpers.Minimum`) is always available and contains only essential helpers for XSS protection and output formatting.
+The secure minimum (`Stem.Transformers.Minimum`) is always available as built-ins and contains only essential transformers for XSS protection and output formatting.
 Complex data operations (filtering, sorting, grouping, transformation) are organized into optional capability groups:
 
-* `Stem.Helpers.Strings` — Text manipulation
-* `Stem.Helpers.Collections` — Data transformation and filtering
-* `Stem.Helpers.Predicates` — Boolean predicates for conditionals
+* `Stem.Transformers.Strings` — Text manipulation
+* `Stem.Transformers.Collections` — Data transformation and filtering
+* `Stem.Transformers.Predicates` — Boolean predicates for conditionals
 
-Templates must explicitly declare which groups they need via the `:helper_groups` parameter:
+Templates declare which groups they need via the `transformers:` map — call `.all()` on each group and merge:
 
 [source,elixir]
 ----
-Stem.Unsafe.eval_string(template, assigns: data, helper_groups: [Stem.Helpers.Collections])
+Stem.Unsafe.eval_string(template, assigns: data,
+  transformers: Stem.Transformers.Collections.all())
 ----
 
 Or via `.stem.config.json` defaults:
@@ -52,7 +53,7 @@ Or via `.stem.config.json` defaults:
 [source,json]
 ----
 {
-  "helper_groups": "Stem.Helpers.Collections,Stem.Helpers.Strings"
+  "transformers": "Stem.Transformers.Collections,Stem.Transformers.Strings"
 }
 ----
 
