@@ -14,11 +14,12 @@ Dynamic rendering of untrusted template source at runtime introduces Server-Side
 #### How
 Prefer compile-time macros for all static templates. Only use `Stem.Unsafe.eval_string/3` or `Stem.Unsafe.eval_file/3` when templates are dynamically generated from strictly trusted sources (e.g., controlled internal tools). Both Unsafe functions default to `allow_elixir_expressions: false`, which forbids arbitrary Elixir expressions. Pass `allow_elixir_expressions: true` explicitly only when the template source is fully trusted and structured Stem expressions are insufficient.
 
+Add `mix stem.audit` to your CI pipeline to enforce this boundary automatically. It scans production config files and fails the build if `allow_elixir_expressions: true` is found, making policy violations visible before deployment.
+
 #### Links
 
 * [[Execution Modes Overview]] - How the allow_elixir_expressions flag works
 * [[Runtime Evaluation and Sandboxing]] - Runtime API details and flag semantics
 * [[Native AST Compilation Pipeline]] - The pipeline these macros drive
 * [[HTML Escaping Behavior]] - Output sanitization and raw expression guidance
-
-## Links
+* [[CI Security Gates]] - `mix stem.audit` task documentation

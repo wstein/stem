@@ -61,6 +61,26 @@ Or via `.stem.config.json` defaults:
 By restricting access to only approved groups, Stem minimizes the "gadget chains" available for exploitation.
 The requirement to explicitly declare which operations are needed makes dangerous choices visible during code review.
 
+=== Collections capability audit signal
+
+Because `Stem.Transformers.Collections` is the most powerful group, every call to `Collections.all/0` emits an
+audit signal.
+When the `:telemetry` application is present, it dispatches a `[:stem, :capability_group, :loaded]` event:
+
+[source,elixir]
+----
+:telemetry.attach(
+  "stem-collections-audit",
+  [:stem, :capability_group, :loaded],
+  fn _event, _measurements, %{group: group}, _config ->
+    Logger.warning("Stem capability group loaded: #{inspect(group)}")
+  end,
+  nil
+)
+----
+
+When `:telemetry` is not in the application tree, a `Logger.warning` is emitted instead so nothing crashes.
+
 == Explicit Data Boundaries
 
 Stem preserves an explicit boundary between data and templates at all levels.
@@ -73,3 +93,78 @@ Whitespace logic allows adjusting spacing around rendered content without litter
 
 * `{{~ ... ~}}`: Trims literal whitespace symmetrically before and after the tag.
 * `{{~ ... }}` and `{{ ... ~}}`: Trims whitespace precisely on the given side (one-sided trim).
+
+`Stem.Formatter` normalises the visual noise produced by these markers — spaces between the braces
+and the tilde are removed during formatting so source files stay readable without any semantic change.
+
+== Template Formatter Plugin
+
+`Stem.Formatter` implements the `Mix.Tasks.Format` behaviour, making it a standard Elixir formatter
+plugin.
+Declaring it in `.formatter.exs` causes `mix format` to process `.stem` files alongside Elixir sources
+in one command:
+
+[source,elixir]
+----
+# .formatter.exs
+[
+  plugins: [Stem.Formatter],
+  inputs: [
+    "{mix,.formatter}.exs",
+    "{config,lib,test}/**/*.{ex,exs}",
+    "templates/**/*.stem"
+  ]
+]
+----
+
+This integration enables:
+
+* Automatic formatting on `mix format` in CI and editor save hooks.
+* `mix format --check-formatted` validation that covers both Elixir and Stem files.
+* Zero-friction adoption — no separate `mix stem.format` step required.
+
+The `mix stem.format` standalone task still exists for direct invocations and file-glob patterns.
+
+== Assign Contracts
+
+Templates can declare a typed assign contract using the `contract:` option, modelled on ST4 Group Interfaces.
+Contracts are evaluated at two points:
+
+. *Compile time*: `Stem.Contract.validate_types!/1` rejects unknown type annotations before code is generated.
+. *Render time*: `Stem.Contract.validate!/2` raises `ArgumentError` if required assigns are missing or typed assigns have the wrong type.
+
+[source,elixir]
+----
+Stem.function_from_string(:def, :render, "{{title}} ({{count}})", [:assigns],
+  contract: [
+    required: [title: :string, count: :integer],
+    optional: [active: :boolean]
+  ])
+----
+
+A shared contract module can be referenced by atom, providing a single interface definition for many templates:
+
+[source,elixir]
+----
+deftemplate :article, "{{title}}", [:assigns],
+  contract: MyApp.Contracts.ArticleView  # must export contract/0
+----
+
+Supported types: `:string`, `:integer`, `:float`, `:number`, `:boolean`, `:atom`, `:list`, `:map`, `:any`.
+
+== CI Security Gate
+
+`mix stem.audit` is a static analysis gate that scans config files for `allow_elixir_expressions: true`
+and fails the build (exit code 1) on any violation.
+Add it to CI pipelines to prevent configuration drift from accidentally re-enabling SSTI-vulnerable
+expression evaluation in production:
+
+[source,yaml]
+----
+# .github/workflows/ci.yml
+- run: mix stem.audit
+----
+
+The task scans `config/prod.exs` and `config/runtime.exs` by default.
+Use `--paths` to scan additional files.
+Each violation is reported with file path, line number, and the offending line.

@@ -25,7 +25,7 @@ This mirrors the `allow_elixir_expressions` flag: intentional friction makes dan
 
 - **`Stem.Transformers.Minimum`** (always on, cannot be disabled): `escape_html`, `escape_json`, `json`, `inspect`, `default`, `lookup`, `join`, `log`. Never exposes dangerous operations.
 - **`Stem.Transformers.Strings`**: `trim`, `upcase`, `downcase`, `capitalize`, `truncate`, `replace`, `take`, `drop`, `slice`, `first`, `reverse`, `starts_with`, `ends_with`.
-- **`Stem.Transformers.Collections`**: `map`, `filter`, `compact`, `uniq`, `sort`, `sort_by`, `group_by`, `take`, `drop`, `slice`, `first`, `flatten`, `reverse`. ⚠️ Powerful — an attacker could chain these to extract internal state; enable only for trusted sources.
+- **`Stem.Transformers.Collections`**: `map`, `filter`, `compact`, `uniq`, `sort`, `sort_by`, `group_by`, `take`, `drop`, `slice`, `first`, `flatten`, `reverse`. ⚠️ Powerful — an attacker could chain these to extract internal state; enable only for trusted sources. Calling `.all()` emits a `[:stem, :capability_group, :loaded]` telemetry event (or a `Logger.warning` when `:telemetry` is not in the application tree) so operators can audit which processes load this group dynamically.
 - **`Stem.Transformers.Predicates`**: `contains`, `empty?`, `present?`. For `{{#if}}` blocks and `filter`.
 
 ### Loading groups
@@ -50,6 +50,30 @@ Pin defaults in `.stem.config.json` as comma-separated module names:
 { "transformers": "Stem.Transformers.Strings,Stem.Transformers.Collections" }
 ```
 
+### Auditing Collections usage
+
+Because `Stem.Transformers.Collections` is the most powerful capability group, every call to
+`Collections.all/0` emits an audit signal:
+
+- **With `:telemetry`** in the application tree, dispatches
+  `[:stem, :capability_group, :loaded]` with `%{count: 1}` measurements and
+  `%{group: Stem.Transformers.Collections, caller: <stacktrace>}` metadata.
+  Attach a handler with `:telemetry.attach/4` to log, alert, or rate-limit.
+- **Without `:telemetry`**, falls back to a `Logger.warning` so nothing crashes
+  in projects that have not opted into telemetry.
+
+```elixir
+# Attach a telemetry handler at application startup
+:telemetry.attach(
+  "stem-collections-audit",
+  [:stem, :capability_group, :loaded],
+  fn event, _measurements, %{group: group}, _config ->
+    Logger.warning("Stem capability group loaded: #{inspect(group)}")
+  end,
+  nil
+)
+```
+
 ### Custom transformers
 
 Register globally with `Stem.Transformers.register/2`, or pass per-call by merging into the `transformers:` map. Custom entries are available regardless of built-in groups.
@@ -64,3 +88,4 @@ Module-level access to all `Stem.Transformers` helpers is unchanged; the capabil
 - [[Compile-Time-Only Security Model]] - Why compile-time templates are safer
 - [[Runtime Evaluation and Sandboxing]] - Runtime API details
 - [[Universal Architecture Principles]] - Capability management as a portable design principle
+- [[CI Security Gates]] - Using `mix stem.audit` to enforce no allow_elixir_expressions in production

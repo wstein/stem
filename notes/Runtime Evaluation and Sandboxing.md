@@ -47,9 +47,25 @@ Stem.Unsafe.eval_string(
 
 **Never pass end-user input as the template string** to either function. Only load transformer groups when their operations are actually needed.
 
+### CI enforcement
+
+Add `mix stem.audit` to your CI pipeline to fail the build if `allow_elixir_expressions: true`
+appears in any production config file:
+
+```yaml
+# .github/workflows/ci.yml
+- run: mix stem.audit
+# Scans config/prod.exs and config/runtime.exs by default.
+# Override with --paths to scan additional or different files.
+```
+
+`mix stem.audit` exits with code 1 on any violation, which causes most CI systems to fail the
+job automatically. It prints the exact file, line number, and offending text for each violation.
+
 ## Links
 
 - [[Execution Modes Overview]] - Comprehensive guide to restricted vs. unrestricted execution
 - [[Compile-Time-Only Security Model]] - The preferred, safer compile-time alternative
 - [[Project Configuration Defaults]] - The `.stem.config.json` settings that control default behavior
 - [[Strict Model-View Separation and State Isolation]] - Why the sandboxing boundary matters
+- [[CI Security Gates]] - `mix stem.audit` for enforcing no allow_elixir_expressions in production

@@ -18,9 +18,18 @@ declared.
 
 `defdictionary/2` accepts only static literal structures for presentation data:
 maps, lists, strings, numbers, booleans, and `nil`. Module attributes are
-allowed only when they expand to those literal forms. The dictionary contents
-are merged into template assigns in declaration order, and explicit caller
-assigns still take precedence.
+allowed only when they expand to those literal forms at the point of declaration.
+The dictionary contents are merged into template assigns in declaration order,
+and explicit caller assigns still take precedence.
+
+### Module attribute support
+
+`defdictionary :name, @my_attr` is accepted when `@my_attr` has been set to a
+literal value earlier in the same module. Elixir's two-phase compilation means
+the attribute value cannot be read inside the macro expansion body; instead, a
+sentinel `{:__stem_attr_ref__, :my_attr}` is stored at macro time and resolved
+to the real value at render time via the compiled `__stem_dictionary__/1` lookup.
+The linter still validates the attribute's value and rejects non-literals.
 
 ## Why
 
