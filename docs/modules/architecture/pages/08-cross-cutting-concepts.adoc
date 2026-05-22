@@ -30,6 +30,10 @@ If you feel forced to enable arbitrary expressions in production, this indicates
 
 == Transformer Capability Groups
 
+Other template engines globally expose filters (Jinja2) or allow dynamic block-helper registration (Handlebars).
+These dynamic contexts are common vectors for Server-Side Template Injection (SSTI) and XSS — a custom helper that returns an unescaped string silently bypasses the engine's protections.
+Stem replaces this paradigm with strictly enforced capability groups: there is no runtime helper registration that can dictate execution flow, and structural blocks are hardcoded at compile time.
+
 Beyond restricting arbitrary Elixir code, Stem also enforces capability management for transformer functions.
 A template has access only to the transformers it explicitly needs, reducing Server-Side Template Injection (SSTI) attack surface through **principle of least privilege**.
 

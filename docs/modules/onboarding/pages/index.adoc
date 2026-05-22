@@ -17,6 +17,32 @@ Unlike earlier templating efforts that translated text via EEx, Stem owns the en
 * Try running a template directly using the bundled `mix stem` task or the `bin/stem` shell launcher: `echo '{"name": "Alice"}' | bin/stem test/fixtures/stem_template.stem`
 * Link deeper operational detail into xref:manual:index.adoc[the manual].
 
+== Migrating to Stem: Engine Comparisons
+
+Stem looks like Handlebars and Jinja2 but behaves like StringTemplate 4 (ST4).
+Understanding these strict boundaries will help you design secure templates.
+
+=== Coming from Jinja2
+
+Jinja2 relies on a runtime sandbox to evaluate complex inline math (`{{ 1 + 1 }}`) and state mutations (`{% set var = "value" %}`).
+
+* *The Stem Difference:* Stem forbids inline logic and variable assignment to guarantee strict model-view separation. Templates must remain side-effect free.
+* *The Solution:* Move calculations to your Elixir controller, or use declarative data pipelines via registered transformers (e.g., `{{ value |> custom_math_transformer }}`).
+
+=== Coming from Handlebars
+
+Handlebars allows developers to register dynamic block helpers that dictate execution flow at runtime. This dynamic nature has historically led to severe XSS vulnerabilities when helpers return unescaped HTML.
+
+* *The Stem Difference:* Stem hardcodes structural blocks (`#if`, `#unless`, `#each`, `#with`, `#region`) into the Elixir AST at compile time for zero-overhead performance and security. All standard `{{ }}` output is HTML-escaped by default.
+* *The Solution:* Separate data transformation from structure. Use standard blocks for layout, and use Transformer Capability Groups to shape the data first (`{{#each users |> active_only}}`).
+
+=== Coming from StringTemplate 4 (ST4)
+
+ST4 relies on dynamic runtime group inheritance (`group Java1_5 : Java;`) and lazy evaluation.
+
+* *The Stem Difference:* Stem is bound to the Erlang VM and compiles templates inline eagerly at compile time to maximize speed.
+* *The Solution:* Replace ST4's dynamic group inheritance with Stem's `{{#region}}` and `{{yield}}` tags. `{{#each}}` renders a concrete list or map, so materialize any lazy or streamed data in your Elixir controller (for example with `Enum.to_list/1`) before placing it in `assigns`. Use Stem Contracts (`contract: [...]`) to replicate ST4 Group Interfaces.
+
 == How The Docs Are Organized
 
 * xref:index.adoc[Docs Index] gives the top-level map.
