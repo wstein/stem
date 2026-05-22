@@ -1,5 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 
 [
-  inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}", "examples/**/*.exs"]
+  plugins: [Stem.Formatter],
+  inputs: [
+    "{mix,.formatter}.exs",
+    "{config,lib,test}/**/*.{ex,exs}",
+    "examples/**/*.exs",
+    "examples/templates/**/*.stem"
+  ]
 ]

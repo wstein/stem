@@ -5,6 +5,25 @@ Code.require_file("../test_helper.exs", __DIR__)
 defmodule Stem.FormatterTest do
   use ExUnit.Case, async: true
 
+  # ── Formatter plugin behaviour ─────────────────────────────────────────────
+
+  test "implements Mix.Tasks.Format behaviour" do
+    assert function_exported?(Stem.Formatter, :features, 1)
+    assert function_exported?(Stem.Formatter, :format, 2)
+  end
+
+  test "features/1 declares .stem extension" do
+    assert [extensions: extensions] = Stem.Formatter.features([])
+    assert ".stem" in extensions
+  end
+
+  test "format/2 delegates to format_string/1" do
+    source = "Hello {{ name }}"
+    assert Stem.Formatter.format(source, []) == Stem.Formatter.format_string(source)
+  end
+
+  # ── format_string/1 canonicalisation ──────────────────────────────────────
+
   test "formats expressions and helper subexpressions canonically" do
     assert Stem.Formatter.format_string("Hello {{  format   ( uppercase name )  }}") ==
              "Hello {{format (uppercase name)}}"

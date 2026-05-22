@@ -1,9 +1,49 @@
 # SPDX-License-Identifier: Apache-2.0
 
 defmodule Stem.Formatter do
-  @moduledoc false
+  @moduledoc """
+  Stem template formatter.
+
+  Normalises Stem template syntax: canonicalises tag whitespace, trims markers,
+  and pipes. Can be used as a standalone function (`format_string/1`) or as an
+  **Elixir formatter plugin** declared in `.formatter.exs`:
+
+      # .formatter.exs
+      [
+        plugins: [Stem.Formatter],
+        inputs: ["{mix,.formatter}.exs", "{config,lib,test}/**/*.{ex,exs}", "templates/**/*.stem"]
+      ]
+
+  When used as a plugin, `mix format` automatically processes every `.stem` file
+  listed in `inputs`.
+
+  ## Whitespace-trim markers
+
+  The formatter normalises the visual noise around `{{~` and `~}}` whitespace
+  trim markers:
+
+  - `{{ ~ ... ~ }}` → `{{~...~}}`  (spaces between braces and tilde removed)
+  - `{{~ ... ~}}` → `{{~...~}}`   (space after opening tilde removed)
+  - `{{  expr  }}` → `{{expr}}`   (padding around expressions removed)
+
+  This keeps template source readable without changing compiled output.
+  """
+
+  @behaviour Mix.Tasks.Format
 
   alias Stem.Expression
+
+  # ── Formatter plugin callbacks ────────────────────────────────────────────
+
+  @impl Mix.Tasks.Format
+  def features(_opts), do: [extensions: [".stem"]]
+
+  @impl Mix.Tasks.Format
+  def format(contents, _opts) do
+    format_string(contents)
+  end
+
+  # ── Public API ────────────────────────────────────────────────────────────
 
   @spec format_string(binary()) :: binary()
   def format_string(source) when is_binary(source) do
