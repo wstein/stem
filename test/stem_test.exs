@@ -330,6 +330,14 @@ defmodule StemTest do
                    end
     end
 
+    test "invalid pipelines underline the full tag span" do
+      assert_raise Stem.SyntaxError,
+                   ~r/1 \| \{\{name \|> String\.trim\(\)\}\}\n\s+\| \^~+/,
+                   fn ->
+                     Stem.__compile_string__("{{name |> String.trim()}}")
+                   end
+    end
+
     test "unterminated expression includes a snippet" do
       message = """
       nofile:1:5: expected closing '}}' for Stem expression

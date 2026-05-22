@@ -3,7 +3,7 @@
 # SPDX-FileCopyrightText: 2012 Plataformatec
 
 defmodule Stem.SyntaxError do
-  defexception [:file, :line, :column, :snippet, message: "syntax error"]
+  defexception [:file, :line, :column, :end_line, :end_column, :snippet, message: "syntax error"]
 
   @impl true
   def message(exception) do
@@ -344,19 +344,28 @@ defmodule Stem do
   defp compile_string_internal(source, options) do
     file = options[:file] || "nofile"
 
-    case Stem.Parser.parse(source, options) do
+    case Stem.Parser.parse_with_spans(source, options) do
       {:ok, ast} ->
         ast
         |> Stem.Compiler.compile(options)
         |> maybe_apply_contract(options)
 
-      {:error, message, %{line: line, column: column}} ->
+      {:error, message, meta} ->
         raise Stem.SyntaxError,
           file: file,
-          line: line,
-          column: column,
+          line: meta.line,
+          column: meta.column,
+          end_line: Map.get(meta, :end_line, meta.line),
+          end_column: Map.get(meta, :end_column, meta.column),
           message: message,
-          snippet: code_snippet(source, line, column)
+          snippet:
+            code_snippet(
+              source,
+              meta.line,
+              meta.column,
+              Map.get(meta, :end_line, meta.line),
+              Map.get(meta, :end_column, meta.column)
+            )
     end
   end
 
@@ -401,7 +410,7 @@ defmodule Stem do
     end
   end
 
-  defp code_snippet(source, line, column) do
+  defp code_snippet(source, line, column, end_line, end_column) do
     line_start = max(line - 2, 1)
     digits = line |> Integer.to_string() |> byte_size()
     padding = String.duplicate(" ", digits)
@@ -411,7 +420,10 @@ defmodule Stem do
     |> Enum.slice((line_start - 1)..(line - 1))
     |> Enum.map_reduce(line_start, fn
       text, number when number == line ->
-        arrow = String.duplicate(" ", max(column - 1, 0)) <> "^"
+        arrow =
+          String.duplicate(" ", max(column - 1, 0)) <>
+            underline(text, line, column, end_line, end_column)
+
         {"#{number} | #{text}\n #{padding}| #{arrow}", number + 1}
 
       text, number ->
@@ -420,6 +432,24 @@ defmodule Stem do
     |> case do
       {[], _} -> ""
       {lines, _} -> Enum.join(["\n #{padding}|" | lines], "\n")
+    end
+  end
+
+  defp underline(text, line, column, end_line, end_column) do
+    width = span_width(text, line, column, end_line, end_column)
+    "^" <> String.duplicate("~", max(width - 1, 0))
+  end
+
+  defp span_width(text, line, column, end_line, end_column) do
+    cond do
+      end_line == line and end_column > column ->
+        end_column - column
+
+      end_line == line ->
+        1
+
+      true ->
+        max(String.length(text) - column + 1, 1)
     end
   end
 end

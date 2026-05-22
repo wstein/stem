@@ -23,7 +23,12 @@ defmodule Stem.Parser do
   # Types (kept public so callers can reference them without Stem.Tokenizer)
   # ---------------------------------------------------------------------------
 
-  @type meta :: %{line: pos_integer(), column: pos_integer()}
+  @type meta :: %{
+          required(:line) => pos_integer(),
+          required(:column) => pos_integer(),
+          optional(:end_line) => pos_integer(),
+          optional(:end_column) => pos_integer()
+        }
   @type kind :: :if | :unless | :each | :with | :region
 
   @type token ::
@@ -143,9 +148,18 @@ defmodule Stem.Parser do
 
   @spec parse(binary(), keyword()) :: {:ok, Stem.AST.t()} | {:error, binary(), meta()}
   def parse(source, opts \\ []) when is_binary(source) do
+    case parse_with_spans(source, opts) do
+      {:ok, ast} -> {:ok, strip_ast_spans(ast)}
+      {:error, message, meta} -> {:error, message, strip_meta_spans(meta)}
+    end
+  end
+
+  @doc false
+  @spec parse_with_spans(binary(), keyword()) :: {:ok, Stem.AST.t()} | {:error, binary(), meta()}
+  def parse_with_spans(source, opts \\ []) when is_binary(source) do
     partials = opts |> Keyword.get(:partials, %{}) |> normalize_partials()
 
-    with {:ok, tokens} <- tokenize(source, opts) do
+    with {:ok, tokens} <- tokenize_with_spans(source, opts) do
       parse_stream(tokens, partials, [])
     end
   end
@@ -155,6 +169,13 @@ defmodule Stem.Parser do
   @doc false
   @spec tokenize(binary(), keyword()) :: {:ok, [token()]} | {:error, binary(), meta()}
   def tokenize(source, opts \\ []) when is_binary(source) do
+    case tokenize_with_spans(source, opts) do
+      {:ok, tokens} -> {:ok, Enum.map(tokens, &strip_token_spans/1)}
+      {:error, message, meta} -> {:error, message, strip_meta_spans(meta)}
+    end
+  end
+
+  defp tokenize_with_spans(source, opts) when is_binary(source) do
     line = Keyword.get(opts, :line, 1)
     column = Keyword.get(opts, :column, 1)
 
@@ -164,7 +185,9 @@ defmodule Stem.Parser do
 
       {:ok, _raw, rest, _ctx, {err_line, err_line_offset}, err_byte} ->
         err_col = err_byte - err_line_offset + 1
-        {:error, unterminated_error(rest), %{line: err_line, column: err_col}}
+
+        {:error, unterminated_error(rest),
+         %{line: err_line, column: err_col, end_line: err_line, end_column: err_col}}
     end
   end
 
@@ -179,7 +202,7 @@ defmodule Stem.Parser do
   # token (equal to the end position of the previous token).
 
   defp assemble_tokens([], line, col, acc, _trim_next) do
-    {:ok, Enum.reverse([{:eof, %{line: line, column: col}} | acc])}
+    {:ok, Enum.reverse([{:eof, span_meta(line, col, line, col)} | acc])}
   end
 
   defp assemble_tokens(
@@ -208,7 +231,7 @@ defmodule Stem.Parser do
           [{:text, prev_text <> trimmed, prev_meta} | rest_acc]
 
         {_, _} ->
-          [{:text, trimmed, %{line: text_line, column: text_col}} | acc]
+          [{:text, trimmed, span_meta(text_line, text_col, end_line, end_col)} | acc]
       end
 
     assemble_tokens(rest, end_line, end_col, acc2, false)
@@ -241,7 +264,7 @@ defmodule Stem.Parser do
          acc,
          _trim_next
        ) do
-    meta = %{line: line, column: col}
+    meta = span_meta(line, col, end_line, end_col)
     {inner2, trim_left, trim_right} = extract_trim_markers(inner)
     acc2 = maybe_trim_last_text(acc, trim_left)
 
@@ -259,7 +282,7 @@ defmodule Stem.Parser do
          acc,
          _trim_next
        ) do
-    meta = %{line: line, column: col}
+    meta = span_meta(line, col, end_line, end_col)
     {inner2, trim_left, trim_right} = extract_trim_markers(inner)
     acc2 = maybe_trim_last_text(acc, trim_left)
 
@@ -388,6 +411,10 @@ defmodule Stem.Parser do
   defp maybe_trim_trailing_marker(inner, true), do: String.trim_trailing(inner, "~")
   defp maybe_trim_trailing_marker(inner, false), do: inner
 
+  defp span_meta(line, column, end_line, end_column) do
+    %{line: line, column: column, end_line: end_line, end_column: end_column}
+  end
+
   # ---------------------------------------------------------------------------
   # Error messages (lexer level)
   # ---------------------------------------------------------------------------
@@ -433,10 +460,60 @@ defmodule Stem.Parser do
 
   # Tokenises and parses a nested source (used for partial expansion).
   defp parse_source(source, partials, stack) do
-    with {:ok, tokens} <- tokenize(source) do
+    with {:ok, tokens} <- tokenize_with_spans(source, []) do
       parse_stream(tokens, partials, stack)
     end
   end
+
+  defp strip_ast_spans(nodes), do: Enum.map(nodes, &strip_node_spans/1)
+
+  defp strip_node_spans({:text, text}), do: {:text, text}
+  defp strip_node_spans({:yield, name, meta}), do: {:yield, name, strip_meta_spans(meta)}
+
+  defp strip_node_spans({:expr, expr, escape_mode, meta}) do
+    {:expr, expr, escape_mode, strip_meta_spans(meta)}
+  end
+
+  defp strip_node_spans({:if, expr, body, else_body, meta}) do
+    {:if, expr, strip_ast_spans(body), strip_ast_spans(else_body), strip_meta_spans(meta)}
+  end
+
+  defp strip_node_spans({:unless, expr, body, else_body, meta}) do
+    {:unless, expr, strip_ast_spans(body), strip_ast_spans(else_body), strip_meta_spans(meta)}
+  end
+
+  defp strip_node_spans({:each, expr, params, body, else_body, meta}) do
+    {:each, expr, params, strip_ast_spans(body), strip_ast_spans(else_body),
+     strip_meta_spans(meta)}
+  end
+
+  defp strip_node_spans({:with, expr, params, body, else_body, meta}) do
+    {:with, expr, params, strip_ast_spans(body), strip_ast_spans(else_body),
+     strip_meta_spans(meta)}
+  end
+
+  defp strip_node_spans({:region, name, body, meta}) do
+    {:region, name, strip_ast_spans(body), strip_meta_spans(meta)}
+  end
+
+  defp strip_meta_spans(%{line: line, column: column}), do: %{line: line, column: column}
+
+  defp strip_token_spans({:text, text, meta}), do: {:text, text, strip_meta_spans(meta)}
+
+  defp strip_token_spans({:expr, raw, escape_mode, meta}),
+    do: {:expr, raw, escape_mode, strip_meta_spans(meta)}
+
+  defp strip_token_spans({:block_open, kind, args, meta}),
+    do: {:block_open, kind, args, strip_meta_spans(meta)}
+
+  defp strip_token_spans({:block_else, meta}), do: {:block_else, strip_meta_spans(meta)}
+
+  defp strip_token_spans({:block_close, kind, meta}),
+    do: {:block_close, kind, strip_meta_spans(meta)}
+
+  defp strip_token_spans({:yield, name, meta}), do: {:yield, name, strip_meta_spans(meta)}
+  defp strip_token_spans({:partial, name, meta}), do: {:partial, name, strip_meta_spans(meta)}
+  defp strip_token_spans({:eof, meta}), do: {:eof, strip_meta_spans(meta)}
 
   defp parse_stream(tokens, partials, stack) do
     case collect(tokens, partials, stack, []) do
