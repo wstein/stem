@@ -129,9 +129,14 @@ defmodule Stem do
   expanded template scope, so nested blocks can define local yields without
   prop drilling through helper arguments.
 
-  Stem ships built-in helpers for common text and collection transforms,
-  including `trim`, `upcase`, `truncate`, `default`, `join`, `map`,
-  `filter`, `sort_by`, `group_by`, `compact`, `uniq`, `json`, and `escape_html`.
+  Stem ships transformers in capability groups. Only the secure `Minimum` group
+  (`escape_html`, `escape_json`, `json`, `default`, `lookup`, `join`, `inspect`,
+  `log`) is available by default. Text transforms (`trim`, `upcase`, `truncate`,
+  …), collection transforms (`map`, `filter`, `sort_by`, `group_by`, …), and
+  predicates (`contains`, `empty?`, `present?`) must be loaded explicitly via the
+  `transformers:` binding — see `Stem.Transformers.Strings`,
+  `Stem.Transformers.Collections`, `Stem.Transformers.Predicates`, and the
+  `Stem.Transformers.Standard` bundle.
 
       iex> defmodule Greeting do
       ...>   require Stem
@@ -148,7 +153,11 @@ defmodule Stem do
   Missing assigns render as an empty string. Pass `warn_on_missing_assigns:
   true` to print a warning for missing values.
 
-      iex> Stem.Unsafe.eval_string("{{name |> trim |> upcase}}", assigns: [name: "  nina  "])
+      iex> Stem.Unsafe.eval_string(
+      ...>   "{{name |> trim |> upcase}}",
+      ...>   assigns: [name: "  nina  "],
+      ...>   transformers: Stem.Transformers.Standard.all()
+      ...> )
       "NINA"
   """
 

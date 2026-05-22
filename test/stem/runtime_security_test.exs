@@ -55,9 +55,23 @@ defmodule Stem.RuntimeSecurityTest do
   test "allow_elixir_expressions: false allows transformer pipelines" do
     assert Stem.Unsafe.eval_string(
              "{{name |> trim}}",
-             [assigns: [name: " Nina "]],
+             [assigns: [name: " Nina "], transformers: Stem.Transformers.Standard.all()],
              allow_elixir_expressions: false
            ) == "Nina"
+  end
+
+  test "the secure default exposes only Minimum; powerful groups need explicit loading" do
+    # `upcase` (Strings) is not in the Minimum floor, so a bare runtime eval
+    # cannot reach it — the capability must be loaded deliberately.
+    assert_raise Stem.SyntaxError, ~r/unknown transformer 'upcase'/, fn ->
+      Stem.Unsafe.eval_string("{{name |> upcase}}", assigns: [name: "nina"])
+    end
+
+    assert Stem.Unsafe.eval_string(
+             "{{name |> upcase}}",
+             assigns: [name: "nina"],
+             transformers: Stem.Transformers.Strings.all()
+           ) == "NINA"
   end
 
   test "runtime contract validation enforces required assigns" do

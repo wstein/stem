@@ -16,8 +16,10 @@ defmodule Stem.Unsafe do
   ## Functions
 
   Pass a map of named functions via the `:transformers` binding to make them available inside
-  templates. Built-in transformers (`escape_html`, `default`, `join`, etc.) are always available
-  without passing anything.
+  templates. Only the secure `Stem.Transformers.Minimum` group (`escape_html`, `escape_json`,
+  `json`, `default`, `lookup`, `join`, `inspect`, `log`) is available without passing anything.
+  String, collection, and predicate transformers must be loaded explicitly — this keeps the
+  default attack surface minimal for runtime evaluation.
 
   Use the pre-built capability groups to load curated sets of transformers and merge in any
   custom transformers you need:
@@ -38,10 +40,11 @@ defmodule Stem.Unsafe do
       )
 
   Available capability groups (call `.all()` to get their function map):
-  - `Stem.Transformers.Minimum` — Essential transformers (escaping, defaults, lookup)
+  - `Stem.Transformers.Minimum` — Essential transformers (escaping, defaults, lookup); the default
   - `Stem.Transformers.Strings` — String transformers
   - `Stem.Transformers.Collections` — Data transformation and filtering
   - `Stem.Transformers.Predicates` — Boolean tests
+  - `Stem.Transformers.Standard` — Minimum + Strings, the safe presentation bundle
 
   **When to use**:
   - Command-line tools (controlled boundary)

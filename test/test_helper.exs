@@ -38,7 +38,7 @@ defmodule Stem.TestTemplate do
 
   def eval_string(template, bindings \\ [], options \\ [])
       when is_binary(template) and is_list(bindings) and is_list(options) do
-    transformer_bindings = Keyword.get(options, :transformers, %{})
+    transformer_bindings = Keyword.get(options, :transformers, trusted_transformers())
 
     bindings =
       if template_uses_helpers?(template) do
@@ -59,7 +59,7 @@ defmodule Stem.TestTemplate do
 
   def eval_file(filename, bindings \\ [], options \\ [])
       when is_list(bindings) and is_list(options) do
-    transformer_bindings = Keyword.get(options, :transformers, %{})
+    transformer_bindings = Keyword.get(options, :transformers, trusted_transformers())
     filename = IO.chardata_to_string(filename)
     template = File.read!(filename)
 
@@ -79,6 +79,18 @@ defmodule Stem.TestTemplate do
       end)
 
     apply(module, :render, arg_values(args, bindings))
+  end
+
+  # The test harness simulates a trusted compile-time environment, so it loads
+  # every capability group by default. The library's own default is the secure
+  # Minimum-only floor (see Stem.Transformers.default_transformers/0); tests that
+  # exercise capability gating pass an explicit `:transformers` map to override.
+  defp trusted_transformers do
+    %{}
+    |> Map.merge(Stem.Transformers.Minimum.all())
+    |> Map.merge(Stem.Transformers.Strings.all())
+    |> Map.merge(Stem.Transformers.Collections.all())
+    |> Map.merge(Stem.Transformers.Predicates.all())
   end
 
   defp module_for(key, builder) do

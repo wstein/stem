@@ -13,6 +13,19 @@ defmodule Stem.TransformersTest do
     Map.fetch!(helpers, Atom.to_string(name)).(args, ctx)
   end
 
+  # The dispatcher-path tests below exercise resolution + execution for every
+  # capability group, so they load the full trusted set explicitly. The library
+  # default is the Minimum-only floor — see the "secure default" test.
+  defp all_transformers do
+    %{}
+    |> Map.merge(Stem.Transformers.Minimum.all())
+    |> Map.merge(Stem.Transformers.Strings.all())
+    |> Map.merge(Stem.Transformers.Collections.all())
+    |> Map.merge(Stem.Transformers.Predicates.all())
+  end
+
+  defp invoke_all(name, args), do: Transformers.invoke(name, args, transformers: all_transformers())
+
   setup do
     Transformers.clear()
     :ok
@@ -126,21 +139,21 @@ defmodule Stem.TransformersTest do
 
       Enum.each(cases, fn {name, args, message} ->
         assert_raise ArgumentError, message, fn ->
-          Transformers.invoke(name, args, [])
+          invoke_all(name, args)
         end
       end)
     end
 
     test "string transforms and defaults" do
-      assert Transformers.invoke(:trim, ["  Nina  "], []) == "Nina"
-      assert Transformers.invoke(:upcase, ["Nina"], []) == "NINA"
-      assert Transformers.invoke(:downcase, ["Nina"], []) == "nina"
-      assert Transformers.invoke(:capitalize, ["nina"], []) == "Nina"
-      assert Transformers.invoke(:replace, ["stem", "e", "a"], []) == "stam"
-      assert Transformers.invoke(:truncate, ["stem", 3], []) == "ste"
-      assert Transformers.invoke(:truncate, ["stem", 3, ".."], []) == "s.."
-      assert Transformers.invoke(:default, [nil, "fallback"], []) == "fallback"
-      assert Transformers.invoke(:default, ["value", "fallback"], []) == "value"
+      assert invoke_all(:trim, ["  Nina  "]) == "Nina"
+      assert invoke_all(:upcase, ["Nina"]) == "NINA"
+      assert invoke_all(:downcase, ["Nina"]) == "nina"
+      assert invoke_all(:capitalize, ["nina"]) == "Nina"
+      assert invoke_all(:replace, ["stem", "e", "a"]) == "stam"
+      assert invoke_all(:truncate, ["stem", 3]) == "ste"
+      assert invoke_all(:truncate, ["stem", 3, ".."]) == "s.."
+      assert invoke_all(:default, [nil, "fallback"]) == "fallback"
+      assert invoke_all(:default, ["value", "fallback"]) == "value"
     end
 
     test "json and inspect transformers serialize values" do
@@ -150,76 +163,99 @@ defmodule Stem.TransformersTest do
     end
 
     test "predicates cover strings, maps, and lists" do
-      assert Transformers.invoke(:contains, [["a", "b"], "a"], [])
-      assert Transformers.invoke(:contains, [%{name: "Nina"}, :name], [])
-      assert Transformers.invoke(:contains, ["stem", "te"], [])
-      refute Transformers.invoke(:contains, [123, :name], [])
-      assert Transformers.invoke(:empty?, [[]], [])
-      refute Transformers.invoke(:empty?, [[1]], [])
-      refute Transformers.invoke(:empty?, [0], [])
-      assert Transformers.invoke(:present?, [[1]], [])
-      refute Transformers.invoke(:present?, [%{}], [])
-      assert Transformers.invoke(:starts_with, ["stem", "st"], [])
-      assert Transformers.invoke(:ends_with, ["stem", "em"], [])
+      assert invoke_all(:contains, [["a", "b"], "a"])
+      assert invoke_all(:contains, [%{name: "Nina"}, :name])
+      assert invoke_all(:contains, ["stem", "te"])
+      refute invoke_all(:contains, [123, :name])
+      assert invoke_all(:empty?, [[]])
+      refute invoke_all(:empty?, [[1]])
+      refute invoke_all(:empty?, [0])
+      assert invoke_all(:present?, [[1]])
+      refute invoke_all(:present?, [%{}])
+      assert invoke_all(:starts_with, ["stem", "st"])
+      assert invoke_all(:ends_with, ["stem", "em"])
     end
 
     test "collection transformers support declarative selectors" do
       rows = [%{name: "b", active: true}, %{name: "a", active: false}, %{name: "c", active: true}]
 
-      assert Transformers.invoke(:map, [rows, "name"], []) == ["b", "a", "c"]
+      assert invoke_all(:map, [rows, "name"]) == ["b", "a", "c"]
 
-      assert Transformers.invoke(:filter, [rows, "active"], []) == [
+      assert invoke_all(:filter, [rows, "active"]) == [
                %{name: "b", active: true},
                %{name: "c", active: true}
              ]
 
-      assert Transformers.invoke(:sort_by, [rows, "name"], []) == [
+      assert invoke_all(:sort_by, [rows, "name"]) == [
                %{name: "a", active: false},
                %{name: "b", active: true},
                %{name: "c", active: true}
              ]
 
-      assert Transformers.invoke(:group_by, [rows, "active"], []) == %{
+      assert invoke_all(:group_by, [rows, "active"]) == %{
                false => [%{name: "a", active: false}],
                true => [%{name: "b", active: true}, %{name: "c", active: true}]
              }
 
-      assert Transformers.invoke(:map, [[%{"name" => "nina"}], "name"], []) == ["nina"]
-      assert Transformers.invoke(:map, [[%{name: "nina"}], :name], []) == ["nina"]
-      assert Transformers.invoke(:map, [[%{1 => "one"}], 1], []) == ["one"]
-      assert Transformers.invoke(:map, [[["a", "b"]], "1"], []) == ["b"]
-      assert Transformers.invoke(:map, [[["a", "b"]], 1], []) == ["b"]
-      assert Transformers.invoke(:map, [[["a", "b"]], "x"], []) == [nil]
-      assert Transformers.invoke(:map, [[:atom_entry], "name"], []) == [nil]
-      assert Transformers.invoke(:map, [[%{other: "x"}], "name"], []) == [nil]
+      assert invoke_all(:map, [[%{"name" => "nina"}], "name"]) == ["nina"]
+      assert invoke_all(:map, [[%{name: "nina"}], :name]) == ["nina"]
+      assert invoke_all(:map, [[%{1 => "one"}], 1]) == ["one"]
+      assert invoke_all(:map, [[["a", "b"]], "1"]) == ["b"]
+      assert invoke_all(:map, [[["a", "b"]], 1]) == ["b"]
+      assert invoke_all(:map, [[["a", "b"]], "x"]) == [nil]
+      assert invoke_all(:map, [[:atom_entry], "name"]) == [nil]
+      assert invoke_all(:map, [[%{other: "x"}], "name"]) == [nil]
     end
 
     test "list and string transformers support common sequence operations" do
-      assert Transformers.invoke(:join, [["a", "b"], ","], []) == "a,b"
-      assert Transformers.invoke(:join, [["a", "b"]], []) == "ab"
-      assert Transformers.invoke(:compact, [[1, nil, 2]], []) == [1, 2]
-      assert Transformers.invoke(:compact, [nil], []) == []
-      assert Transformers.invoke(:sort, [[3, 1, 2]], []) == [1, 2, 3]
-      assert Transformers.invoke(:sort, [%{a: 2, b: 1}], []) == [1, 2]
-      assert Transformers.invoke(:filter, [[true, false, nil, 0, ""]], []) == [true]
-      assert Transformers.invoke(:take, [[1, 2, 3], 2], []) == [1, 2]
-      assert Transformers.invoke(:take, [[1, 2, 3], "2"], []) == [1, 2]
-      assert Transformers.invoke(:take, [7, 1], []) == [7]
-      assert Transformers.invoke(:drop, [[1, 2, 3], 1], []) == [2, 3]
-      assert Transformers.invoke(:slice, [[1, 2, 3], 1, 2], []) == [2, 3]
-      assert Transformers.invoke(:first, [[1, 2, 3]], []) == 1
-      assert Transformers.invoke(:first, [7], []) == 7
-      assert Transformers.invoke(:uniq, [[1, 1, 2]], []) == [1, 2]
-      assert Transformers.invoke(:flatten, [[[1], [2, [3]]]], []) == [1, 2, 3]
-      assert Transformers.invoke(:reverse, [[1, 2, 3]], []) == [3, 2, 1]
-      assert Transformers.invoke(:take, ["stem", 2], []) == "st"
-      assert Transformers.invoke(:drop, ["stem", 2], []) == "em"
-      assert Transformers.invoke(:slice, ["stem", 1, 2], []) == "te"
-      assert Transformers.invoke(:first, ["stem"], []) == "s"
-      assert Transformers.invoke(:reverse, ["stem"], []) == "mets"
+      assert invoke_all(:join, [["a", "b"], ","]) == "a,b"
+      assert invoke_all(:join, [["a", "b"]]) == "ab"
+      assert invoke_all(:compact, [[1, nil, 2]]) == [1, 2]
+      assert invoke_all(:compact, [nil]) == []
+      assert invoke_all(:sort, [[3, 1, 2]]) == [1, 2, 3]
+      assert invoke_all(:sort, [%{a: 2, b: 1}]) == [1, 2]
+      assert invoke_all(:filter, [[true, false, nil, 0, ""]]) == [true]
+      assert invoke_all(:take, [[1, 2, 3], 2]) == [1, 2]
+      assert invoke_all(:take, [[1, 2, 3], "2"]) == [1, 2]
+      assert invoke_all(:take, [7, 1]) == [7]
+      assert invoke_all(:drop, [[1, 2, 3], 1]) == [2, 3]
+      assert invoke_all(:slice, [[1, 2, 3], 1, 2]) == [2, 3]
+      assert invoke_all(:first, [[1, 2, 3]]) == 1
+      assert invoke_all(:first, [7]) == 7
+      assert invoke_all(:uniq, [[1, 1, 2]]) == [1, 2]
+      assert invoke_all(:flatten, [[[1], [2, [3]]]]) == [1, 2, 3]
+      assert invoke_all(:reverse, [[1, 2, 3]]) == [3, 2, 1]
+      assert invoke_all(:take, ["stem", 2]) == "st"
+      assert invoke_all(:drop, ["stem", 2]) == "em"
+      assert invoke_all(:slice, ["stem", 1, 2]) == "te"
+      assert invoke_all(:first, ["stem"]) == "s"
+      assert invoke_all(:reverse, ["stem"]) == "mets"
 
       assert_raise ArgumentError, ~r/take expects integer arguments/, fn ->
-        Transformers.invoke(:take, [[1, 2, 3], "nope"], [])
+        invoke_all(:take, [[1, 2, 3], "nope"])
+      end
+    end
+
+    test "secure default exposes only the Minimum group; other groups must be loaded" do
+      # Minimum transformers resolve with no `transformers:` binding.
+      assert Transformers.invoke(:escape_html, ["<b>"], []) == "&lt;b&gt;"
+      assert Transformers.invoke(:default, [nil, "x"], []) == "x"
+
+      # Strings/Collections/Predicates transformers are gated off by default.
+      for name <- [:upcase, :trim, :map, :filter, :sort_by, :contains, :empty?] do
+        assert_raise Stem.SyntaxError, "unknown transformer '#{name}'", fn ->
+          Transformers.invoke(name, ["x"], [])
+        end
+      end
+
+      # Loading a group via the binding makes its transformers available, while
+      # the Minimum floor stays reachable underneath.
+      strings = Stem.Transformers.Strings.all()
+      assert Transformers.invoke(:upcase, ["nina"], transformers: strings) == "NINA"
+      assert Transformers.invoke(:escape_html, ["<b>"], transformers: strings) == "&lt;b&gt;"
+
+      assert_raise Stem.SyntaxError, ~r/unknown transformer 'map'/, fn ->
+        Transformers.invoke(:map, [[%{a: 1}], "a"], transformers: strings)
       end
     end
   end

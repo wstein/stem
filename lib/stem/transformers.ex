@@ -56,15 +56,15 @@ defmodule Stem.Transformers do
     helper.(args, %{assigns: assigns, this: this, binding: binding_env})
   end
 
-  # The transformers available with no explicit `transformers:` binding and no
-  # globally registered transformer. The four capability-group modules are the
-  # single source of truth for the implementations.
+  # Secure-by-default capability floor: with no explicit `transformers:` binding
+  # and no globally registered transformer, only the Minimum group is callable.
+  # The Strings, Collections, and Predicates groups must be loaded explicitly
+  # (via the `transformers:` binding, the `--transformers` CLI flag, or config)
+  # so that a template can never reach a more powerful transformer than the
+  # caller has opted into. Minimum remains the floor even when other groups are
+  # loaded, since callers merge groups on top of it.
   defp default_transformers do
-    %{}
-    |> Map.merge(Stem.Transformers.Minimum.all())
-    |> Map.merge(Stem.Transformers.Strings.all())
-    |> Map.merge(Stem.Transformers.Collections.all())
-    |> Map.merge(Stem.Transformers.Predicates.all())
+    Stem.Transformers.Minimum.all()
   end
 
   defp normalize_name(name) when is_atom(name), do: Atom.to_string(name)
