@@ -358,7 +358,10 @@ defmodule Mix.Tasks.StemTest do
 
     test "expands transformer groups from CLI options and ignores invalid entries" do
       temp_dir =
-        Path.join(System.tmp_dir!(), "stem-cli-transformers-#{System.unique_integer([:positive])}")
+        Path.join(
+          System.tmp_dir!(),
+          "stem-cli-transformers-#{System.unique_integer([:positive])}"
+        )
 
       File.mkdir_p!(temp_dir)
 

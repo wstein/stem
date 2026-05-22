@@ -16,7 +16,11 @@ defmodule BuiltinHelpersGuide do
 
   deftemplate(:lookup_map, ~s({{lookup person "firstName"}}), [:assigns, :transformers])
   deftemplate(:lookup_list, "{{lookup values 1}}", [:assigns, :transformers])
-  deftemplate(:pipeline_name, "{{name |> trim |> upcase |> truncate(4)}}", [:assigns, :transformers])
+
+  deftemplate(:pipeline_name, "{{name |> trim |> upcase |> truncate(4)}}", [
+    :assigns,
+    :transformers
+  ])
 
   deftemplate(
     :pipeline_people,

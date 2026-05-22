@@ -204,7 +204,10 @@ defmodule Stem.FuzzTest do
       constant([]),
       list_of(expression_generator(child_depth), max_length: 3),
       bind(integer(1..3), fn kw_count ->
-        list_of(keyword_argument_generator(child_depth), min_length: kw_count, max_length: kw_count)
+        list_of(keyword_argument_generator(child_depth),
+          min_length: kw_count,
+          max_length: kw_count
+        )
       end)
     ])
   end
@@ -242,7 +245,10 @@ defmodule Stem.FuzzTest do
       constant([]),
       list_of(pipeline_arg_generator(child_depth), max_length: 3),
       bind(integer(1..3), fn kw_count ->
-        list_of(keyword_argument_generator(child_depth), min_length: kw_count, max_length: kw_count)
+        list_of(keyword_argument_generator(child_depth),
+          min_length: kw_count,
+          max_length: kw_count
+        )
       end)
     ])
   end

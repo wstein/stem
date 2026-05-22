@@ -197,9 +197,14 @@ defmodule Stem do
   defmacro function_from_string(kind, name, template, args \\ [], options \\ []) do
     quote bind_quoted: binding() do
       original_args = args
+      dictionary_assigns = Keyword.get(options, :dictionary_assigns, %{})
 
       if options[:contract] && :assigns not in original_args do
         raise ArgumentError, "Stem contracts require an :assigns argument"
+      end
+
+      if dictionary_assigns != %{} and :assigns not in original_args do
+        raise ArgumentError, "Stem dictionaries require an :assigns argument"
       end
 
       info = Keyword.merge([file: __ENV__.file, line: __ENV__.line], options)
@@ -214,7 +219,22 @@ defmodule Stem do
       noops =
         if :transformers in original_args,
           do: [quote(do: _ = var!(transformers)) | noops],
-          else: [quote(do: transformers = %{}) | noops]
+          else: [quote(do: _ = var!(transformers) = %{}) | noops]
+
+      noops =
+        if dictionary_assigns != %{} and :assigns in original_args,
+          do: [
+            quote(
+              do:
+                var!(assigns) =
+                  Stem.merge_dictionary_assigns(
+                    var!(assigns),
+                    unquote(Macro.escape(dictionary_assigns))
+                  )
+            )
+            | noops
+          ],
+          else: noops
 
       case kind do
         :def ->
@@ -267,9 +287,14 @@ defmodule Stem do
   defmacro function_from_file(kind, name, file, args \\ [], options \\ []) do
     quote bind_quoted: binding() do
       original_args = args
+      dictionary_assigns = Keyword.get(options, :dictionary_assigns, %{})
 
       if options[:contract] && :assigns not in original_args do
         raise ArgumentError, "Stem contracts require an :assigns argument"
+      end
+
+      if dictionary_assigns != %{} and :assigns not in original_args do
+        raise ArgumentError, "Stem dictionaries require an :assigns argument"
       end
 
       info = Keyword.merge([file: IO.chardata_to_string(file), line: 1], options)
@@ -284,7 +309,22 @@ defmodule Stem do
       noops =
         if :transformers in original_args,
           do: [quote(do: _ = var!(transformers)) | noops],
-          else: [quote(do: transformers = %{}) | noops]
+          else: [quote(do: _ = var!(transformers) = %{}) | noops]
+
+      noops =
+        if dictionary_assigns != %{} and :assigns in original_args,
+          do: [
+            quote(
+              do:
+                var!(assigns) =
+                  Stem.merge_dictionary_assigns(
+                    var!(assigns),
+                    unquote(Macro.escape(dictionary_assigns))
+                  )
+            )
+            | noops
+          ],
+          else: noops
 
       @external_resource file
       @file file
@@ -413,6 +453,26 @@ defmodule Stem do
         end
     end
   end
+
+  @doc false
+  def merge_dictionary_assigns(assigns, dictionary_assigns)
+
+  def merge_dictionary_assigns(assigns, dictionary_assigns)
+      when is_list(assigns) and is_list(dictionary_assigns) do
+    Keyword.merge(dictionary_assigns, assigns)
+  end
+
+  def merge_dictionary_assigns(assigns, dictionary_assigns)
+      when is_list(assigns) and is_map(dictionary_assigns) do
+    Keyword.merge(Map.to_list(dictionary_assigns), assigns)
+  end
+
+  def merge_dictionary_assigns(assigns, dictionary_assigns)
+      when is_map(assigns) and is_map(dictionary_assigns) do
+    Map.merge(dictionary_assigns, assigns)
+  end
+
+  def merge_dictionary_assigns(assigns, _dictionary_assigns), do: assigns
 
   defp code_snippet(source, line, column, end_line, end_column) do
     line_start = max(line - 2, 1)

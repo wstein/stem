@@ -30,7 +30,21 @@ defmodule Stem.Sigil do
     compiled = Stem.__compile_string__(template, file: __CALLER__.file, line: __CALLER__.line)
 
     quote do
+      _ = var!(transformers) = Keyword.get(binding(), :transformers, %{})
+
+      var!(assigns) =
+        Stem.merge_dictionary_assigns(var!(assigns), Stem.Sigil.dictionary_assigns(__MODULE__))
+
       unquote(compiled)
+    end
+  end
+
+  @doc false
+  def dictionary_assigns(module) when is_atom(module) do
+    if function_exported?(module, :__stem_dictionary_assigns__, 0) do
+      module.__stem_dictionary_assigns__()
+    else
+      %{}
     end
   end
 

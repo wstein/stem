@@ -45,6 +45,35 @@ defmodule Stem.DSLTest.SigilViews do
   def upcase(assigns, transformers), do: ~STEM"{{upcase name}}"
 end
 
+defmodule Stem.DSLTest.DictionaryViews do
+  use Stem.DSL
+
+  defdictionary(:status_map, %{
+    "1" => "Active",
+    "12" => "Inactive",
+    "99" => "Archived"
+  })
+
+  deftemplate(
+    :render_inline_template,
+    "{{lookup status_map current_status |> default(\"Unknown\")}}",
+    [:assigns]
+  )
+
+  deftemplate_file(
+    :render_file_template,
+    Path.join(__DIR__, "../fixtures/stem_dictionary_lookup.stem"),
+    [:assigns]
+  )
+
+  def render_inline_sigil(assigns) do
+    ~STEM"""
+    Inline {{lookup status_map current_status |> default("Unknown")}}
+    """
+    |> String.trim()
+  end
+end
+
 defmodule Stem.DSLTest.UseStemViews do
   use Stem
 
@@ -84,6 +113,47 @@ defmodule Stem.DSLTest do
   test "use Stem imports the DSL and sigil" do
     assert Stem.DSLTest.UseStemViews.hello(name: "Nina") == "Hello Nina"
     assert Stem.DSLTest.UseStemViews.hello_inline(name: "Nina") == "Inline Nina"
+  end
+
+  test "defdictionary injects assigns into deftemplate, deftemplate_file, and ~STEM" do
+    assert Stem.DSLTest.DictionaryViews.render_inline_template(current_status: "12") == "Inactive"
+
+    assert Stem.DSLTest.DictionaryViews.render_file_template(current_status: "99") ==
+             "File Status: Archived"
+
+    assert Stem.DSLTest.DictionaryViews.render_inline_sigil(current_status: "1") ==
+             "Inline Active"
+  end
+
+  test "explicit assigns override injected dictionaries" do
+    assert Stem.DSLTest.DictionaryViews.render_inline_template(
+             current_status: "12",
+             status_map: %{"12" => "Overridden"}
+           ) == "Overridden"
+  end
+
+  test "defdictionary requires :assigns in generated template functions" do
+    assert_raise ArgumentError, ~r/Stem dictionaries require an :assigns argument/, fn ->
+      Code.compile_string("""
+      defmodule Stem.DSLTest.InvalidDictionaryArgs do
+        use Stem.DSL
+
+        defdictionary :status_map, %{"1" => "Active"}
+        deftemplate :broken, "{{lookup status_map current_status}}", [:transformers]
+      end
+      """)
+    end
+  end
+
+  test "defdictionary requires an atom name" do
+    assert_raise ArgumentError, ~r/expected dictionary name to be an atom/, fn ->
+      Code.compile_string("""
+      defmodule Stem.DSLTest.InvalidDictionaryName do
+        use Stem.DSL
+        defdictionary "status_map", %{"1" => "Active"}
+      end
+      """)
+    end
   end
 
   test "template contracts validate required assigns" do

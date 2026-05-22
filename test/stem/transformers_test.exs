@@ -264,9 +264,11 @@ defmodule Stem.TransformersTest do
 
       assert invoke_module_helper(helpers, :join, [["a", "b"]]) == "ab"
       assert invoke_module_helper(helpers, :join, [["a", "b"], ","]) == "a,b"
+
       assert invoke_module_helper(helpers, :join, [%{a: 1, b: 2}, ","])
-         |> String.split(",")
-         |> Enum.sort() == ["1", "2"]
+             |> String.split(",")
+             |> Enum.sort() == ["1", "2"]
+
       assert invoke_module_helper(helpers, :join, [nil, ","]) == ""
       assert invoke_module_helper(helpers, :join, [7, ","]) == "7"
 
