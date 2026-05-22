@@ -9,18 +9,18 @@ defmodule Stem.Unsafe do
   template syntax to execute arbitrary code.
 
   Both `eval_string/3` and `eval_file/3` default to `allow_elixir_expressions: false`,
-  which allows only structured Stem expressions (variable paths, helper calls, literals).
+  which allows only structured Stem expressions (variable paths, transformer calls, literals).
   Pass `allow_elixir_expressions: true` explicitly to allow arbitrary Elixir expressions
   inside tags — only do this when the template source is fully controlled by your team.
 
   ## Functions
 
   Pass a map of named functions via the `:transformers` binding to make them available inside
-  templates. Built-in helpers (`escape_html`, `default`, `join`, etc.) are always available
+  templates. Built-in transformers (`escape_html`, `default`, `join`, etc.) are always available
   without passing anything.
 
-  Use the pre-built capability groups to load curated sets of helpers and merge in any
-  custom functions you need:
+  Use the pre-built capability groups to load curated sets of transformers and merge in any
+  custom transformers you need:
 
       Stem.Unsafe.eval_string(
         template_source,
@@ -38,8 +38,8 @@ defmodule Stem.Unsafe do
       )
 
   Available capability groups (call `.all()` to get their function map):
-  - `Stem.Transformers.Minimum` — Essential helpers (escaping, defaults, lookup)
-  - `Stem.Transformers.Strings` — String manipulation
+  - `Stem.Transformers.Minimum` — Essential transformers (escaping, defaults, lookup)
+  - `Stem.Transformers.Strings` — String transformers
   - `Stem.Transformers.Collections` — Data transformation and filtering
   - `Stem.Transformers.Predicates` — Boolean tests
 

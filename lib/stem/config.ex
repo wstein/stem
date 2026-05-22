@@ -118,7 +118,7 @@ defmodule Stem.Config do
     |> maybe_add_escape(map)
     |> maybe_add_warn_on_missing_assigns(map)
     |> maybe_add_allow_elixir_expressions(map)
-    |> maybe_add_functions(map)
+    |> maybe_add_transformers(map)
   end
 
   defp maybe_add_escape(acc, map) do
@@ -144,13 +144,13 @@ defmodule Stem.Config do
     end
   end
 
-  defp maybe_add_functions(acc, map) do
-    case Map.get(map, "helper_groups") do
+  defp maybe_add_transformers(acc, map) do
+    case Map.get(map, "transformers") do
       nil ->
         acc
 
       groups_string when is_binary(groups_string) ->
-        functions =
+        transformers =
           groups_string
           |> String.split(",")
           |> Enum.map(&String.trim/1)
@@ -160,10 +160,10 @@ defmodule Stem.Config do
             if function_exported?(mod, :all, 0), do: Map.merge(acc, mod.all()), else: acc
           end)
 
-        if functions == %{} do
+        if transformers == %{} do
           acc
         else
-          Keyword.put(acc, :functions, functions)
+          Keyword.put(acc, :transformers, transformers)
         end
 
       _ ->

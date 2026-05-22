@@ -5,7 +5,7 @@ defmodule Stem.Sigil do
   Compile literal Stem templates inline with the `~STEM` sigil.
 
   The sigil compiles the template at compile time and renders it against the
-  surrounding `assigns` and `helpers` variables when the generated code runs.
+  surrounding `assigns` and `transformers` variables when the generated code runs.
 
   ## Examples
 

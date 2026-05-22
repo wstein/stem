@@ -214,7 +214,7 @@ defmodule Stem do
       noops =
         if :transformers in original_args,
           do: [quote(do: _ = var!(transformers)) | noops],
-          else: noops
+          else: [quote(do: transformers = %{}) | noops]
 
       case kind do
         :def ->
@@ -284,7 +284,7 @@ defmodule Stem do
       noops =
         if :transformers in original_args,
           do: [quote(do: _ = var!(transformers)) | noops],
-          else: noops
+          else: [quote(do: transformers = %{}) | noops]
 
       @external_resource file
       @file file

@@ -15,7 +15,7 @@ defmodule Stem.CLI do
     -o, --output FILE                  Write the rendered output to FILE
     --strict                           Warn on missing assigns
     --allow-elixir-expressions         Allow arbitrary Elixir expressions in tags
-    --helper-groups GROUPS             Enable helper capability groups (comma-separated)
+    --transformers GROUPS             Enable helper capability groups (comma-separated)
     --escape MODE                      Escape mode: none, html (default), xml, json, url
     -h, --help                         Show this message
     -v, --version                      Show the Stem version
@@ -30,7 +30,7 @@ defmodule Stem.CLI do
           version: :boolean,
           strict: :boolean,
           allow_elixir_expressions: :boolean,
-          helper_groups: :string,
+          transformers: :string,
           escape: :string
         ],
         aliases: [o: :output, h: :help, v: :version]
@@ -113,7 +113,7 @@ defmodule Stem.CLI do
   defp template_binding_args(template) when is_binary(template) do
     []
     |> maybe_add_binding(template, :assigns, &template_uses_assigns?/1)
-    |> maybe_add_binding(template, :functions, &template_uses_helpers?/1)
+    |> maybe_add_binding(template, :transformers, &template_uses_helpers?/1)
   end
 
   defp maybe_add_binding(args, template, binding, predicate) do
@@ -127,7 +127,7 @@ defmodule Stem.CLI do
   defp runtime_binding_values(args, bindings, options) do
     Enum.map(args, fn
       :assigns -> bindings
-      :functions -> Keyword.get(options, :functions, %{})
+      :transformers -> Keyword.get(options, :transformers, %{})
     end)
   end
 
@@ -341,9 +341,9 @@ defmodule Stem.CLI do
       end
 
     cli_opts =
-      if opts[:helper_groups] do
-        functions = expand_groups_to_functions(opts[:helper_groups])
-        Keyword.put(cli_opts, :functions, functions)
+      if opts[:transformers] do
+        transformers = expand_groups_to_transformers(opts[:transformers])
+        Keyword.put(cli_opts, :transformers, transformers)
       else
         cli_opts
       end
@@ -363,7 +363,7 @@ defmodule Stem.CLI do
     end
   end
 
-  defp expand_groups_to_functions(groups_string) when is_binary(groups_string) do
+  defp expand_groups_to_transformers(groups_string) when is_binary(groups_string) do
     groups_string
     |> String.split(",")
     |> Enum.map(&String.trim/1)
