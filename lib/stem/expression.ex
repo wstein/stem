@@ -3,6 +3,118 @@
 defmodule Stem.Expression do
   @moduledoc false
 
+  import NimbleParsec
+
+  escaped_char =
+    string("\\")
+    |> utf8_char([])
+    |> reduce({List, :to_string, []})
+
+  double_quoted_chunk =
+    string("\"")
+    |> repeat(
+      choice([
+        escaped_char,
+        lookahead_not(string("\""))
+        |> utf8_char([])
+      ])
+    )
+    |> optional(string("\""))
+    |> reduce({List, :to_string, []})
+
+  single_quoted_chunk =
+    string("'")
+    |> repeat(
+      choice([
+        escaped_char,
+        lookahead_not(string("'"))
+        |> utf8_char([])
+      ])
+    )
+    |> optional(string("'"))
+    |> reduce({List, :to_string, []})
+
+  defparsecp(
+    :paren_chunk,
+    string("(")
+    |> repeat(
+      choice([
+        parsec(:paren_chunk),
+        double_quoted_chunk,
+        single_quoted_chunk,
+        lookahead_not(choice([string("("), string(")"), string("\""), string("'")]))
+        |> utf8_char([])
+      ])
+    )
+    |> optional(string(")"))
+    |> reduce({List, :to_string, []})
+  )
+
+  top_level_text_part =
+    choice([
+      parsec(:paren_chunk),
+      double_quoted_chunk,
+      single_quoted_chunk,
+      lookahead_not(
+        choice([
+          string("|>"),
+          string(","),
+          string("="),
+          string(":"),
+          ascii_char([9, 10, 13, 32]),
+          string("\""),
+          string("'"),
+          string("("),
+          string(")")
+        ])
+      )
+      |> utf8_char([])
+    ])
+
+  top_level_text_token =
+    top_level_text_part
+    |> repeat(top_level_text_part)
+    |> reduce({List, :to_string, []})
+    |> unwrap_and_tag(:text)
+
+  stage_text_part =
+    choice([
+      double_quoted_chunk,
+      single_quoted_chunk,
+      lookahead_not(choice([string("\""), string("'"), string("("), string(")")]))
+      |> utf8_char([])
+    ])
+
+  stage_text_token =
+    stage_text_part
+    |> repeat(stage_text_part)
+    |> reduce({List, :to_string, []})
+    |> unwrap_and_tag(:text)
+
+  defparsecp(
+    :do_splitter_tokens,
+    repeat(
+      choice([
+        string("|>") |> unwrap_and_tag(:pipe),
+        string(",") |> unwrap_and_tag(:comma),
+        string("=") |> unwrap_and_tag(:eq),
+        string(":") |> unwrap_and_tag(:colon),
+        ascii_char([9, 10, 13, 32]) |> reduce({List, :to_string, []}) |> unwrap_and_tag(:ws),
+        top_level_text_token
+      ])
+    )
+  )
+
+  defparsecp(
+    :do_stage_tokens,
+    repeat(
+      choice([
+        parsec(:paren_chunk) |> unwrap_and_tag(:paren),
+        stage_text_token
+      ])
+    )
+  )
+
   @type context :: %{in_each: boolean(), locals: %{optional(binary()) => binary()}}
   @type helper_arg_t :: expr_t() | {:kw, binary(), expr_t()}
   @type pipeline_stage_t :: {:stage, binary(), [helper_arg_t()]}
@@ -235,8 +347,8 @@ defmodule Stem.Expression do
         {:ok, {:stage, trimmed, []}}
 
       true ->
-        case Regex.run(~r/^([a-z_][a-zA-Z0-9_]*)\((.*)\)$/s, trimmed, capture: :all_but_first) do
-          [name, args_source] ->
+        case pipeline_stage_call_parts(trimmed) do
+          {:ok, name, args_source} ->
             with :ok <- validate_pipeline_stage_source(trimmed),
                  {:ok, args} <- parse_pipeline_call_args(args_source) do
               {:ok, {:stage, name, args}}
@@ -492,8 +604,8 @@ defmodule Stem.Expression do
       String.starts_with?(expr, "this.")
   end
 
-  defp parse_path("this." <> rest), do: {:path, :this, String.split(rest, ".")}
-  defp parse_path(expr), do: {:path, :implicit, String.split(expr, ".")}
+  defp parse_path("this." <> rest), do: {:path, :this, :binary.split(rest, ".", [:global])}
+  defp parse_path(expr), do: {:path, :implicit, :binary.split(expr, ".", [:global])}
 
   defp helper_context_expression(context) do
     base = ["assigns: assigns", "helpers: helpers"]
@@ -542,176 +654,28 @@ defmodule Stem.Expression do
     valid? and depth == 0
   end
 
-  defp split_top_level_once(token, delimiter),
-    do: split_top_level_once(token, delimiter, 0, nil, [])
-
-  defp split_top_level_once(<<>>, _delimiter, _depth, _quote, _buffer), do: nil
-
-  defp split_top_level_once(<<char::utf8, rest::binary>>, delimiter, depth, quote, buffer) do
-    cond do
-      not is_nil(quote) and char == ?\\ and rest != <<>> ->
-        <<escaped::utf8, remaining::binary>> = rest
-
-        split_top_level_once(remaining, delimiter, depth, quote, [
-          buffer | <<char::utf8, escaped::utf8>>
-        ])
-
-      not is_nil(quote) and char == quote ->
-        split_top_level_once(rest, delimiter, depth, nil, [buffer | <<char::utf8>>])
-
-      not is_nil(quote) ->
-        split_top_level_once(rest, delimiter, depth, quote, [buffer | <<char::utf8>>])
-
-      char in [?", ?'] ->
-        split_top_level_once(rest, delimiter, depth, char, [buffer | <<char::utf8>>])
-
-      char == ?( ->
-        split_top_level_once(rest, delimiter, depth + 1, quote, [buffer | <<char::utf8>>])
-
-      char == ?) ->
-        split_top_level_once(rest, delimiter, max(depth - 1, 0), quote, [buffer | <<char::utf8>>])
-
-      char == delimiter and depth == 0 ->
-        [IO.iodata_to_binary(buffer), rest]
-
-      true ->
-        split_top_level_once(rest, delimiter, depth, quote, [buffer | <<char::utf8>>])
-    end
+  defp split_top_level_once(token, delimiter) do
+    token
+    |> splitter_tokens()
+    |> split_once_tokens(delimiter)
   end
 
-  defp split_top_level(expr), do: split_top_level(expr, 0, nil, [], [])
-  defp split_top_level(<<>>, _depth, _quote, [], acc), do: Enum.reverse(acc)
-
-  defp split_top_level(<<>>, _depth, _quote, buffer, acc),
-    do: Enum.reverse([IO.iodata_to_binary(buffer) | acc])
-
-  defp split_top_level(<<char::utf8, rest::binary>>, depth, quote, buffer, acc) do
-    cond do
-      not is_nil(quote) and char == ?\\ and rest != <<>> ->
-        <<escaped::utf8, remaining::binary>> = rest
-        split_top_level(remaining, depth, quote, [buffer | <<char::utf8, escaped::utf8>>], acc)
-
-      not is_nil(quote) and char == quote ->
-        split_top_level(rest, depth, nil, [buffer | <<char::utf8>>], acc)
-
-      not is_nil(quote) ->
-        split_top_level(rest, depth, quote, [buffer | <<char::utf8>>], acc)
-
-      char in [?", ?'] ->
-        split_top_level(rest, depth, char, [buffer | <<char::utf8>>], acc)
-
-      char == ?( ->
-        split_top_level(rest, depth + 1, quote, [buffer | <<char::utf8>>], acc)
-
-      char == ?) ->
-        split_top_level(rest, max(depth - 1, 0), quote, [buffer | <<char::utf8>>], acc)
-
-      depth == 0 and char in [32, ?\n, ?\t, ?\r] ->
-        case IO.iodata_to_binary(buffer) do
-          "" -> split_top_level(rest, depth, quote, [], acc)
-          token -> split_top_level(rest, depth, quote, [], [token | acc])
-        end
-
-      true ->
-        split_top_level(rest, depth, quote, [buffer | <<char::utf8>>], acc)
-    end
+  defp split_top_level(expr) do
+    expr
+    |> splitter_tokens()
+    |> split_whitespace_tokens()
   end
 
-  defp split_top_level_pipe(expr), do: split_top_level_pipe(expr, 0, nil, [], [])
-
-  defp split_top_level_pipe(<<>>, _depth, _quote, buffer, acc),
-    do: Enum.reverse([iodata(buffer) | acc])
-
-  defp split_top_level_pipe(<<char::utf8, rest::binary>>, depth, quote, buffer, acc) do
-    cond do
-      not is_nil(quote) and char == ?\\ and rest != <<>> ->
-        <<escaped::utf8, remaining::binary>> = rest
-
-        split_top_level_pipe(
-          remaining,
-          depth,
-          quote,
-          [buffer | <<char::utf8, escaped::utf8>>],
-          acc
-        )
-
-      not is_nil(quote) and char == quote ->
-        split_top_level_pipe(rest, depth, nil, [buffer | <<char::utf8>>], acc)
-
-      not is_nil(quote) ->
-        split_top_level_pipe(rest, depth, quote, [buffer | <<char::utf8>>], acc)
-
-      char in [?", ?'] ->
-        split_top_level_pipe(rest, depth, char, [buffer | <<char::utf8>>], acc)
-
-      char == ?( ->
-        split_top_level_pipe(rest, depth + 1, quote, [buffer | <<char::utf8>>], acc)
-
-      char == ?) ->
-        split_top_level_pipe(rest, max(depth - 1, 0), quote, [buffer | <<char::utf8>>], acc)
-
-      depth == 0 and char == ?| and String.starts_with?(rest, ">") ->
-        split_top_level_pipe(
-          String.trim_leading(binary_part(rest, 1, byte_size(rest) - 1)),
-          depth,
-          quote,
-          [],
-          [iodata(buffer) | acc]
-        )
-
-      true ->
-        split_top_level_pipe(rest, depth, quote, [buffer | <<char::utf8>>], acc)
-    end
+  defp split_top_level_pipe(expr) do
+    expr
+    |> splitter_tokens()
+    |> split_by_token(:pipe)
   end
 
-  defp split_top_level_by_char(expr, delimiter),
-    do: split_top_level_by_char(expr, delimiter, 0, nil, [], [])
-
-  defp split_top_level_by_char(<<>>, _delimiter, _depth, _quote, buffer, acc),
-    do: Enum.reverse([iodata(buffer) | acc])
-
-  defp split_top_level_by_char(<<char::utf8, rest::binary>>, delimiter, depth, quote, buffer, acc) do
-    cond do
-      not is_nil(quote) and char == ?\\ and rest != <<>> ->
-        <<escaped::utf8, remaining::binary>> = rest
-
-        split_top_level_by_char(
-          remaining,
-          delimiter,
-          depth,
-          quote,
-          [buffer | <<char::utf8, escaped::utf8>>],
-          acc
-        )
-
-      not is_nil(quote) and char == quote ->
-        split_top_level_by_char(rest, delimiter, depth, nil, [buffer | <<char::utf8>>], acc)
-
-      not is_nil(quote) ->
-        split_top_level_by_char(rest, delimiter, depth, quote, [buffer | <<char::utf8>>], acc)
-
-      char in [?", ?'] ->
-        split_top_level_by_char(rest, delimiter, depth, char, [buffer | <<char::utf8>>], acc)
-
-      char == ?( ->
-        split_top_level_by_char(rest, delimiter, depth + 1, quote, [buffer | <<char::utf8>>], acc)
-
-      char == ?) ->
-        split_top_level_by_char(
-          rest,
-          delimiter,
-          max(depth - 1, 0),
-          quote,
-          [buffer | <<char::utf8>>],
-          acc
-        )
-
-      depth == 0 and char == delimiter ->
-        split_top_level_by_char(rest, delimiter, depth, quote, [], [iodata(buffer) | acc])
-
-      true ->
-        split_top_level_by_char(rest, delimiter, depth, quote, [buffer | <<char::utf8>>], acc)
-    end
+  defp split_top_level_by_char(expr, delimiter) do
+    expr
+    |> splitter_tokens()
+    |> split_by_token(delimiter_token(delimiter))
   end
 
   defp balanced_call_parentheses?(source) do
@@ -722,8 +686,116 @@ defmodule Stem.Expression do
       )
   end
 
-  defp iodata([]), do: ""
-  defp iodata(buffer), do: IO.iodata_to_binary(buffer)
+  defp pipeline_stage_call_parts(source) do
+    case stage_tokens(source) do
+      [{:text, name}, {:paren, args}] ->
+        if helper_name?(name) do
+          {:ok, name, strip_outer_parens(args)}
+        else
+          :error
+        end
+
+      _ ->
+        :error
+    end
+  end
+
+  defp strip_outer_parens("(" <> rest) do
+    if String.ends_with?(rest, ")") do
+      binary_part(rest, 0, byte_size(rest) - 1)
+    else
+      rest
+    end
+  end
+
+  defp splitter_tokens(source) do
+    case do_splitter_tokens(source) do
+      {:ok, tokens, "", _, _, _} -> tokens
+      _ -> [{:text, source}]
+    end
+  end
+
+  defp stage_tokens(source) do
+    case do_stage_tokens(source) do
+      {:ok, tokens, "", _, _, _} -> tokens
+      _ -> [{:text, source}]
+    end
+  end
+
+  defp split_whitespace_tokens(tokens) do
+    {current, acc} =
+      Enum.reduce(tokens, {"", []}, fn
+        {:ws, _}, {"", acc} ->
+          {"", acc}
+
+        {:ws, _}, {current, acc} ->
+          {"", [current | acc]}
+
+        token, {current, acc} ->
+          {current <> token_value(token), acc}
+      end)
+
+    acc = if current == "", do: acc, else: [current | acc]
+    Enum.reverse(acc)
+  end
+
+  defp split_by_token(tokens, delimiter_token) do
+    {current, acc} =
+      Enum.reduce(tokens, {"", []}, fn
+        {^delimiter_token, _}, {current, acc} ->
+          {"", [current | acc]}
+
+        token, {current, acc} ->
+          {current <> token_value(token), acc}
+      end)
+
+    Enum.reverse([current | acc])
+  end
+
+  defp split_once_tokens(tokens, delimiter) do
+    delimiter_token = delimiter_token(delimiter)
+
+    Enum.reduce_while(tokens, {:searching, "", []}, fn
+      {^delimiter_token, _}, {:searching, current, _acc} ->
+        {:halt, [current, tokens_to_binary(tl_after_current(tokens, delimiter_token, current))]}
+
+      token, {:searching, current, acc} ->
+        {:cont, {:searching, current <> token_value(token), [token | acc]}}
+    end)
+    |> case do
+      [left, right] -> [left, right]
+      _ -> nil
+    end
+  end
+
+  defp tl_after_current(tokens, delimiter_token, current) do
+    current_size = byte_size(current)
+    {_before, rest} = rebuild_split(tokens, delimiter_token, current_size, "")
+    rest
+  end
+
+  defp rebuild_split([{token_kind, value} | rest], delimiter_token, current_size, built)
+       when token_kind == delimiter_token do
+    if byte_size(built) == current_size do
+      {built, rest}
+    else
+      rebuild_split(rest, delimiter_token, current_size, built <> value)
+    end
+  end
+
+  defp rebuild_split([token | rest], delimiter_token, current_size, built) do
+    rebuild_split(rest, delimiter_token, current_size, built <> token_value(token))
+  end
+
+  defp rebuild_split([], _delimiter_token, _current_size, built), do: {built, []}
+
+  defp tokens_to_binary(tokens), do: Enum.map_join(tokens, &token_value/1)
+
+  defp delimiter_token(?,), do: :comma
+  defp delimiter_token(?=), do: :eq
+  defp delimiter_token(?:), do: :colon
+
+  defp token_value({_kind, value}), do: value
 
   defp strip_parent_segments("../" <> rest), do: strip_parent_segments(rest)
   defp strip_parent_segments(rest), do: rest
