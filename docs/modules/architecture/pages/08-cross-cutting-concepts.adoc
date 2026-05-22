@@ -17,16 +17,16 @@ Escape modes can be configured globally via `.stem.config.json` or per-call:
 Keeping the rendering model explicit makes security-sensitive formatting decisions visible at the call site.
 Callers must treat all dynamically selected templates and user-provided context as untrusted.
 
-== Execution Modes: Safe vs. Permissive
+== Execution Modes: Restricted vs. Unrestricted
 
-Stem enforces two execution modes for template evaluation:
+Stem enforces control over arbitrary Elixir expression execution via the `allow_elixir_expressions` flag:
 
-* **`:safe` (default, recommended)** — Restricts templates to structured Stem expressions, literals, helpers, and variable paths. Forbids arbitrary Elixir code. Protects against Server-Side Template Injection (SSTI). This is the required mode for all production templates.
+* **`allow_elixir_expressions: false` (default, recommended)** — Restricts templates to structured Stem expressions, literals, helpers, and variable paths. Forbids arbitrary Elixir code. Protects against Server-Side Template Injection (SSTI). This is the required mode for all production templates.
 
-* **`:permissive`** — Allows arbitrary Elixir expressions. Maximum flexibility but should only be used for development and local experiments when the template source is entirely trusted and controlled by your team. Passing `mode: :permissive` serves as a visible code-review flag.
+* **`allow_elixir_expressions: true`** — Allows arbitrary Elixir expressions. Maximum flexibility but should only be used for development and local experiments when the template source is entirely trusted and controlled by your team. Passing `allow_elixir_expressions: true` serves as a visible code-review flag.
 
-Runtime evaluation APIs (`Stem.Unsafe.eval_string/3` and `Stem.Unsafe.eval_file/3`) default to `:safe` mode, requiring explicit opt-in to use `:permissive`.
-If you feel forced to use `:permissive` in production, this indicates an architectural flaw: business logic is leaking into the presentation layer and should be refactored into helpers or backend services.
+Runtime evaluation APIs (`Stem.Unsafe.eval_string/3` and `Stem.Unsafe.eval_file/3`) default to `allow_elixir_expressions: false`, requiring explicit opt-in to use `allow_elixir_expressions: true`.
+If you feel forced to enable arbitrary expressions in production, this indicates an architectural flaw: business logic is leaking into the presentation layer and should be refactored into helpers or backend services.
 
 == Explicit Data Boundaries
 

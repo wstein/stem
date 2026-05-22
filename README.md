@@ -7,7 +7,7 @@ There is no intermediate template language.
 ## Why Stem
 
 * **Handlebars Syntax**: Remains approachable and compatible with standard frontend tooling.
-* **StringTemplate Strictness**: Enforces clear separation of concerns with restricted expression evaluation and safe-mode compatibility.
+* **StringTemplate Strictness**: Enforces clear separation of concerns with restricted expression evaluation by default.
 * **Jinja2 Pipelines**: Enables elegant data transformation using the Elixir-style `|>` pipe operator to chain built-in and project-specific helpers.
 * **Native Performance**: Templates become ordinary compiled functions, so rendering is fast and type-checked by the compiler.
 * **Flexibility**: Choose compile-time macros for static performance or runtime APIs for dynamic content.
@@ -56,7 +56,7 @@ bin/stem data.json template.stem
 echo '{"name": "Nina"}' | bin/stem template.stem
 
 # Allow arbitrary Elixir in a trusted template
-echo '{"name":"Jim","id":123}' | bin/stem examples/templates/card.stem --permissive
+echo '{"name":"Jim","id":123}' | bin/stem examples/templates/card.stem --allow-elixir-expressions
 ```
 
 ## Compilation Strategies
@@ -140,32 +140,32 @@ Stem.Unsafe.eval_string("{{name}}", assigns: [name: "Nina"])
 Stem.Unsafe.eval_string("{{name}}", assigns: [name: "Nina"], contract: [required: [:name]])
 #=> "Nina"
 
-Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], mode: :permissive)
+Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], allow_elixir_expressions: true)
 #=> "3"
 ```
 
 ### Execution Modes
 
-Both `eval_string/3` and `eval_file/3` support two execution modes:
+Both `eval_string/3` and `eval_file/3` support two execution modes controlled by the `allow_elixir_expressions` flag:
 
-* **`:safe` (default)** — Restricts templates to structured Stem expressions, literals, helpers, and variable paths. Forbids arbitrary Elixir code. This is the recommended mode for all production templates and protects against Server-Side Template Injection (SSTI). Use this for:
+* **`allow_elixir_expressions: false` (default)** — Restricts templates to structured Stem expressions, literals, helpers, and variable paths. Forbids arbitrary Elixir code. This is the recommended mode for all production templates and protects against Server-Side Template Injection (SSTI). Use this for:
   * User-generated or untrusted template sources
   * Production environments
   * Compliance-sensitive applications
 
-* **`:permissive`** — Allows arbitrary Elixir expressions. Provides maximum flexibility but should only be used for development and local experiments when the template source is entirely trusted and controlled by your own team. Passing `mode: :permissive` serves as a visible code-review flag during security review.
+* **`allow_elixir_expressions: true`** — Allows arbitrary Elixir expressions. Provides maximum flexibility but should only be used for development and local experiments when the template source is entirely trusted and controlled by your own team. Passing `allow_elixir_expressions: true` serves as a visible code-review flag during security review.
 
 ```elixir
-# Safe by default — use in production
+# Restricted by default — use in production
 Stem.Unsafe.eval_string("{{user.name |> trim |> upcase}}", assigns: [user: %{name: "nina"}])
 
 # Explicit opt-in for arbitrary code — development only
-Stem.Unsafe.eval_string("{{a + b}}", assigns: [a: 1, b: 2], mode: :permissive)
+Stem.Unsafe.eval_string("{{a + b}}", assigns: [a: 1, b: 2], allow_elixir_expressions: true)
 ```
 
 Additional features:
 - `contract:` lets templates declare required assigns at the call boundary
-- Helper pipelines are safe-mode compatible because they lower to helper invocations instead of arbitrary Elixir
+- Helper pipelines are allowed by default because they lower to helper invocations instead of arbitrary Elixir
 
 ## Built-In Helpers
 
@@ -201,7 +201,7 @@ Create a `.stem.config.json` file in your project root to set default options fo
 {
   "escape": "html",
   "warn_on_missing_assigns": false,
-  "mode": "safe"
+  "allow_elixir_expressions": false
 }
 ```
 
@@ -209,7 +209,7 @@ Create a `.stem.config.json` file in your project root to set default options fo
 
 * `escape` - Default escape mode: `none`, `html` (default), `xml`, `json`, `url`
 * `warn_on_missing_assigns` - Print warnings for missing assigns: `true` or `false`
-* `mode` - Template evaluation mode: `safe` (default) or `permissive`
+* `allow_elixir_expressions` - Allow arbitrary Elixir expressions: `true` or `false` (default)
 
 **Config discovery**: Stem walks up the directory tree from the current working directory to find `.stem.config.json`. It stops at the project root (when `mix.exs` is found) or the filesystem root.
 

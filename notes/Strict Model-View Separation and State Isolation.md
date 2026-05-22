@@ -11,16 +11,14 @@ Stem templates act as purely declarative views. They have zero direct access to 
 #### Why
 Allowing templates to access global state or execute arbitrary logic violates separation of concerns, tangling generation logic with presentation code. Enforcing a strict boundary keeps templates portable, reusable, and secure against data-exfiltration Server-Side Template Injection (SSTI) attacks. Templates act as exemplars of the desired output with holes where the programmer sticks values — nothing more.
 
-The [[safe-mode]] execution mode enforces this boundary at compile time by forbidding arbitrary Elixir expressions, ensuring templates remain purely declarative.
+The default execution mode (`allow_elixir_expressions: false`) enforces this boundary at compile time by forbidding arbitrary Elixir expressions, ensuring templates remain purely declarative.
 
 #### How
-Fetch all necessary data (API URLs, database records, configuration flags) in the Elixir controller and pass it explicitly via the `assigns` keyword list to your compiled template macros or `Stem.Unsafe` runtime functions. Do not call Elixir system or I/O functions from inside `.stem` files. The compiler's default `mode: :safe` enforces this boundary at compile time.
+Fetch all necessary data (API URLs, database records, configuration flags) in the Elixir controller and pass it explicitly via the `assigns` keyword list to your compiled template macros or `Stem.Unsafe` runtime functions. Do not call Elixir system or I/O functions from inside `.stem` files. The compiler's default `allow_elixir_expressions: false` enforces this boundary at compile time.
 
 #### Links
 
-- [[execution-modes-overview]] - Overview of execution modes and their role in maintaining separation
-- [[safe-mode]] - How safe mode enforces strict boundaries
-- [[permissive-mode]] - Why permissive mode breaks this boundary (development-only)
+- [[Execution Modes Overview]] - Overview of execution control and its role in maintaining separation
 - [[Handlebars-Inspired Philosophy]] - The declarative syntax that enforces this boundary
 - [[Compile-Time-Only Security Model]] - How the strict boundary protects the host application
 - [[Runtime Evaluation and Sandboxing]] - What happens when you need dynamic templates

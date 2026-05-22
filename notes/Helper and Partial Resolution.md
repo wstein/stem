@@ -19,7 +19,7 @@ Register global helpers with `Stem.Helpers.register/2` or pass local helpers as 
 
 ## Runtime Templates
 
-Runtime templates default to `mode: :safe`, so only structured Stem expressions (variable paths, helper calls, literals, pipelines) are allowed inside tags. Pass `mode: :permissive` to opt in to arbitrary Elixir expressions when the template source is fully trusted:
+Runtime templates default to `allow_elixir_expressions: false`, so only structured Stem expressions (variable paths, helper calls, literals, pipelines) are allowed inside tags. Pass `allow_elixir_expressions: true` to opt in to arbitrary Elixir expressions when the template source is fully trusted:
 
 ```elixir
 import Stem
@@ -27,7 +27,7 @@ import Stem
 Stem.Unsafe.eval_string("{{name}}", assigns: [name: "nina"])
 #=> "nina"
 
-Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], mode: :permissive)
+Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], allow_elixir_expressions: true)
 #=> "3"
 ```
 
