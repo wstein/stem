@@ -461,6 +461,9 @@ defmodule Stem.Expression do
       literal_source?(trimmed) ->
         {:ok, {:literal, trimmed}}
 
+      trimmed == "null" ->
+        {:ok, {:literal, "nil"}}
+
       trimmed == "@index" ->
         {:ok, {:special, :index}}
 
@@ -569,6 +572,9 @@ defmodule Stem.Expression do
 
       literal_source?(trimmed) ->
         {:ok, {:literal, trimmed}}
+
+      trimmed == "null" ->
+        {:ok, {:literal, "nil"}}
 
       trimmed == "@index" ->
         {:ok, {:special, :index}}

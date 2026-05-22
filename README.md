@@ -122,6 +122,7 @@ Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 Bare identifiers resolve to assigns, so `{{name}}` reads the `:name` assign.
 Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the zero-based index, `{{@index1}}` the one-based index (mirroring StringTemplate's `i0`/`i`), and `{{@key}}` the key when iterating a map.
 `{{../name}}` reaches the parent (top-level assign) scope.
+The literals `true`, `false`, and `nil` are recognized; `null` is accepted as an alias for `nil` (and canonicalized to `nil` by the formatter) for Handlebars/JSON familiarity.
 Block conditionals follow Handlebars truthiness: `false`, `nil`, `0`, `""`, `[]`, and `{}` (empty map) are falsey.
 Use helpers or regular Elixir functions when output needs transformation (for example, sanitization, normalization, or formatting).
 Nested brace forms inside expressions are not supported.

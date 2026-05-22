@@ -111,6 +111,13 @@ defmodule StemTest do
     test "booleans and nil pass through" do
       assert eval("{{true}} {{nil}}") == "true "
     end
+
+    test "null is an alias for nil" do
+      assert eval("a{{null}}b") == "ab"
+      assert eval("{{#if null}}t{{else}}f{{/if}}", assigns: []) == "f"
+      # null as a helper argument (parsed via the argument path)
+      assert eval(~s({{default null "fallback"}}), assigns: []) == "fallback"
+    end
   end
 
   describe "blocks" do

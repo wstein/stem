@@ -211,7 +211,7 @@ defmodule Stem.CLI do
 
   defp identifier_uses_assigns?(token) do
     cond do
-      token in ["true", "false", "nil", "this", "@index", "@index1", "@key"] ->
+      token in ["true", "false", "nil", "null", "this", "@index", "@index1", "@key"] ->
         false
 
       String.starts_with?(token, "../") ->

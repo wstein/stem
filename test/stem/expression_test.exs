@@ -20,6 +20,10 @@ defmodule Stem.ExpressionTest do
     assert t("nil") == "nil"
   end
 
+  test "null is canonicalised to the nil literal" do
+    assert t("null") == "nil"
+  end
+
   test "special variables outside each keep their literal form" do
     assert t("@index") == "@index"
     assert t("@index1") == "@index1"
