@@ -20,3 +20,4 @@ erl_crash.dump
 bundle/
 repomix-output.xml
 .cx/
+tmp/
