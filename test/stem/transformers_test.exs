@@ -6,6 +6,7 @@ defmodule Stem.TransformersTest do
   use ExUnit.Case, async: false
 
   import ExUnit.CaptureIO
+  import ExUnit.CaptureLog
 
   alias Stem.Transformers
 
@@ -637,6 +638,20 @@ defmodule Stem.TransformersTest do
       assert_raise ArgumentError, ~r/reverse expects 1 argument/, fn ->
         invoke_module_helper(helpers, :reverse, [1, 2])
       end
+    end
+  end
+
+  describe "Collections capability audit signal" do
+    test "does not re-emit the Logger warning on repeated loads" do
+      # First load ensures the once-per-VM latch is set regardless of prior
+      # test state. Any subsequent load (here or in a concurrent process) must
+      # then stay silent. When :telemetry is available the audit signal is a
+      # telemetry event rather than a log, so this stays quiet there too.
+      Stem.Transformers.Collections.all()
+
+      log = capture_log(fn -> Stem.Transformers.Collections.all() end)
+
+      refute log =~ "capability group loaded"
     end
   end
 

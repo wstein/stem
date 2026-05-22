@@ -123,31 +123,37 @@ defmodule Stem.Transformers.Collections do
 
   # ── Telemetry / audit event ────────────────────────────────────────────────
 
-  # Emits a [:stem, :capability_group, :loaded] telemetry event when the
-  # Collections group is loaded dynamically. This event can be used to audit
-  # which processes are using the most powerful transformer set.
+  # Signals that the Collections group — the most powerful transformer set —
+  # was loaded, so operators can audit which processes reach for it.
   #
-  # If the :telemetry application is not available (it is an optional dep),
-  # falls back to a Logger warning so no crash occurs.
+  # When :telemetry (an optional dep) is available we emit a
+  # [:stem, :capability_group, :loaded] event on *every* load: telemetry
+  # dispatch is cheap, throttling is the handler's concern, and a per-load event
+  # is what lets an auditor see each distinct caller. Without :telemetry we fall
+  # back to a Logger warning, which we throttle to once per VM so it does not
+  # flood logs on repeated loads.
   defp emit_capability_loaded_event do
-    key = {__MODULE__, :capability_loaded}
+    if Code.ensure_loaded?(:telemetry) do
+      metadata = %{group: __MODULE__, caller: Process.info(self(), :current_stacktrace)}
+      apply(:telemetry, :execute, [[:stem, :capability_group, :loaded], %{count: 1}, metadata])
+    else
+      warn_capability_loaded_once()
+    end
+  end
+
+  defp warn_capability_loaded_once do
+    key = {__MODULE__, :capability_warned}
 
     unless :persistent_term.get(key, false) do
       :persistent_term.put(key, true)
-      metadata = %{group: __MODULE__, caller: Process.info(self(), :current_stacktrace)}
+      require Logger
 
-      if Code.ensure_loaded?(:telemetry) do
-        apply(:telemetry, :execute, [[:stem, :capability_group, :loaded], %{count: 1}, metadata])
-      else
-        require Logger
-
-        Logger.warning(
-          "[Stem] #{inspect(__MODULE__)} capability group loaded. " <>
-            "This group contains powerful data-manipulation transformers " <>
-            "(map, group_by, sort_by, filter, etc.). " <>
-            "Ensure the template source is fully trusted."
-        )
-      end
+      Logger.warning(
+        "[Stem] #{inspect(__MODULE__)} capability group loaded. " <>
+          "This group contains powerful data-manipulation transformers " <>
+          "(map, group_by, sort_by, filter, etc.). " <>
+          "Ensure the template source is fully trusted."
+      )
     end
   end
 end
