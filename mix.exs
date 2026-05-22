@@ -30,7 +30,8 @@ defmodule Stem.MixProject do
 
   defp deps do
     [
-      {:nimble_parsec, "~> 1.4"}
+      {:nimble_parsec, "~> 1.4"},
+      {:stream_data, "~> 1.0", only: [:dev, :test]}
     ]
   end
 
