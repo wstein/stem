@@ -9,13 +9,20 @@ defmodule Mix.Tasks.Stem.Audit do
   Static analysis gate for Stem security settings.
 
   `mix stem.audit` scans the files listed in `--paths` (defaulting to
-  `config/prod.exs` and `config/runtime.exs`) for occurrences of
+  `config/prod.exs`, `config/runtime.exs`, and `.stem.config.json`) for
 
       allow_elixir_expressions: true
 
-  and **fails the build** if any are found. Add this task to your CI/CD
-  pipeline to ensure that arbitrary Elixir expression evaluation is never
-  enabled in production templates.
+  and **fails the build** if any are found:
+
+  * Source files (`.ex`/`.exs`) are scanned line-by-line, catching both
+    `config :stem, allow_elixir_expressions: true` settings and single-line
+    `Stem.Unsafe.eval_string/eval_file` calls that pass the flag.
+  * `.stem.config.json` files are parsed as JSON and flagged when the
+    `allow_elixir_expressions` key is `true`.
+
+  Add this task to your CI/CD pipeline to ensure that arbitrary Elixir
+  expression evaluation is never enabled in production.
 
   ## Usage
 
@@ -37,7 +44,7 @@ defmodule Mix.Tasks.Stem.Audit do
   * `1` — one or more violations found (or a listed file does not exist)
   """
 
-  @default_paths ~w(config/prod.exs config/runtime.exs)
+  @default_paths ~w(config/prod.exs config/runtime.exs .stem.config.json)
 
   # Pattern that matches any line enabling allow_elixir_expressions
   @dangerous_pattern ~r/allow_elixir_expressions\s*:\s*true/
@@ -83,13 +90,50 @@ defmodule Mix.Tasks.Stem.Audit do
           Mix.shell().info("Stem audit: #{path} not found, skipping.")
           []
 
+        String.ends_with?(path, ".json") ->
+          scan_json(path, abs)
+
         true ->
-          abs
-          |> File.stream!()
-          |> Stream.with_index(1)
-          |> Stream.filter(fn {line, _n} -> Regex.match?(@dangerous_pattern, line) end)
-          |> Enum.map(fn {line, n} -> {path, n, line} end)
+          scan_source(path, abs)
       end
     end)
+  end
+
+  # Line-by-line scan of Elixir source/config files.
+  defp scan_source(path, abs) do
+    abs
+    |> File.stream!()
+    |> Stream.with_index(1)
+    |> Stream.filter(fn {line, _n} -> Regex.match?(@dangerous_pattern, line) end)
+    |> Enum.map(fn {line, n} -> {path, n, line} end)
+  end
+
+  # Parses a `.stem.config.json` file and flags `allow_elixir_expressions: true`.
+  defp scan_json(path, abs) do
+    content = File.read!(abs)
+
+    case JSON.decode(content) do
+      {:ok, %{"allow_elixir_expressions" => true}} ->
+        line = json_key_line(content) || 1
+        [{path, line, ~s("allow_elixir_expressions": true)}]
+
+      {:ok, _decoded} ->
+        []
+
+      {:error, _reason} ->
+        Mix.shell().info("Stem audit: #{path} is not valid JSON, skipping.")
+        []
+    end
+  end
+
+  # Best-effort line number of the offending key for a readable report.
+  defp json_key_line(content) do
+    content
+    |> String.split("\n")
+    |> Enum.find_index(&Regex.match?(~r/"allow_elixir_expressions"/, &1))
+    |> case do
+      nil -> nil
+      index -> index + 1
+    end
   end
 end

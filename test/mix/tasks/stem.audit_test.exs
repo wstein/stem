@@ -60,4 +60,43 @@ defmodule Mix.Tasks.Stem.AuditTest do
       capture_io(:stderr, fn -> Mix.Tasks.Stem.Audit.run(["--paths", path]) end)
     end
   end
+
+  test "fails when .stem.config.json enables allow_elixir_expressions", %{tmp: tmp} do
+    path = Path.join(tmp, ".stem.config.json")
+    File.write!(path, ~s({"escape": "html", "allow_elixir_expressions": true}\n))
+
+    assert_raise Mix.Error, ~r/Stem audit failed.*1 violation/, fn ->
+      capture_io(:stderr, fn -> Mix.Tasks.Stem.Audit.run(["--paths", path]) end)
+    end
+  end
+
+  test "passes when .stem.config.json keeps allow_elixir_expressions false", %{tmp: tmp} do
+    path = Path.join(tmp, ".stem.config.json")
+    File.write!(path, ~s({"escape": "html", "allow_elixir_expressions": false}\n))
+
+    output = capture_io(fn -> Mix.Tasks.Stem.Audit.run(["--paths", path]) end)
+    assert output =~ "passed"
+  end
+
+  test "skips a .stem.config.json file that is not valid JSON", %{tmp: tmp} do
+    path = Path.join(tmp, ".stem.config.json")
+    File.write!(path, "{not valid json")
+
+    output = capture_io(fn -> Mix.Tasks.Stem.Audit.run(["--paths", path]) end)
+    assert output =~ "not valid JSON, skipping"
+    assert output =~ "passed"
+  end
+
+  test "counts violations across a json config and an exs config", %{tmp: tmp} do
+    json = Path.join(tmp, ".stem.config.json")
+    exs = Path.join(tmp, "prod.exs")
+    File.write!(json, ~s({"allow_elixir_expressions": true}\n))
+    File.write!(exs, "config :stem, allow_elixir_expressions: true\n")
+
+    assert_raise Mix.Error, ~r/2 violation/, fn ->
+      capture_io(:stderr, fn ->
+        Mix.Tasks.Stem.Audit.run(["--paths", json, "--paths", exs])
+      end)
+    end
+  end
 end
