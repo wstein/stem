@@ -75,6 +75,23 @@ defmodule Stem.Transformers do
     helper.(resolved_args, %{assigns: assigns, this: this, binding: binding_env})
   end
 
+  @doc """
+  The built-in capability groups, mapping each group's atom name to its module.
+
+  Single source of truth for the set of groups, used wherever code needs to map
+  group names to their transformers (capability metadata, conformance tooling).
+  """
+  @spec groups() :: %{atom() => module()}
+  def groups do
+    %{
+      minimum: Stem.Transformers.Minimum,
+      strings: Stem.Transformers.Strings,
+      collections: Stem.Transformers.Collections,
+      predicates: Stem.Transformers.Predicates,
+      i18n: Stem.Transformers.I18n
+    }
+  end
+
   # Secure-by-default capability floor: with no explicit `transformers:` binding
   # and no globally registered transformer, only the Minimum group is callable.
   # The Strings, Collections, and Predicates groups must be loaded explicitly

@@ -374,14 +374,6 @@ defmodule Stem.Bytecode do
 
   # ── Capability metadata ──────────────────────────────────────────────────────
 
-  @group_modules %{
-    minimum: Stem.Transformers.Minimum,
-    strings: Stem.Transformers.Strings,
-    collections: Stem.Transformers.Collections,
-    predicates: Stem.Transformers.Predicates,
-    i18n: Stem.Transformers.I18n
-  }
-
   defp transformer_names(instructions) do
     instructions |> Enum.flat_map(&instruction_calls/1) |> Enum.map(&elem(&1, 1)) |> Enum.uniq()
   end
@@ -415,7 +407,7 @@ defmodule Stem.Bytecode do
   defp capabilities(transformer_names) do
     membership = group_membership()
 
-    @group_modules
+    membership
     |> Map.keys()
     |> Enum.filter(fn group ->
       Enum.any?(transformer_names, &(&1 in Map.get(membership, group, [])))
@@ -429,7 +421,7 @@ defmodule Stem.Bytecode do
   end
 
   defp group_membership do
-    Map.new(@group_modules, fn {group, module} -> {group, Map.keys(module.all())} end)
+    Map.new(Stem.Transformers.groups(), fn {group, module} -> {group, Map.keys(module.all())} end)
   end
 
   # ── Disassembly ──────────────────────────────────────────────────────────────
