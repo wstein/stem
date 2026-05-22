@@ -37,6 +37,11 @@ defmodule Stem.FormatterTest do
              "{{user.name |> trim |> truncate(20)}}"
   end
 
+  test "canonicalises nil to null and keeps null" do
+    assert Stem.Formatter.format_string("{{nil}}") == "{{null}}"
+    assert Stem.Formatter.format_string("{{null}}") == "{{null}}"
+  end
+
   test "raises on invalid pipeline expressions" do
     assert_raise ArgumentError, ~r/pipeline stages must be helper names/, fn ->
       Stem.Formatter.format_string("{{name |> String.trim()}}")

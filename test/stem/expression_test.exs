@@ -20,8 +20,17 @@ defmodule Stem.ExpressionTest do
     assert t("nil") == "nil"
   end
 
-  test "null is canonicalised to the nil literal" do
+  test "null and nil both translate to Elixir nil" do
     assert t("null") == "nil"
+    assert t("nil") == "nil"
+  end
+
+  test "formatting canonicalises nil to null" do
+    assert {:ok, expr} = p("nil")
+    assert Expression.format(expr) == "null"
+
+    assert {:ok, expr} = p("null")
+    assert Expression.format(expr) == "null"
   end
 
   test "special variables outside each keep their literal form" do

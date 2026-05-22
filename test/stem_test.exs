@@ -112,7 +112,7 @@ defmodule StemTest do
       assert eval("{{true}} {{nil}}") == "true "
     end
 
-    test "null is an alias for nil" do
+    test "null is canonical and nil is an alias" do
       assert eval("a{{null}}b") == "ab"
       assert eval("{{#if null}}t{{else}}f{{/if}}", assigns: []) == "f"
       # null as a helper argument (parsed via the argument path)

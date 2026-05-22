@@ -155,6 +155,7 @@ defmodule Stem.Expression do
   end
 
   @spec to_source(expr_t(), context()) :: binary()
+  def to_source({:literal, "null"}, _context), do: "nil"
   def to_source({:literal, source}, _context), do: source
 
   def to_source({:special, :index}, context),
@@ -458,11 +459,14 @@ defmodule Stem.Expression do
       trimmed == "" ->
         {:ok, {:literal, ~s("")}}
 
+      trimmed == "nil" ->
+        {:ok, {:literal, "null"}}
+
       literal_source?(trimmed) ->
         {:ok, {:literal, trimmed}}
 
       trimmed == "null" ->
-        {:ok, {:literal, "nil"}}
+        {:ok, {:literal, "null"}}
 
       trimmed == "@index" ->
         {:ok, {:special, :index}}
@@ -570,11 +574,14 @@ defmodule Stem.Expression do
       wrapped_subexpression?(trimmed) ->
         parse_subexpression(trimmed)
 
+      trimmed == "nil" ->
+        {:ok, {:literal, "null"}}
+
       literal_source?(trimmed) ->
         {:ok, {:literal, trimmed}}
 
       trimmed == "null" ->
-        {:ok, {:literal, "nil"}}
+        {:ok, {:literal, "null"}}
 
       trimmed == "@index" ->
         {:ok, {:special, :index}}
@@ -639,7 +646,7 @@ defmodule Stem.Expression do
   defp simple_identifier?(expr), do: String.match?(expr, ~r/^[a-z_][a-zA-Z0-9_]*$/)
 
   defp literal_source?(arg) do
-    arg in ["true", "false", "nil"] or
+    arg in ["true", "false", "nil", "null"] or
       String.match?(arg, ~r/^-?\d+(\.\d+)?$/) or
       String.match?(arg, ~r/^"(?:\\.|[^"])*"$/) or
       String.match?(arg, ~r/^'(?:\\.|[^'])*'$/)

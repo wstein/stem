@@ -122,9 +122,9 @@ defmodule Stem do
   StringTemplate's `i0`/`i`), and `{{@key}}` the key when iterating a map.
   `{{../name}}` reaches the parent (top-level assign) scope.
 
-  The literals `true`, `false`, and `nil` are recognized; `null` is accepted as
-  an alias for `nil` (canonicalized to `nil` by the formatter) for
-  Handlebars/JSON familiarity.
+  The literals `true`, `false`, and `null` are recognized; `nil` is accepted as
+  an alias for `null` (canonicalized to `null` by the formatter) for
+  JSON/YAML familiarity.
 
   Pipelines are restricted to helper stages so templates stay declarative.
   `{{lhs |> helper(a, b)}}` compiles as if the helper had been called with

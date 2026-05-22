@@ -3,20 +3,25 @@ id: 20260523130000
 aliases: ["null keyword", "null alias"]
 tags: ["semantics", "literals", "handlebars"]
 ---
-Stem accepts `null` as an alias for the `nil` literal in template expressions, canonicalizing it to `nil`.
+Stem accepts both `null` and `nil` in template expressions, with `null` as the canonical source spelling.
 
 #### What
-`{{null}}` and `null` in any expression position (helper arguments, block conditions) are treated exactly like the `nil` literal: they render as the empty string and are falsy under Handlebars truthiness. The formatter rewrites `null` to `nil`, so `nil` remains the single canonical spelling in source.
+
+`{{null}}`, `{{nil}}`, and the same tokens in helper arguments and block conditions represent the same null value: they render as the empty string and are falsy under Handlebars truthiness. The formatter rewrites `nil` to `null`, so `null` remains the single canonical spelling in source.
 
 #### Why
-Stem already consumes JSON on the data side (`bin/stem data.json template.stem`), where JSON `null` decodes to Elixir `nil`. Accepting `null` in template *source* removes a small friction point for developers arriving from Handlebars/JavaScript/JSON, without adding a genuinely new value — it is purely a spelling alias. Stem stays Handlebars-*inspired* (see [[Handlebars-Inspired Philosophy]]) while keeping `nil` as the Elixir-native canonical form.
+
+Stem already consumes JSON and YAML on the data side, where null-like values map to Elixir `nil`. Using `null` as canonical in template source reduces friction for developers arriving from JSON/YAML/Handlebars conventions, while still preserving Elixir runtime semantics. This keeps Stem Handlebars-inspired (see [[Handlebars-Inspired Philosophy]]) and friendly to non-Elixir template authors.
 
 #### How
-Both expression parse sites in `Stem.Expression` map `trimmed == "null"` to `{:literal, "nil"}` (the `nil` literal node), so it lowers to Elixir `nil` and `format/1` emits `nil`. `Stem.CLI`'s assigns heuristic lists `null` among the non-assign literals alongside `nil`/`true`/`false`.
+
+Expression parsing normalizes both `null` and `nil` to a canonical literal node whose formatter spelling is `null`. Runtime code generation lowers that canonical `null` literal to Elixir `nil`, so rendering and truthiness behavior are unchanged. `Stem.CLI`'s assigns heuristic treats both `null` and `nil` as literals (not assign names), alongside `true` and `false`.
 
 #### Tradeoff
-`null` is now effectively reserved: `{{null}}` no longer reads an assign or map key literally named `null` (it always means `nil`). This shadowing is the deliberate cost of the alias; data whose key is the string `"null"` must be reached another way (e.g. `{{lookup map "null"}}`).
+
+`null` and `nil` are effectively reserved literal keywords: `{{null}}` and `{{nil}}` do not read assigns or map keys with those names. This shadowing is the deliberate cost of supporting both spellings as literals; data whose key is `"null"` or `"nil"` must be reached another way (for example `{{lookup map "null"}}`).
 
 #### Links
+
 * [[Handlebars Expression Resolution]] - How tag tokens resolve to Elixir.
 * [[Handlebars-Inspired Philosophy]] - Why Stem favors familiarity without bug-for-bug parity.
