@@ -31,5 +31,3 @@ One authoritative specification and a vector suite, generated from the Elixir re
 - [[HTML Escaping Behavior]] - The escaping rule the spec table pins.
 - [[Property and Fuzz Testing Strategy]] - Extended here into differential fuzzing.
 - [[Handlebars Truthiness Semantics]] - The falsy set the spec fixes across backends.
-## Links
-

@@ -11,7 +11,7 @@ Stem's native backend ships templates as portable bytecode run by one small inte
 - Decision: **reject** the "transpile `Stem.AST` → Rust source → LLVM, integrated into mainline" proposal. **Adopt**: lower the existing `Stem.AST` to a portable bytecode (see [[Portable Stem Bytecode]]), executed by one small interpreter compiled once — an Elixir reference VM first, then a Rust core compiled to a single WASM module.
 - The BEAM backend ([[Native AST Compilation Pipeline]]) is unchanged and stays the default; native is purely additive.
 - The interpreter boundary is bytes-in / bytes-out: `render(program_bytes, data_msgpack, caps) -> utf8_bytes`. No per-node host callbacks, no shared pointers, no `unsafe` FFI, no per-template native compilation.
-- The goal is **parity and portability** — render the same template identically off-BEAM (browser, edge worker, Python/Node) — explicitly **not** beating the BEAM, which has no serialization boundary and wins locally.
+- The goal is **parity and portability** — render the same template identically off-BEAM (browser, edge worker, Python/Node) — **not** beating the BEAM, which wins locally.
 
 ## Why
 
@@ -25,7 +25,7 @@ Stem's native backend ships templates as portable bytecode run by one small inte
 Deliver in independently-useful phases; never build a later phase on spec:
 
 1. **Spec + conformance vectors** — pin the authoritative rules (single escaping table, truthiness, path resolution, capability set, contract semantics) and generate vectors from the Elixir reference. See [[Cross-Backend Conformance Spec]].
-2. **Bytecode + pure-Elixir VM** — add a second AST backend and an Elixir interpreter; prove `VM(compile(ast), data) == Compiler(ast).(data)` across the suite. De-risks ~80% with zero Rust and yields a serializable compiled-template artifact on its own. See [[Portable Stem Bytecode]].
+2. **Bytecode + pure-Elixir VM** — add a second AST backend and an Elixir interpreter; prove `VM(compile(ast), data) == Compiler(ast).(data)` across the suite. De-risks ~80% with zero Rust and yields a serializable compiled-template artifact on its own. *Landed* (`Stem.Bytecode`/`.VM` + differential conformance suite); blocks and regions/yields are next. See [[Portable Stem Bytecode]].
 3. **Rust interpreter → single WASM module** — port the VM and native stdlib, run the same vectors, add differential fuzzing.
 4. **Host shims** — thin Python/Node loaders plus an edge-render demo.
 
@@ -39,5 +39,3 @@ Gate phases 3–4 on a real non-BEAM/edge demand signal and a benchmark; until t
 - [[Universal Architecture Principles]] - Why Stem's constraints are portable in the first place.
 - [[Compile-Time-Only Security Model]] - The existing trust boundary the native path must not weaken.
 - [[Helper Capability Groups]] - The Minimum-only allowlist the bytecode capability header mirrors.
-## Links
-
