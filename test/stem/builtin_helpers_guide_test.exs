@@ -108,7 +108,13 @@ defmodule Stem.BuiltinHelpersGuideTest do
 
     test "log with level hash argument" do
       template = "{{log \"hello\" level=\"debug\"}}"
-      assert Stem.TestTemplate.eval_string(template, assigns: []) == ""
+
+      stderr =
+        ExUnit.CaptureIO.capture_io(:stderr, fn ->
+          assert Stem.TestTemplate.eval_string(template, assigns: []) == ""
+        end)
+
+      assert stderr =~ "hello level=debug"
     end
   end
 
