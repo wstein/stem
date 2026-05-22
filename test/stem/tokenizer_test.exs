@@ -167,5 +167,23 @@ defmodule Stem.TokenizerTest do
       assert {:error, "unsupported Stem closing tag '{{/foo}}'", _} =
                Tokenizer.tokenize("{{/foo}}")
     end
+
+    test "unterminated raw expression" do
+      assert {:error, "expected closing '}}}' for raw Stem expression", _} =
+               Tokenizer.tokenize("{{{unclosed")
+    end
+
+    test "nested braces in raw expression are rejected" do
+      assert {:error, "nested braces are not supported in Stem expressions", _} =
+               Tokenizer.tokenize("{{{a{b}}}")
+    end
+  end
+
+  test "empty raw tag is skipped" do
+    assert tokens("{{{}}}") == [{:eof, %{line: 1, column: 7}}]
+  end
+
+  test "trim-left at start of string does not crash on empty acc" do
+    assert [{:expr, "name", :default, %{line: 1, column: 1}}, {:eof, _}] = tokens("{{~name}}")
   end
 end

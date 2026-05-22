@@ -9,6 +9,12 @@ defmodule Stem.Tokenizer do
   # constructs and classifies tag prefixes (`#`, `/`, `>`, `else`), but it does
   # not match blocks or interpret expression contents. Block nesting is the
   # parser's job; expression semantics belong to `Stem.Expression`.
+  #
+  # The lexer is implemented with `nimble_parsec` combinators. The public
+  # `tokenize/2` interface and the `[token()]` output format are unchanged so
+  # that `Stem.Parser` requires no modifications.
+
+  import NimbleParsec
 
   @type meta :: %{line: pos_integer(), column: pos_integer()}
   @type kind :: :if | :unless | :each | :with | :region
@@ -31,110 +37,210 @@ defmodule Stem.Tokenizer do
     "region" => :region
   }
 
+  # ---------------------------------------------------------------------------
+  # NimbleParsec combinators (compile-time)
+  # ---------------------------------------------------------------------------
+
+  # Matches any sequence of characters that does not start a `{{` tag.
+  text_chunk =
+    lookahead_not(string("{{"))
+    |> utf8_char([])
+    |> repeat(
+      lookahead_not(string("{{"))
+      |> utf8_char([])
+    )
+    |> reduce({List, :to_string, []})
+
+  # Matches `{{!-- ... --}}` block comments. Retains char codepoints so
+  # `build_tokens/5` can reconstruct the raw text for position tracking.
+  block_comment =
+    ignore(string("{{!--"))
+    |> repeat(
+      lookahead_not(string("--}}"))
+      |> utf8_char([])
+    )
+    |> ignore(string("--}}"))
+    |> tag(:block_comment)
+
+  # Matches `{{! ... }}` inline comments.
+  inline_comment =
+    ignore(string("{{!"))
+    |> repeat(
+      lookahead_not(string("}}"))
+      |> utf8_char([])
+    )
+    |> ignore(string("}}"))
+    |> tag(:inline_comment)
+
+  # Matches `{{{ ... }}}` raw (no-escape) output.
+  raw_tag =
+    ignore(string("{{{"))
+    |> repeat(
+      lookahead_not(string("}}}"))
+      |> utf8_char([])
+    )
+    |> ignore(string("}}}"))
+    |> reduce({List, :to_string, []})
+    |> tag(:raw_tag)
+
+  # Matches `{{ ... }}` standard tags.
+  standard_tag =
+    ignore(string("{{"))
+    |> repeat(
+      lookahead_not(string("}}"))
+      |> utf8_char([])
+    )
+    |> ignore(string("}}"))
+    |> reduce({List, :to_string, []})
+    |> tag(:standard_tag)
+
+  defparsec(
+    :do_tokenize,
+    repeat(
+      choice([
+        block_comment,
+        inline_comment,
+        raw_tag,
+        standard_tag,
+        text_chunk
+      ])
+    )
+  )
+
+  # ---------------------------------------------------------------------------
+  # Public API
+  # ---------------------------------------------------------------------------
+
   @spec tokenize(binary(), keyword()) :: {:ok, [token()]} | {:error, binary(), meta()}
   def tokenize(source, opts \\ []) when is_binary(source) do
     line = Keyword.get(opts, :line, 1)
     column = Keyword.get(opts, :column, 1)
 
-    scan(source, line, column, [], nil, [])
-  end
+    case do_tokenize(source) do
+      {:ok, raw_tokens, "", _context, {end_line, end_line_offset}, end_byte} ->
+        end_col = end_byte - end_line_offset + 1
+        build_tokens(raw_tokens, line, column, end_line, end_col)
 
-  # `buffer` accumulates literal text as reverse iodata; `buffer_meta` records
-  # where the current text run started so the flushed `:text` token is anchored.
-
-  defp scan(<<"{{!--", rest::binary>>, line, column, buffer, buffer_meta, acc) do
-    meta = %{line: line, column: column}
-
-    case take_until(rest, "--}}") do
-      {:ok, comment, tail} ->
-        {line, column} = advance(["{{!--", comment, "--}}"], line, column)
-        scan(tail, line, column, buffer, buffer_meta, acc)
-
-      :error ->
-        {:error, "expected closing '--}}' for Stem comment", meta}
+      {:ok, _raw_tokens, rest, _context, {err_line, err_line_offset}, err_byte} ->
+        err_col = err_byte - err_line_offset + 1
+        {:error, unterminated_error(rest), %{line: err_line, column: err_col}}
     end
   end
 
-  defp scan(<<"{{!", rest::binary>>, line, column, buffer, buffer_meta, acc) do
-    meta = %{line: line, column: column}
+  # ---------------------------------------------------------------------------
+  # Token assembly
+  # ---------------------------------------------------------------------------
 
-    case take_until(rest, "}}") do
-      {:ok, comment, tail} ->
-        {line, column} = advance(["{{!", comment, "}}"], line, column)
-        scan(tail, line, column, buffer, buffer_meta, acc)
+  # Converts the flat list emitted by `do_tokenize/1` into the structured
+  # `[token()]` list consumed by `Stem.Parser`, applying whitespace trim markers
+  # and line/column tracking along the way.
+  #
+  # State threaded through the reduce:
+  #   `{:ok, acc, line, col, trim_next}`
+  #   - `acc` is a reversed token list (head = most recently added token)
+  #   - `trim_next` is true when the previous tag carried a right-trim marker
+  #
+  # Text merging: consecutive text runs (surrounding a skipped/comment token)
+  # are merged into the first run's token so the output matches the original
+  # scan/6 behaviour.
+  defp build_tokens(raw_tokens, start_line, start_col, _end_line, _end_col) do
+    result =
+      Enum.reduce_while(
+        raw_tokens,
+        {:ok, [], start_line, start_col, false},
+        fn raw, {:ok, acc, line, col, trim_next} ->
+          case raw do
+            text when is_binary(text) ->
+              # Advance past any whitespace stripped by a preceding right-trim marker.
+              {stripped_len, trimmed_text} =
+                if trim_next do
+                  remaining = String.replace(text, ~r/\A[\s]+/u, "")
+                  {byte_size(text) - byte_size(remaining), remaining}
+                else
+                  {0, text}
+                end
 
-      :error ->
-        {:error, "expected closing '}}' for Stem comment", meta}
-    end
-  end
+              stripped_prefix = binary_part(text, 0, stripped_len)
+              {text_line, text_col} = advance_binary(stripped_prefix, line, col)
+              {line2, col2} = advance_binary(trimmed_text, text_line, text_col)
 
-  defp scan(<<"{{{", rest::binary>>, line, column, buffer, buffer_meta, acc) do
-    meta = %{line: line, column: column}
+              # Merge with immediately preceding :text token (handles skipped tags
+              # and comments between two text runs).
+              acc2 =
+                case {trimmed_text, acc} do
+                  {"", _} ->
+                    acc
 
-    case take_until(rest, "}}}") do
-      {:ok, inner, tail} ->
-        {line, column} = advance(["{{{", inner, "}}}"], line, column)
-        {inner, trim_left, trim_right} = extract_trim_markers(inner)
-        {buffer, buffer_meta} = maybe_trim_buffer(buffer, buffer_meta, trim_left)
-        {tail, line, column} = maybe_trim_leading_tail(tail, line, column, trim_right)
+                  {_, [{:text, prev_text, prev_meta} | rest_acc]} ->
+                    [{:text, prev_text <> trimmed_text, prev_meta} | rest_acc]
 
-        case classify_raw_expr(inner, meta) do
-          {:ok, token} ->
-            acc = flush(buffer, buffer_meta, acc)
-            scan(tail, line, column, [], nil, [token | acc])
+                  {_, _} ->
+                    [{:text, trimmed_text, %{line: text_line, column: text_col}} | acc]
+                end
 
-          :skip ->
-            scan(tail, line, column, buffer, buffer_meta, acc)
+              {:cont, {:ok, acc2, line2, col2, false}}
 
-          {:error, _message, _meta} = error ->
-            error
+            {:block_comment, chars} ->
+              inner = List.to_string(chars)
+              {line2, col2} = advance_binary("{{!--" <> inner <> "--}}", line, col)
+              {:cont, {:ok, acc, line2, col2, trim_next}}
+
+            {:inline_comment, chars} ->
+              inner = List.to_string(chars)
+              {line2, col2} = advance_binary("{{!" <> inner <> "}}", line, col)
+              {:cont, {:ok, acc, line2, col2, trim_next}}
+
+            {:raw_tag, [inner]} ->
+              meta = %{line: line, column: col}
+              {line2, col2} = advance_binary("{{{" <> inner <> "}}}", line, col)
+              {inner2, trim_left, trim_right} = extract_trim_markers(inner)
+              acc2 = maybe_trim_last_text(acc, trim_left)
+
+              case classify_raw_expr(inner2, meta) do
+                {:ok, token} -> {:cont, {:ok, [token | acc2], line2, col2, trim_right}}
+                :skip -> {:cont, {:ok, acc2, line2, col2, trim_right}}
+                {:error, message, emeta} -> {:halt, {:error, message, emeta}}
+              end
+
+            {:standard_tag, [inner]} ->
+              meta = %{line: line, column: col}
+              {line2, col2} = advance_binary("{{" <> inner <> "}}", line, col)
+              {inner2, trim_left, trim_right} = extract_trim_markers(inner)
+              acc2 = maybe_trim_last_text(acc, trim_left)
+
+              case classify(inner2, meta) do
+                {:ok, token} -> {:cont, {:ok, [token | acc2], line2, col2, trim_right}}
+                :skip -> {:cont, {:ok, acc2, line2, col2, trim_right}}
+                {:error, message, emeta} -> {:halt, {:error, message, emeta}}
+              end
+          end
         end
+      )
 
-      :error ->
-        {:error, "expected closing '}}}' for raw Stem expression", meta}
+    case result do
+      {:ok, acc, final_line, final_col, _trim_next} ->
+        eof = {:eof, %{line: final_line, column: final_col}}
+        {:ok, Enum.reverse([eof | acc])}
+
+      {:error, _message, _meta} = error ->
+        error
     end
   end
 
-  defp scan(<<"{{", rest::binary>>, line, column, buffer, buffer_meta, acc) do
-    meta = %{line: line, column: column}
+  # Strip trailing whitespace from the most-recent :text token in `acc`.
+  defp maybe_trim_last_text(acc, false), do: acc
 
-    case take_until(rest, "}}") do
-      {:ok, inner, tail} ->
-        {line, column} = advance(["{{", inner, "}}"], line, column)
-        {inner, trim_left, trim_right} = extract_trim_markers(inner)
-        {buffer, buffer_meta} = maybe_trim_buffer(buffer, buffer_meta, trim_left)
-        {tail, line, column} = maybe_trim_leading_tail(tail, line, column, trim_right)
-
-        case classify(inner, meta) do
-          {:ok, token} ->
-            acc = flush(buffer, buffer_meta, acc)
-            scan(tail, line, column, [], nil, [token | acc])
-
-          :skip ->
-            scan(tail, line, column, buffer, buffer_meta, acc)
-
-          {:error, _message, _meta} = error ->
-            error
-        end
-
-      :error ->
-        {:error, "expected closing '}}' for Stem expression", meta}
-    end
+  defp maybe_trim_last_text([{:text, text, meta} | rest], true) do
+    trimmed = String.replace(text, ~r/[\s]+\z/u, "")
+    if trimmed == "", do: rest, else: [{:text, trimmed, meta} | rest]
   end
 
-  defp scan(<<char::utf8, rest::binary>>, line, column, buffer, buffer_meta, acc) do
-    buffer_meta = buffer_meta || %{line: line, column: column}
-    {line, column} = advance_char(char, line, column)
-    scan(rest, line, column, [buffer | <<char::utf8>>], buffer_meta, acc)
-  end
+  defp maybe_trim_last_text(acc, true), do: acc
 
-  defp scan(<<>>, line, column, buffer, buffer_meta, acc) do
-    acc = flush(buffer, buffer_meta, acc)
-    eof = {:eof, %{line: line, column: column}}
-    {:ok, Enum.reverse([eof | acc])}
-  end
+  # ---------------------------------------------------------------------------
+  # Tag classification (identical logic to the original scan/6 helpers)
+  # ---------------------------------------------------------------------------
 
-  # Classifies the contents of a `{{ ... }}` tag into a structural token.
   defp classify(inner, meta) do
     tag = String.trim(inner)
 
@@ -240,49 +346,27 @@ defmodule Stem.Tokenizer do
   defp maybe_trim_trailing_marker(inner, true), do: String.trim_trailing(inner, "~")
   defp maybe_trim_trailing_marker(inner, false), do: inner
 
-  defp maybe_trim_buffer(buffer, buffer_meta, false), do: {buffer, buffer_meta}
+  # ---------------------------------------------------------------------------
+  # Error message helpers
+  # ---------------------------------------------------------------------------
 
-  defp maybe_trim_buffer(buffer, buffer_meta, true) do
-    trimmed = buffer |> IO.iodata_to_binary() |> String.replace(~r/[\s]+$/u, "")
+  # Maps the unparsed rest to the descriptive error message that the old
+  # hand-written scanner produced.
+  defp unterminated_error(<<"{{!--", _::binary>>),
+    do: "expected closing '--}}' for Stem comment"
 
-    case trimmed do
-      "" -> {[], nil}
-      _ -> {[trimmed], buffer_meta}
-    end
-  end
+  defp unterminated_error(<<"{{!", _::binary>>),
+    do: "expected closing '}}' for Stem comment"
 
-  defp maybe_trim_leading_tail(tail, line, column, false), do: {tail, line, column}
+  defp unterminated_error(<<"{{{", _::binary>>),
+    do: "expected closing '}}}' for raw Stem expression"
 
-  defp maybe_trim_leading_tail(tail, line, column, true) do
-    trimmed_tail = String.replace(tail, ~r/^[\s]+/u, "")
-    removed_size = byte_size(tail) - byte_size(trimmed_tail)
-    <<removed::binary-size(^removed_size), _::binary>> = tail
-    {line, column} = advance(removed, line, column)
-    {trimmed_tail, line, column}
-  end
+  defp unterminated_error(<<"{{", _::binary>>),
+    do: "expected closing '}}' for Stem expression"
 
-  defp flush([], _buffer_meta, acc), do: acc
-
-  defp flush(buffer, buffer_meta, acc),
-    do: [{:text, IO.iodata_to_binary(buffer), buffer_meta} | acc]
-
-  defp take_until(source, delimiter) do
-    case :binary.match(source, delimiter) do
-      {index, _length} ->
-        delimiter_size = byte_size(delimiter)
-        <<inner::binary-size(^index), _::binary-size(^delimiter_size), rest::binary>> = source
-        {:ok, inner, rest}
-
-      :nomatch ->
-        :error
-    end
-  end
-
-  defp advance(iodata, line, column) do
-    iodata
-    |> IO.iodata_to_binary()
-    |> advance_binary(line, column)
-  end
+  # ---------------------------------------------------------------------------
+  # Position tracking
+  # ---------------------------------------------------------------------------
 
   defp advance_binary(<<"\r\n", rest::binary>>, line, _column),
     do: advance_binary(rest, line + 1, 1)
@@ -294,7 +378,4 @@ defmodule Stem.Tokenizer do
     do: advance_binary(rest, line, column + 1)
 
   defp advance_binary(<<>>, line, column), do: {line, column}
-
-  defp advance_char(?\n, line, _column), do: {line + 1, 1}
-  defp advance_char(_char, line, column), do: {line, column + 1}
 end
