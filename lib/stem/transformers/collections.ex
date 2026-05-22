@@ -270,19 +270,24 @@ defmodule Stem.Transformers.Collections do
   # If the :telemetry application is not available (it is an optional dep),
   # falls back to a Logger warning so no crash occurs.
   defp emit_capability_loaded_event do
-    metadata = %{group: __MODULE__, caller: Process.info(self(), :current_stacktrace)}
+    key = {__MODULE__, :capability_loaded}
 
-    if Code.ensure_loaded?(:telemetry) do
-      apply(:telemetry, :execute, [[:stem, :capability_group, :loaded], %{count: 1}, metadata])
-    else
-      require Logger
+    unless :persistent_term.get(key, false) do
+      :persistent_term.put(key, true)
+      metadata = %{group: __MODULE__, caller: Process.info(self(), :current_stacktrace)}
 
-      Logger.warning(
-        "[Stem] #{inspect(__MODULE__)} capability group loaded. " <>
-          "This group contains powerful data-manipulation transformers " <>
-          "(map, group_by, sort_by, filter, etc.). " <>
-          "Ensure the template source is fully trusted."
-      )
+      if Code.ensure_loaded?(:telemetry) do
+        apply(:telemetry, :execute, [[:stem, :capability_group, :loaded], %{count: 1}, metadata])
+      else
+        require Logger
+
+        Logger.warning(
+          "[Stem] #{inspect(__MODULE__)} capability group loaded. " <>
+            "This group contains powerful data-manipulation transformers " <>
+            "(map, group_by, sort_by, filter, etc.). " <>
+            "Ensure the template source is fully trusted."
+        )
+      end
     end
   end
 end

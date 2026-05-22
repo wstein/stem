@@ -5,7 +5,7 @@ Code.require_file("../../test_helper.exs", __DIR__)
 defmodule Mix.Tasks.Stem.AuditTest do
   use ExUnit.Case, async: false
 
-  import ExUnit.CaptureIO
+  import ExUnit.CaptureIO, only: [capture_io: 1, capture_io: 2]
 
   setup do
     tmp = System.tmp_dir!() |> Path.join("stem_audit_#{:erlang.unique_integer([:positive])}")
@@ -36,7 +36,7 @@ defmodule Mix.Tasks.Stem.AuditTest do
     File.write!(path, "config :stem, allow_elixir_expressions: true\n")
 
     assert_raise Mix.Error, ~r/Stem audit failed.*1 violation/, fn ->
-      capture_io(fn -> Mix.Tasks.Stem.Audit.run(["--paths", path]) end)
+      capture_io(:stderr, fn -> Mix.Tasks.Stem.Audit.run(["--paths", path]) end)
     end
   end
 
@@ -48,7 +48,7 @@ defmodule Mix.Tasks.Stem.AuditTest do
     File.write!(p2, "# dangerous\nconfig :other, allow_elixir_expressions: true\n")
 
     assert_raise Mix.Error, ~r/2 violation/, fn ->
-      capture_io(fn -> Mix.Tasks.Stem.Audit.run(["--paths", p1, "--paths", p2]) end)
+      capture_io(:stderr, fn -> Mix.Tasks.Stem.Audit.run(["--paths", p1, "--paths", p2]) end)
     end
   end
 
@@ -57,7 +57,7 @@ defmodule Mix.Tasks.Stem.AuditTest do
     File.write!(path, "config :stem, allow_elixir_expressions :  true\n")
 
     assert_raise Mix.Error, ~r/Stem audit failed/, fn ->
-      capture_io(fn -> Mix.Tasks.Stem.Audit.run(["--paths", path]) end)
+      capture_io(:stderr, fn -> Mix.Tasks.Stem.Audit.run(["--paths", path]) end)
     end
   end
 end
