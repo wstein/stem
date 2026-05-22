@@ -15,6 +15,8 @@ defmodule Stem.Transformers.Minimum do
   `Stem.Transformers.Strings`, `Stem.Transformers.Collections`, and `Stem.Transformers.Predicates`.
   """
 
+  alias Stem.Transformers.Shared
+
   @type transformer :: ([term()], map() -> term())
 
   @doc "Return all minimum transformers as a map keyed by name."
@@ -78,7 +80,7 @@ defmodule Stem.Transformers.Minimum do
   end
 
   defp default([value, fallback], _ctx) do
-    if present?(value), do: value, else: fallback
+    if Shared.present?(value), do: value, else: fallback
   end
 
   defp default(args, _ctx) do
@@ -99,7 +101,7 @@ defmodule Stem.Transformers.Minimum do
 
   defp join_impl(collection, separator) do
     collection
-    |> enumerable_list()
+    |> Shared.enumerable_list()
     |> Enum.map_join(separator, &to_string/1)
   end
 
@@ -131,19 +133,4 @@ defmodule Stem.Transformers.Minimum do
     encoded = JSON.encode!(to_string(value))
     String.slice(encoded, 1, max(byte_size(encoded) - 2, 0))
   end
-
-  # Helpers
-
-  defp present?(value), do: not empty?(value)
-
-  defp empty?(value) when value in [nil, "", []], do: true
-  defp empty?(value) when is_map(value), do: map_size(value) == 0
-  defp empty?(value) when is_list(value), do: value == []
-  defp empty?(value) when is_binary(value), do: value == ""
-  defp empty?(_value), do: false
-
-  defp enumerable_list(value) when is_list(value), do: value
-  defp enumerable_list(value) when is_map(value), do: Map.values(value)
-  defp enumerable_list(nil), do: []
-  defp enumerable_list(value), do: List.wrap(value)
 end

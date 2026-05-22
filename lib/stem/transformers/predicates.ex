@@ -19,6 +19,8 @@ defmodule Stem.Transformers.Predicates do
       )
   """
 
+  alias Stem.Transformers.Shared
+
   @type transformer :: ([term()], map() -> term())
 
   @doc "Return all predicate transformers as a map keyed by name."
@@ -56,21 +58,15 @@ defmodule Stem.Transformers.Predicates do
   defp contains_impl(_collection, _needle), do: false
 
   defp empty_q([value], _ctx) do
-    empty_impl(value)
+    Shared.empty?(value)
   end
 
   defp empty_q(args, _ctx) do
     raise ArgumentError, "empty? expects 1 argument, got: #{length(args)}"
   end
 
-  defp empty_impl(value) when value in [nil, "", []], do: true
-  defp empty_impl(value) when is_map(value), do: map_size(value) == 0
-  defp empty_impl(value) when is_list(value), do: value == []
-  defp empty_impl(value) when is_binary(value), do: value == ""
-  defp empty_impl(_value), do: false
-
   defp present_q([value], _ctx) do
-    not empty_impl(value)
+    Shared.present?(value)
   end
 
   defp present_q(args, _ctx) do
