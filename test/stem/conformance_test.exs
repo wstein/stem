@@ -8,6 +8,8 @@ defmodule Stem.ConformanceTest do
   use ExUnit.Case, async: false
   use ExUnitProperties
 
+  import ExUnit.CaptureIO
+
   alias Stem.Conformance
 
   @vectors_path "conformance/vectors.json"
@@ -66,7 +68,8 @@ defmodule Stem.ConformanceTest do
 
     on_exit(fn -> File.rm_rf!(path) end)
 
-    Mix.Tasks.Stem.Conformance.run(["--output", path])
+    # capture_io keeps the task's "Wrote N vectors" notice out of test output.
+    capture_io(fn -> Mix.Tasks.Stem.Conformance.run(["--output", path]) end)
 
     loaded = path |> File.read!() |> JSON.decode!()
     assert length(loaded) == length(Conformance.corpus())
