@@ -200,19 +200,13 @@ defmodule Stem.FuzzTest do
   defp helper_argument_list_generator(depth) do
     child_depth = max(depth - 1, 0)
 
-    bind(integer(0..3), fn pos_count ->
-      bind(
-        list_of(expression_generator(child_depth), min_length: pos_count, max_length: pos_count),
-        fn pos_args ->
-          bind(
-            list_of(keyword_argument_generator(child_depth), max_length: 3 - pos_count),
-            fn kw_args ->
-              constant(pos_args ++ kw_args)
-            end
-          )
-        end
-      )
-    end)
+    one_of([
+      constant([]),
+      list_of(expression_generator(child_depth), max_length: 3),
+      bind(integer(1..3), fn kw_count ->
+        list_of(keyword_argument_generator(child_depth), min_length: kw_count, max_length: kw_count)
+      end)
+    ])
   end
 
   defp keyword_argument_generator(depth) do
@@ -244,22 +238,13 @@ defmodule Stem.FuzzTest do
   defp pipeline_argument_list_generator(depth) do
     child_depth = max(depth - 1, 0)
 
-    bind(integer(0..3), fn pos_count ->
-      bind(
-        list_of(pipeline_arg_generator(child_depth),
-          min_length: pos_count,
-          max_length: pos_count
-        ),
-        fn pos_args ->
-          bind(
-            list_of(keyword_argument_generator(child_depth), max_length: 3 - pos_count),
-            fn kw_args ->
-              constant(pos_args ++ kw_args)
-            end
-          )
-        end
-      )
-    end)
+    one_of([
+      constant([]),
+      list_of(pipeline_arg_generator(child_depth), max_length: 3),
+      bind(integer(1..3), fn kw_count ->
+        list_of(keyword_argument_generator(child_depth), min_length: kw_count, max_length: kw_count)
+      end)
+    ])
   end
 
   defp pipeline_arg_generator(depth) do
