@@ -9,6 +9,10 @@ defmodule Stem.TransformersTest do
 
   alias Stem.Transformers
 
+  defp invoke_module_helper(helpers, name, args, ctx \\ %{}) do
+    Map.fetch!(helpers, Atom.to_string(name)).(args, ctx)
+  end
+
   setup do
     Transformers.clear()
     :ok
@@ -216,6 +220,384 @@ defmodule Stem.TransformersTest do
 
       assert_raise ArgumentError, ~r/take expects integer arguments/, fn ->
         Transformers.invoke(:take, [[1, 2, 3], "nope"], [])
+      end
+    end
+  end
+
+  describe "direct minimum helper module coverage" do
+    test "minimum helper map exposes functions and covers success and error branches" do
+      helpers = Stem.Transformers.Minimum.all()
+
+      assert Map.keys(helpers) |> Enum.sort() == [
+               "default",
+               "escape_html",
+               "escape_json",
+               "inspect",
+               "join",
+               "json",
+               "log",
+               "lookup"
+             ]
+
+      assert invoke_module_helper(helpers, :lookup, [%{name: "nina"}, :name]) == "nina"
+      assert invoke_module_helper(helpers, :lookup, [%{"name" => "nina"}, :name]) == "nina"
+      assert invoke_module_helper(helpers, :lookup, [["a", "b"], 1]) == "b"
+      assert invoke_module_helper(helpers, :lookup, [["a", "b"], "1"]) == nil
+      assert invoke_module_helper(helpers, :lookup, [123, :name]) == nil
+
+      stderr =
+        capture_io(:stderr, fn ->
+          assert invoke_module_helper(helpers, :log, ["hello", {:level, :debug}]) == ""
+        end)
+
+      assert stderr =~ "hello level=debug"
+
+      assert invoke_module_helper(helpers, :escape_html, [~s(<b>&"')]) ==
+               "&lt;b&gt;&amp;&quot;&#39;"
+
+      assert invoke_module_helper(helpers, :default, ["value", "fallback"]) == "value"
+      assert invoke_module_helper(helpers, :default, [nil, "fallback"]) == "fallback"
+      assert invoke_module_helper(helpers, :default, ["", "fallback"]) == "fallback"
+      assert invoke_module_helper(helpers, :default, [[1], "fallback"]) == [1]
+      assert invoke_module_helper(helpers, :default, [%{}, "fallback"]) == "fallback"
+      assert invoke_module_helper(helpers, :default, [false, "fallback"]) == false
+
+      assert invoke_module_helper(helpers, :join, [["a", "b"]]) == "ab"
+      assert invoke_module_helper(helpers, :join, [["a", "b"], ","]) == "a,b"
+      assert invoke_module_helper(helpers, :join, [%{a: 1, b: 2}, ","])
+         |> String.split(",")
+         |> Enum.sort() == ["1", "2"]
+      assert invoke_module_helper(helpers, :join, [nil, ","]) == ""
+      assert invoke_module_helper(helpers, :join, [7, ","]) == "7"
+
+      assert invoke_module_helper(helpers, :inspect, [%{a: 1}]) == "%{a: 1}"
+      assert invoke_module_helper(helpers, :json, [%{a: 1}]) == ~s({"a":1})
+      assert invoke_module_helper(helpers, :escape_json, [~s(a"b)]) == "a\\\"b"
+
+      assert_raise ArgumentError, ~r/lookup expects 2 arguments/, fn ->
+        invoke_module_helper(helpers, :lookup, [1])
+      end
+
+      assert_raise ArgumentError, ~r/escape_html expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :escape_html, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/default expects 2 arguments/, fn ->
+        invoke_module_helper(helpers, :default, [1])
+      end
+
+      assert_raise ArgumentError, ~r/join expects 1 or 2 arguments/, fn ->
+        invoke_module_helper(helpers, :join, [1, 2, 3])
+      end
+
+      assert_raise ArgumentError, ~r/inspect expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :inspect, [])
+      end
+
+      assert_raise ArgumentError, ~r/json expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :json, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/escape_json expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :escape_json, [])
+      end
+    end
+  end
+
+  describe "direct predicates helper module coverage" do
+    test "predicate helpers cover collection types and arity errors" do
+      helpers = Stem.Transformers.Predicates.all()
+
+      assert Map.keys(helpers) |> Enum.sort() == ["contains", "empty?", "present?"]
+
+      assert invoke_module_helper(helpers, :contains, ["stem", "te"])
+      assert invoke_module_helper(helpers, :contains, [%{name: "nina"}, :name])
+      assert invoke_module_helper(helpers, :contains, [%{"name" => "nina"}, :name])
+      assert invoke_module_helper(helpers, :contains, [["a", "b"], "a"])
+      refute invoke_module_helper(helpers, :contains, [123, :name])
+
+      assert invoke_module_helper(helpers, :empty?, [nil])
+      assert invoke_module_helper(helpers, :empty?, [""])
+      assert invoke_module_helper(helpers, :empty?, [[]])
+      assert invoke_module_helper(helpers, :empty?, [%{}])
+      refute invoke_module_helper(helpers, :empty?, ["stem"])
+      refute invoke_module_helper(helpers, :empty?, [[1]])
+      refute invoke_module_helper(helpers, :empty?, [0])
+
+      assert invoke_module_helper(helpers, :present?, [[1]])
+      assert invoke_module_helper(helpers, :present?, [false])
+      refute invoke_module_helper(helpers, :present?, [%{}])
+
+      assert_raise ArgumentError, ~r/contains expects 2 arguments/, fn ->
+        invoke_module_helper(helpers, :contains, [1])
+      end
+
+      assert_raise ArgumentError, ~r/empty\? expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :empty?, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/present\? expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :present?, [1, 2])
+      end
+    end
+  end
+
+  describe "direct string helper module coverage" do
+    test "string helpers cover main branches and integer normalization" do
+      helpers = Stem.Transformers.Strings.all()
+
+      assert Map.keys(helpers) |> Enum.sort() == [
+               "capitalize",
+               "downcase",
+               "drop",
+               "ends_with",
+               "first",
+               "replace",
+               "reverse",
+               "slice",
+               "starts_with",
+               "take",
+               "trim",
+               "truncate",
+               "upcase"
+             ]
+
+      assert invoke_module_helper(helpers, :trim, ["  Nina  "]) == "Nina"
+      assert invoke_module_helper(helpers, :upcase, ["Nina"]) == "NINA"
+      assert invoke_module_helper(helpers, :downcase, ["Nina"]) == "nina"
+      assert invoke_module_helper(helpers, :capitalize, ["nina"]) == "Nina"
+      assert invoke_module_helper(helpers, :truncate, ["stem", 10]) == "stem"
+      assert invoke_module_helper(helpers, :truncate, ["stem", 3]) == "ste"
+      assert invoke_module_helper(helpers, :truncate, ["stem", 3, ".."]) == "s.."
+      assert invoke_module_helper(helpers, :replace, ["stem", "e", "a"]) == "stam"
+      assert invoke_module_helper(helpers, :starts_with, ["stem", "st"])
+      assert invoke_module_helper(helpers, :ends_with, ["stem", "em"])
+
+      assert invoke_module_helper(helpers, :take, ["stem", 2]) == "st"
+      assert invoke_module_helper(helpers, :take, [[1, 2, 3], "2"]) == [1, 2]
+      assert invoke_module_helper(helpers, :take, [%{a: 2, b: 1}, 1]) |> length() == 1
+      assert invoke_module_helper(helpers, :take, [7, 1]) == [7]
+      assert invoke_module_helper(helpers, :drop, ["stem", 2]) == "em"
+      assert invoke_module_helper(helpers, :drop, [[1, 2, 3], 1]) == [2, 3]
+      assert invoke_module_helper(helpers, :drop, [nil, 1]) == []
+      assert invoke_module_helper(helpers, :slice, ["stem", 1, 2]) == "te"
+      assert invoke_module_helper(helpers, :slice, [[1, 2, 3], 1, "2"]) == [2, 3]
+      assert invoke_module_helper(helpers, :first, ["stem"]) == "s"
+      assert invoke_module_helper(helpers, :first, [[1, 2, 3]]) == 1
+      assert invoke_module_helper(helpers, :reverse, ["stem"]) == "mets"
+      assert invoke_module_helper(helpers, :reverse, [[1, 2, 3]]) == [3, 2, 1]
+
+      assert_raise ArgumentError, ~r/trim expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :trim, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/upcase expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :upcase, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/downcase expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :downcase, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/capitalize expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :capitalize, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/truncate expects 2 or 3 arguments/, fn ->
+        invoke_module_helper(helpers, :truncate, [1])
+      end
+
+      assert_raise ArgumentError, ~r/replace expects 3 arguments/, fn ->
+        invoke_module_helper(helpers, :replace, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/starts_with expects 2 arguments/, fn ->
+        invoke_module_helper(helpers, :starts_with, [1])
+      end
+
+      assert_raise ArgumentError, ~r/ends_with expects 2 arguments/, fn ->
+        invoke_module_helper(helpers, :ends_with, [1])
+      end
+
+      assert_raise ArgumentError, ~r/take expects 2 arguments/, fn ->
+        invoke_module_helper(helpers, :take, [1])
+      end
+
+      assert_raise ArgumentError, ~r/take expects integer arguments/, fn ->
+        invoke_module_helper(helpers, :take, [[1, 2, 3], "nope"])
+      end
+
+      assert_raise ArgumentError, ~r/drop expects 2 arguments/, fn ->
+        invoke_module_helper(helpers, :drop, [1])
+      end
+
+      assert_raise ArgumentError, ~r/drop expects integer arguments, got: :bad/, fn ->
+        invoke_module_helper(helpers, :drop, [[1, 2, 3], :bad])
+      end
+
+      assert_raise ArgumentError, ~r/slice expects 3 arguments/, fn ->
+        invoke_module_helper(helpers, :slice, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/slice expects integer arguments/, fn ->
+        invoke_module_helper(helpers, :slice, ["stem", "bad", 1])
+      end
+
+      assert_raise ArgumentError, ~r/first expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :first, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/reverse expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :reverse, [1, 2])
+      end
+    end
+  end
+
+  describe "direct collections helper module coverage" do
+    test "collection helpers cover selector traversal, sequence branches, and errors" do
+      helpers = Stem.Transformers.Collections.all()
+
+      assert Map.keys(helpers) |> Enum.sort() == [
+               "compact",
+               "drop",
+               "filter",
+               "first",
+               "flatten",
+               "group_by",
+               "map",
+               "reverse",
+               "slice",
+               "sort",
+               "sort_by",
+               "take",
+               "uniq"
+             ]
+
+      rows = [
+        %{name: "b", active: true, meta: %{rank: 2}},
+        %{name: "a", active: false, meta: %{rank: 1}},
+        %{name: "c", active: true, meta: %{rank: 3}}
+      ]
+
+      assert invoke_module_helper(helpers, :map, [rows, "name"]) == ["b", "a", "c"]
+      assert invoke_module_helper(helpers, :map, [[%{"name" => "nina"}], "name"]) == ["nina"]
+      assert invoke_module_helper(helpers, :map, [[%{name: "nina"}], :name]) == ["nina"]
+      assert invoke_module_helper(helpers, :map, [[%{1 => "one"}], 1]) == ["one"]
+      assert invoke_module_helper(helpers, :map, [[%{meta: %{rank: 2}}], "meta.rank"]) == [2]
+      assert invoke_module_helper(helpers, :map, [[["a", "b"]], 1]) == ["b"]
+      assert invoke_module_helper(helpers, :map, [[[%{"name" => "nina"}]], "0.name"]) == ["nina"]
+      assert invoke_module_helper(helpers, :map, [[%{1 => "one"}], "missing"]) == [nil]
+      assert invoke_module_helper(helpers, :map, [[[:atom_entry]], "name"]) == [nil]
+      assert invoke_module_helper(helpers, :map, [[1], "name"]) == [nil]
+      assert invoke_module_helper(helpers, :map, [[[%{name: "nina"}]], "x"]) == [nil]
+
+      assert invoke_module_helper(helpers, :filter, [[true, false, nil, 0, "", [], %{}, 1]]) == [
+               true,
+               1
+             ]
+
+      assert invoke_module_helper(helpers, :filter, [rows, "active"]) == [
+               %{name: "b", active: true, meta: %{rank: 2}},
+               %{name: "c", active: true, meta: %{rank: 3}}
+             ]
+
+      assert invoke_module_helper(helpers, :sort, [[3, 1, 2]]) == [1, 2, 3]
+
+      assert invoke_module_helper(helpers, :sort_by, [rows, "name"]) == [
+               %{name: "a", active: false, meta: %{rank: 1}},
+               %{name: "b", active: true, meta: %{rank: 2}},
+               %{name: "c", active: true, meta: %{rank: 3}}
+             ]
+
+      assert invoke_module_helper(helpers, :group_by, [rows, "active"]) == %{
+               false => [%{name: "a", active: false, meta: %{rank: 1}}],
+               true => [
+                 %{name: "b", active: true, meta: %{rank: 2}},
+                 %{name: "c", active: true, meta: %{rank: 3}}
+               ]
+             }
+
+      assert invoke_module_helper(helpers, :compact, [[1, nil, 2]]) == [1, 2]
+      assert Enum.sort(invoke_module_helper(helpers, :compact, [%{a: 2, b: nil, c: 1}])) == [1, 2]
+      assert invoke_module_helper(helpers, :compact, [nil]) == []
+      assert invoke_module_helper(helpers, :uniq, [[1, 1, 2]]) == [1, 2]
+      assert invoke_module_helper(helpers, :flatten, [[[1], [2, [3]]]]) == [1, 2, 3]
+
+      assert invoke_module_helper(helpers, :take, ["stem", 2]) == "st"
+      assert invoke_module_helper(helpers, :take, [[1, 2, 3], "2"]) == [1, 2]
+      assert invoke_module_helper(helpers, :take, [7, 1]) == [7]
+      assert invoke_module_helper(helpers, :drop, ["stem", 2]) == "em"
+      assert invoke_module_helper(helpers, :drop, [[1, 2, 3], 1]) == [2, 3]
+      assert invoke_module_helper(helpers, :slice, ["stem", 1, 2]) == "te"
+      assert invoke_module_helper(helpers, :slice, [[1, 2, 3], 1, "2"]) == [2, 3]
+      assert invoke_module_helper(helpers, :first, ["stem"]) == "s"
+      assert invoke_module_helper(helpers, :first, [[1, 2, 3]]) == 1
+      assert invoke_module_helper(helpers, :first, [7]) == 7
+      assert invoke_module_helper(helpers, :reverse, ["stem"]) == "mets"
+      assert invoke_module_helper(helpers, :reverse, [[1, 2, 3]]) == [3, 2, 1]
+
+      assert_raise ArgumentError, ~r/map expects 2 arguments/, fn ->
+        invoke_module_helper(helpers, :map, [1])
+      end
+
+      assert_raise ArgumentError, ~r/filter expects 1 or 2 arguments/, fn ->
+        invoke_module_helper(helpers, :filter, [1, 2, 3])
+      end
+
+      assert_raise ArgumentError, ~r/sort expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :sort, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/sort_by expects 2 arguments/, fn ->
+        invoke_module_helper(helpers, :sort_by, [1])
+      end
+
+      assert_raise ArgumentError, ~r/group_by expects 2 arguments/, fn ->
+        invoke_module_helper(helpers, :group_by, [1])
+      end
+
+      assert_raise ArgumentError, ~r/compact expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :compact, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/uniq expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :uniq, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/flatten expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :flatten, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/take expects 2 arguments/, fn ->
+        invoke_module_helper(helpers, :take, [1])
+      end
+
+      assert_raise ArgumentError, ~r/take expects integer arguments, got: :bad/, fn ->
+        invoke_module_helper(helpers, :take, [[1, 2, 3], :bad])
+      end
+
+      assert_raise ArgumentError, ~r/drop expects 2 arguments/, fn ->
+        invoke_module_helper(helpers, :drop, [1])
+      end
+
+      assert_raise ArgumentError, ~r/drop expects integer arguments/, fn ->
+        invoke_module_helper(helpers, :drop, ["stem", "bad"])
+      end
+
+      assert_raise ArgumentError, ~r/slice expects 3 arguments/, fn ->
+        invoke_module_helper(helpers, :slice, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/slice expects integer arguments, got: :bad/, fn ->
+        invoke_module_helper(helpers, :slice, [[1, 2, 3], :bad, 1])
+      end
+
+      assert_raise ArgumentError, ~r/first expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :first, [1, 2])
+      end
+
+      assert_raise ArgumentError, ~r/reverse expects 1 argument/, fn ->
+        invoke_module_helper(helpers, :reverse, [1, 2])
       end
     end
   end

@@ -157,8 +157,35 @@ defmodule Stem.UnsafeTest do
     assert result == "y"
   end
 
+  test "Unsafe.eval_string falls back to explicit options when config loading fails" do
+    temp_dir =
+      Path.join(System.tmp_dir!(), "unsafe-bad-config-#{System.unique_integer([:positive])}")
+
+    config_file = Path.join(temp_dir, ".stem.config.json")
+
+    File.mkdir_p!(temp_dir)
+    File.write!(config_file, "not json")
+
+    original_cwd = System.get_env("EXBAR_CWD")
+    System.put_env("EXBAR_CWD", temp_dir)
+
+    try do
+      result = Stem.Unsafe.eval_string("{{html}}", [assigns: [html: "<tag>"]], escape: :none)
+      assert result == "<tag>"
+    after
+      if original_cwd do
+        System.put_env("EXBAR_CWD", original_cwd)
+      else
+        System.delete_env("EXBAR_CWD")
+      end
+
+      File.rm_rf!(temp_dir)
+    end
+  end
+
   test "Unsafe functions are named for SSTI awareness" do
     # These functions exist in the Unsafe namespace for transparency
+    assert {:module, Stem.Unsafe} = Code.ensure_loaded(Stem.Unsafe)
     assert function_exported?(Stem.Unsafe, :eval_string, 3)
     assert function_exported?(Stem.Unsafe, :eval_file, 3)
   end

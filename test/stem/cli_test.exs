@@ -356,6 +356,31 @@ defmodule Mix.Tasks.StemTest do
       end
     end
 
+    test "expands transformer groups from CLI options and ignores invalid entries" do
+      temp_dir =
+        Path.join(System.tmp_dir!(), "stem-cli-transformers-#{System.unique_integer([:positive])}")
+
+      File.mkdir_p!(temp_dir)
+
+      template = Path.join(temp_dir, "template.stem")
+      File.write!(template, "{{name |> trim |> upcase}}")
+
+      try do
+        output =
+          capture_io([input: ~s({"name":"  nina  "})], fn ->
+            Stem.CLI.run([
+              "--transformers",
+              "Stem.Transformers.Strings, Stem.Config, bad-name",
+              template
+            ])
+          end)
+
+        assert output == "NINA"
+      after
+        File.rm_rf!(temp_dir)
+      end
+    end
+
     test "template helper detection ignores helper names without arguments" do
       assert Stem.CLI.render_template!("{{upcase}}", %{}) == ""
     end
@@ -400,9 +425,18 @@ defmodule Mix.Tasks.StemTest do
       assert Stem.CLI.render_template!("a{{}}b", %{}) == "ab"
     end
 
+    test "ignores comments while still rendering surrounding content" do
+      assert Stem.CLI.render_template!("a{{! note }}b", %{}) == "ab"
+    end
+
     test "detects assigns through blocks and ignores loop variables" do
       template = "{{#each xs}}{{@index}}:{{this}};{{/each}}"
       assert Stem.CLI.render_template!(template, %{xs: ["a", "b"]}) == "0:a;1:b;"
+    end
+
+    test "detects parent-scope assigns in nested expressions" do
+      template = "{{#each items}}{{../prefix}}:{{this}};{{/each}}"
+      assert Stem.CLI.render_template!(template, %{items: ["a", "b"], prefix: "P"}) == "P:a;P:b;"
     end
   end
 end

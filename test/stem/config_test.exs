@@ -106,6 +106,82 @@ defmodule Stem.ConfigTest do
     refute Keyword.has_key?(config, :mode)
   end
 
+  test "load_config expands a single transformer group", %{temp_dir: temp_dir} do
+    config_file = Path.join(temp_dir, ".stem.config.json")
+
+    Stem.Transformers.Strings.all()
+
+    File.write!(config_file, ~S"""
+    {
+      "transformers": "Stem.Transformers.Strings"
+    }
+    """)
+
+    {:ok, config} = Stem.Config.load_config(config_file)
+
+    assert is_map(config[:transformers])
+    assert Map.has_key?(config[:transformers], "trim")
+    refute Map.has_key?(config[:transformers], "load_config")
+  end
+
+  test "load_config ignores non-string transformers field", %{temp_dir: temp_dir} do
+    config_file = Path.join(temp_dir, ".stem.config.json")
+
+    File.write!(config_file, ~S"""
+    {
+      "transformers": true,
+      "allow_elixir_expressions": false
+    }
+    """)
+
+    {:ok, config} = Stem.Config.load_config(config_file)
+
+    refute Keyword.has_key?(config, :transformers)
+    assert config[:allow_elixir_expressions] == false
+  end
+
+  test "load_config ignores invalid allow_elixir_expressions values", %{temp_dir: temp_dir} do
+    config_file = Path.join(temp_dir, ".stem.config.json")
+
+    File.write!(config_file, ~S"""
+    {
+      "allow_elixir_expressions": "sometimes"
+    }
+    """)
+
+    {:ok, config} = Stem.Config.load_config(config_file)
+
+    refute Keyword.has_key?(config, :allow_elixir_expressions)
+  end
+
+  test "load_config ignores transformer modules without all/0", %{temp_dir: temp_dir} do
+    config_file = Path.join(temp_dir, ".stem.config.json")
+
+    File.write!(config_file, ~S"""
+    {
+      "transformers": "Stem.Config"
+    }
+    """)
+
+    {:ok, config} = Stem.Config.load_config(config_file)
+
+    refute Keyword.has_key?(config, :transformers)
+  end
+
+  test "load_config normalizes additional escape modes", %{temp_dir: temp_dir} do
+    xml_config = Path.join(temp_dir, "xml.config.json")
+    url_config = Path.join(temp_dir, "url.config.json")
+
+    File.write!(xml_config, ~S({"escape":"xml"}))
+    File.write!(url_config, ~S({"escape":"url"}))
+
+    assert {:ok, config} = Stem.Config.load_config(xml_config)
+    assert config[:escape] == :xml
+
+    assert {:ok, config} = Stem.Config.load_config(url_config)
+    assert config[:escape] == :url
+  end
+
   test "find_config locates .stem.config.json in current directory", %{temp_dir: temp_dir} do
     config_file = Path.join(temp_dir, ".stem.config.json")
     File.write!(config_file, "{}")
