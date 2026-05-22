@@ -23,6 +23,12 @@ Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], mode: :permissive)
 Never pass end-user input as the template string to either function.
 
 #### Links
-- [[Compile-Time-Only Security Model]] - The preferred, safer compile-time alternative.
-- [[Project Configuration Defaults]] - The `.stem.config.json` settings that influence mode.
-- [[Strict Model-View Separation and State Isolation]] - Why the safe boundary matters.
+
+- [[execution-modes-overview]] - Comprehensive guide to safe vs. permissive modes
+- [[safe-mode]] - Default sandbox mode details and production best practices
+- [[permissive-mode]] - Development-only unrestricted mode
+- [[Compile-Time-Only Security Model]] - The preferred, safer compile-time alternative
+- [[Project Configuration Defaults]] - The `.stem.config.json` settings that influence mode
+- [[Strict Model-View Separation and State Isolation]] - Why the safe boundary matters
+
+## Links

@@ -5,11 +5,28 @@ Use this chapter for concepts that apply across multiple building blocks.
 
 == Security and HTML Escaping
 
-Stem does not perform automatic HTML escaping; `{{ expression }}` renders the expression result directly as a string.
-Any output transformation, including sanitization and escaping, must be done explicitly through helper functions (e.g., `{{name |> escape_html}}`) or ordinary Elixir function calls used in expressions.
+Stem is **secure by default**: `{{ expression }}` output is **automatically HTML escaped** to prevent XSS attacks.
+Use `{{{ expression }}}` for raw output only when you know the content is safe.
 
-Keeping the rendering model to one expression form removes ambiguous output modes and makes security-sensitive formatting decisions explicit at the call site.
-Callers must treat all dynamically selected templates and user-provided context as untrusted, applying sanitization at the output boundary.
+Escape modes can be configured globally via `.stem.config.json` or per-call:
+
+* **HTML escaping (default)** — Prevents XSS attacks
+* **Raw output (`:none`)** — Use with caution only for trusted content
+* **Other modes** — `:xml`, `:json`, `:url`, or custom escape functions
+
+Keeping the rendering model explicit makes security-sensitive formatting decisions visible at the call site.
+Callers must treat all dynamically selected templates and user-provided context as untrusted.
+
+== Execution Modes: Safe vs. Permissive
+
+Stem enforces two execution modes for template evaluation:
+
+* **`:safe` (default, recommended)** — Restricts templates to structured Stem expressions, literals, helpers, and variable paths. Forbids arbitrary Elixir code. Protects against Server-Side Template Injection (SSTI). This is the required mode for all production templates.
+
+* **`:permissive`** — Allows arbitrary Elixir expressions. Maximum flexibility but should only be used for development and local experiments when the template source is entirely trusted and controlled by your team. Passing `mode: :permissive` serves as a visible code-review flag.
+
+Runtime evaluation APIs (`Stem.Unsafe.eval_string/3` and `Stem.Unsafe.eval_file/3`) default to `:safe` mode, requiring explicit opt-in to use `:permissive`.
+If you feel forced to use `:permissive` in production, this indicates an architectural flaw: business logic is leaking into the presentation layer and should be refactored into helpers or backend services.
 
 == Explicit Data Boundaries
 

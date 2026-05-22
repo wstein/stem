@@ -39,6 +39,53 @@ echo '{"name":"Nina"}' | mix stem template.stem
 
 By isolating the data into standalone files or pipes, there is no ambiguity parsing raw strings vs files on the command line.
 
+=== Execution Modes
+
+The CLI supports two execution modes via the `--permissive` flag:
+
+*Safe Mode (default):*
+[source,sh]
+----
+# Restricts templates to structured Stem expressions only
+echo '{"name":"Nina"}' | bin/stem template.stem
+----
+
+*Permissive Mode:*
+[source,sh]
+----
+# Allows arbitrary Elixir expressions — development only
+echo '{"a":1,"b":2}' | bin/stem template.stem --permissive
+----
+
+Use `:safe` mode (the default) for all production templates and when working with untrusted or user-generated templates.
+Only use `--permissive` for local development and experiments on templates you fully control.
+
+== Runtime APIs
+
+Stem provides runtime evaluation APIs for dynamic template compilation:
+
+[source,elixir]
+----
+# Safe by default — structured Stem expressions only
+Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"])
+
+# Explicit opt-in for arbitrary Elixir — development/trusted sources only
+Stem.Unsafe.eval_string("{{a + b}}", assigns: [a: 1, b: 2], mode: :permissive)
+----
+
+Always use `:safe` mode (the default) for production templates.
+Only pass `mode: :permissive` when the template source is entirely controlled by your team and arbitrary code execution is necessary.
+
+For full API reference, see xref:architecture:index.adoc[Architecture] documentation.
+
+== Security Best Practices
+
+* **Always use `:safe` mode in production.** It is the default for a reason.
+* **Never execute user-generated templates.** If you must, ensure they are validated and safe first.
+* **Use HTML escaping by default.** `{{ expression }}` is escaped; use `{{{ expression }}}` only for trusted content.
+* **Inject all data via `assigns`.** Do not allow templates to read environment variables or access global state.
+* **Register custom helpers instead of relying on `:permissive` mode.** Helper functions keep business logic out of templates.
+
 == Relationship To The Other Docs
 
 * Keep project orientation in xref:onboarding:index.adoc[Onboarding].

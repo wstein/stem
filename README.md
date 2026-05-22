@@ -144,9 +144,28 @@ Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], mode: :permissive)
 #=> "3"
 ```
 
-Both `eval_string/3` and `eval_file/3` default to `mode: :safe`, which only accepts structured Stem expressions, literals, helpers, and paths. Pass `mode: :permissive` to allow arbitrary Elixir expressions — only do this when the template source is fully controlled by your team.
-`contract:` lets templates declare required assigns at the call boundary.
-Helper pipelines are safe-mode compatible because they lower to helper invocations instead of arbitrary Elixir.
+### Execution Modes
+
+Both `eval_string/3` and `eval_file/3` support two execution modes:
+
+* **`:safe` (default)** — Restricts templates to structured Stem expressions, literals, helpers, and variable paths. Forbids arbitrary Elixir code. This is the recommended mode for all production templates and protects against Server-Side Template Injection (SSTI). Use this for:
+  * User-generated or untrusted template sources
+  * Production environments
+  * Compliance-sensitive applications
+
+* **`:permissive`** — Allows arbitrary Elixir expressions. Provides maximum flexibility but should only be used for development and local experiments when the template source is entirely trusted and controlled by your own team. Passing `mode: :permissive` serves as a visible code-review flag during security review.
+
+```elixir
+# Safe by default — use in production
+Stem.Unsafe.eval_string("{{user.name |> trim |> upcase}}", assigns: [user: %{name: "nina"}])
+
+# Explicit opt-in for arbitrary code — development only
+Stem.Unsafe.eval_string("{{a + b}}", assigns: [a: 1, b: 2], mode: :permissive)
+```
+
+Additional features:
+- `contract:` lets templates declare required assigns at the call boundary
+- Helper pipelines are safe-mode compatible because they lower to helper invocations instead of arbitrary Elixir
 
 ## Built-In Helpers
 

@@ -15,7 +15,12 @@ Dynamic rendering of untrusted template source at runtime introduces Server-Side
 Prefer compile-time macros for all static templates. Only use `Stem.Unsafe.eval_string/3` or `Stem.Unsafe.eval_file/3` when templates are dynamically generated from strictly trusted sources (e.g., controlled internal tools). Both Unsafe functions default to `mode: :safe`, which forbids arbitrary Elixir expressions. Pass `mode: :permissive` explicitly only when the template source is fully trusted and structured Stem expressions are insufficient.
 
 #### Links
-* [[Native AST Compilation Pipeline]] - The pipeline these macros drive.
-* [[HTML Escaping Behavior]] - Output sanitization and raw expression guidance.
+
+* [[execution-modes-overview]] - How safe and permissive modes work
+* [[safe-mode]] - Default mode for production templates
+* [[permissive-mode]] - Unrestricted mode for development only
+* [[Runtime Evaluation and Sandboxing]] - Runtime API details and mode selection
+* [[Native AST Compilation Pipeline]] - The pipeline these macros drive
+* [[HTML Escaping Behavior]] - Output sanitization and raw expression guidance
 
 ## Links

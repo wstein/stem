@@ -40,3 +40,13 @@ Accepted (2026-05-21).
 *Decision.* Remove inline JSON from the positional CLI contract. Establish a Mustache-style contract: one argument (`stem template.stem`) means the template gets bound to JSON read from standard input. Two arguments (`stem data.json template.stem`) mean file-backed data first, then the template.
 
 *Consequences.* The CLI behavior is strictly file-based or pipe-based, avoiding ambiguity and reinforcing Stem's philosophy of explicit data separation and strict input boundaries.
+
+=== ADR-0004: Two-Mode Execution Model for SSTI Protection
+
+Accepted (2026-05-22).
+
+*Context.* Runtime template evaluation introduces Server-Side Template Injection (SSTI) risk. Stem must make the trust boundary explicit and force developers to consciously opt into unsafe behavior.
+
+*Decision.* Implement two execution modes: `:safe` (default) forbids arbitrary Elixir expressions and restricts templates to structured Stem expressions, literals, helpers, and paths; `:permissive` allows arbitrary Elixir code for trusted internal templates. Runtime evaluation APIs (`eval_string/3`, `eval_file/3`) default to `:safe` and require explicit `mode: :permissive` in config or at the call site to enable unrestricted code.
+
+*Consequences.* Production templates are protected against SSTI by default. The requirement to explicitly set `mode: :permissive` serves as a visible code-review flag. If a developer needs `:permissive` in production, it signals an architectural flaw—business logic is leaking into the presentation layer and should be refactored into registered helpers or backend services.
