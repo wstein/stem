@@ -19,8 +19,8 @@ defmodule Stem do
   Stem is a native Handlebars-style template compiler for Elixir.
 
   Stem compiles double-curly-brace templates straight into Elixir's abstract
-  syntax tree through its own tokenizer, parser, and compiler — there is no
-  intermediate template language. Templates become efficient compiled
+  syntax tree through its own parser and compiler — there is no intermediate
+  template language. Templates become efficient compiled
   functions, and templates can be compiled or evaluated both at compile time
   and at runtime.
 
@@ -45,10 +45,12 @@ defmodule Stem do
 
   ## Pipeline
 
-  Compilation flows through four stages:
+  Compilation flows through three stages:
 
-      source -> Stem.Tokenizer -> Stem.Parser -> Stem.AST -> Stem.Compiler -> quoted Elixir
+      source -> Stem.Parser -> Stem.AST -> Stem.Compiler -> quoted Elixir
 
+  `Stem.Parser` handles both lexing (via NimbleParsec combinators) and structural
+  parsing (block nesting, partial expansion, region and yield resolution).
   `Stem.Expression` translates the contents of each tag into Elixir as part of
   the compiler stage.
 

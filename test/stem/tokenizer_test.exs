@@ -2,13 +2,13 @@
 
 Code.require_file("../test_helper.exs", __DIR__)
 
-defmodule Stem.TokenizerTest do
+defmodule Stem.LexerTest do
   use ExUnit.Case, async: true
 
-  alias Stem.Tokenizer
+  alias Stem.Parser
 
   defp tokens(source) do
-    {:ok, tokens} = Tokenizer.tokenize(source)
+    {:ok, tokens} = Parser.tokenize(source)
     tokens
   end
 
@@ -67,7 +67,7 @@ defmodule Stem.TokenizerTest do
 
   test "nested braces are rejected" do
     assert {:error, "nested braces are not supported in Stem expressions", _} =
-             Tokenizer.tokenize("{{ {name} }}")
+             Parser.tokenize("{{ {name} }}")
   end
 
   test "short comments are discarded and surrounding text merges" do
@@ -140,42 +140,42 @@ defmodule Stem.TokenizerTest do
 
   describe "errors" do
     test "unterminated expression" do
-      assert Tokenizer.tokenize("foo {{bar") ==
+      assert Parser.tokenize("foo {{bar") ==
                {:error, "expected closing '}}' for Stem expression", %{line: 1, column: 5}}
     end
 
     test "nested braces are not supported" do
       assert {:error, "nested braces are not supported in Stem expressions", _} =
-               Tokenizer.tokenize("{{ #if {bar} }}")
+               Parser.tokenize("{{ #if {bar} }}")
     end
 
     test "unterminated block comment" do
       assert {:error, "expected closing '--}}' for Stem comment", _} =
-               Tokenizer.tokenize("{{!-- bar")
+               Parser.tokenize("{{!-- bar")
     end
 
     test "unterminated short comment" do
-      assert {:error, "expected closing '}}' for Stem comment", _} = Tokenizer.tokenize("{{! bar")
+      assert {:error, "expected closing '}}' for Stem comment", _} = Parser.tokenize("{{! bar")
     end
 
     test "unsupported block helper" do
       assert {:error, "unsupported Stem block helper '{{#each_with}}'", _} =
-               Tokenizer.tokenize("{{#each_with items}}")
+               Parser.tokenize("{{#each_with items}}")
     end
 
     test "unsupported closing tag" do
       assert {:error, "unsupported Stem closing tag '{{/foo}}'", _} =
-               Tokenizer.tokenize("{{/foo}}")
+               Parser.tokenize("{{/foo}}")
     end
 
     test "unterminated raw expression" do
       assert {:error, "expected closing '}}}' for raw Stem expression", _} =
-               Tokenizer.tokenize("{{{unclosed")
+               Parser.tokenize("{{{unclosed")
     end
 
     test "nested braces in raw expression are rejected" do
       assert {:error, "nested braces are not supported in Stem expressions", _} =
-               Tokenizer.tokenize("{{{a{b}}}")
+               Parser.tokenize("{{{a{b}}}")
     end
   end
 

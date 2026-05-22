@@ -3,30 +3,437 @@
 defmodule Stem.Parser do
   @moduledoc false
 
-  # Builds a `Stem.AST` from Stem source.
+  # Lexes and parses Stem source into a `Stem.AST`.
   #
-  # The parser drives `Stem.Tokenizer`, matches block open/else/close tokens
-  # into nested nodes, expands partials inline (with a recursion guard), and
-  # reports structural errors such as mismatched or unclosed blocks. Expression
-  # contents are parsed into `Stem.Expression` nodes for later compiler stages.
+  # This module combines lexing and structural parsing into a single stage.
+  # NimbleParsec combinators recognise the `{{ }}` family of constructs and
+  # attach line/column metadata via `post_traverse` hooks, eliminating manual
+  # byte iteration for position tracking.  Elixir recursive-descent functions
+  # then fold the flat token stream into the nested AST that `Stem.Compiler`
+  # consumes.
+  #
+  # Partial expansion happens inline during the structural parse: each
+  # `{{> name}}` token is replaced by recursively parsing the partial's source
+  # with a recursion guard in the call stack.
 
+  import NimbleParsec
   alias Stem.Expression
-  alias Stem.Tokenizer
+
+  # ---------------------------------------------------------------------------
+  # Types (kept public so callers can reference them without Stem.Tokenizer)
+  # ---------------------------------------------------------------------------
+
+  @type meta :: %{line: pos_integer(), column: pos_integer()}
+  @type kind :: :if | :unless | :each | :with | :region
+
+  @type token ::
+          {:text, binary(), meta()}
+          | {:expr, binary(), atom(), meta()}
+          | {:block_open, kind(), binary(), meta()}
+          | {:block_else, meta()}
+          | {:block_close, kind(), meta()}
+          | {:yield, binary(), meta()}
+          | {:partial, binary(), meta()}
+          | {:eof, meta()}
+
+  @block_kinds %{
+    "if" => :if,
+    "unless" => :unless,
+    "each" => :each,
+    "with" => :with,
+    "region" => :region
+  }
 
   @kind_tags %{if: "if", unless: "unless", each: "each", with: "with", region: "region"}
 
-  @spec parse(binary(), keyword()) :: {:ok, Stem.AST.t()} | {:error, binary(), Tokenizer.meta()}
+  # ---------------------------------------------------------------------------
+  # NimbleParsec – position-capture callback
+  # ---------------------------------------------------------------------------
+
+  # Called by `post_traverse` hooks on each combinator.  Prepends
+  # `{:end_pos, line, col}` to the accumulated args so that
+  # `assemble_tokens/5` can read the end position of each raw token directly
+  # from the tagged tuple without byte iteration.
+  @doc false
+  def inject_end_pos(rest, args, context, {line, line_offset}, byte_offset) do
+    col = byte_offset - line_offset + 1
+    # args is in reversed stack order; appending here means {:end_pos, ...}
+    # appears FIRST after tag/1 reverses the accumulation.
+    {rest, args ++ [{:end_pos, line, col}], context}
+  end
+
+  # ---------------------------------------------------------------------------
+  # NimbleParsec combinators (compile-time)
+  # ---------------------------------------------------------------------------
+
+  # Matches any sequence of characters that does not start a `{{` tag.
+  text_chunk =
+    lookahead_not(string("{{"))
+    |> utf8_char([])
+    |> repeat(
+      lookahead_not(string("{{"))
+      |> utf8_char([])
+    )
+    |> reduce({List, :to_string, []})
+    |> post_traverse({__MODULE__, :inject_end_pos, []})
+    |> tag(:text_chunk)
+
+  # Matches `{{!-- ... --}}` block comments.
+  block_comment =
+    ignore(string("{{!--"))
+    |> repeat(
+      lookahead_not(string("--}}"))
+      |> utf8_char([])
+    )
+    |> ignore(string("--}}"))
+    |> post_traverse({__MODULE__, :inject_end_pos, []})
+    |> tag(:block_comment)
+
+  # Matches `{{! ... }}` inline comments.
+  inline_comment =
+    ignore(string("{{!"))
+    |> repeat(
+      lookahead_not(string("}}"))
+      |> utf8_char([])
+    )
+    |> ignore(string("}}"))
+    |> post_traverse({__MODULE__, :inject_end_pos, []})
+    |> tag(:inline_comment)
+
+  # Matches `{{{ ... }}}` raw (no-escape) output.
+  raw_tag =
+    ignore(string("{{{"))
+    |> repeat(
+      lookahead_not(string("}}}"))
+      |> utf8_char([])
+    )
+    |> ignore(string("}}}"))
+    |> reduce({List, :to_string, []})
+    |> post_traverse({__MODULE__, :inject_end_pos, []})
+    |> tag(:raw_tag)
+
+  # Matches `{{ ... }}` standard tags.
+  standard_tag =
+    ignore(string("{{"))
+    |> repeat(
+      lookahead_not(string("}}"))
+      |> utf8_char([])
+    )
+    |> ignore(string("}}"))
+    |> reduce({List, :to_string, []})
+    |> post_traverse({__MODULE__, :inject_end_pos, []})
+    |> tag(:standard_tag)
+
+  defparsec(
+    :do_lex,
+    repeat(
+      choice([
+        block_comment,
+        inline_comment,
+        raw_tag,
+        standard_tag,
+        text_chunk
+      ])
+    )
+  )
+
+  # ---------------------------------------------------------------------------
+  # Public API
+  # ---------------------------------------------------------------------------
+
+  @spec parse(binary(), keyword()) :: {:ok, Stem.AST.t()} | {:error, binary(), meta()}
   def parse(source, opts \\ []) when is_binary(source) do
     partials = opts |> Keyword.get(:partials, %{}) |> normalize_partials()
 
-    with {:ok, tokens} <- Tokenizer.tokenize(source, opts) do
+    with {:ok, tokens} <- tokenize(source, opts) do
       parse_stream(tokens, partials, [])
     end
   end
 
-  # Tokenizes and parses a nested source (used for partials).
+  # Exposed for lexer-level tests (position tracking, trim markers, error
+  # messages).  Not part of the stable public API.
+  @doc false
+  @spec tokenize(binary(), keyword()) :: {:ok, [token()]} | {:error, binary(), meta()}
+  def tokenize(source, opts \\ []) when is_binary(source) do
+    line = Keyword.get(opts, :line, 1)
+    column = Keyword.get(opts, :column, 1)
+
+    case do_lex(source) do
+      {:ok, raw_tokens, "", _ctx, _pos, _offset} ->
+        assemble_tokens(raw_tokens, line, column, [], false)
+
+      {:ok, _raw, rest, _ctx, {err_line, err_line_offset}, err_byte} ->
+        err_col = err_byte - err_line_offset + 1
+        {:error, unterminated_error(rest), %{line: err_line, column: err_col}}
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Token assembly
+  # ---------------------------------------------------------------------------
+
+  # Folds the flat list emitted by `do_lex/1` into the `[token()]` list
+  # consumed by the structural parser.  Each raw token carries
+  # `{:end_pos, end_line, end_col}` as its first element (injected by
+  # `inject_end_pos/5`).  `{line, col}` is the START position of the current
+  # token (equal to the end position of the previous token).
+
+  defp assemble_tokens([], line, col, acc, _trim_next) do
+    {:ok, Enum.reverse([{:eof, %{line: line, column: col}} | acc])}
+  end
+
+  defp assemble_tokens(
+         [{:text_chunk, [{:end_pos, end_line, end_col}, text]} | rest],
+         line,
+         col,
+         acc,
+         trim_next
+       ) do
+    {text_line, text_col, trimmed} =
+      if trim_next do
+        remaining = String.replace(text, ~r/\A[\s]+/u, "")
+        stripped = binary_part(text, 0, byte_size(text) - byte_size(remaining))
+        {new_line, new_col} = advance_through(stripped, line, col)
+        {new_line, new_col, remaining}
+      else
+        {line, col, text}
+      end
+
+    acc2 =
+      case {trimmed, acc} do
+        {"", _} ->
+          acc
+
+        {_, [{:text, prev_text, prev_meta} | rest_acc]} ->
+          [{:text, prev_text <> trimmed, prev_meta} | rest_acc]
+
+        {_, _} ->
+          [{:text, trimmed, %{line: text_line, column: text_col}} | acc]
+      end
+
+    assemble_tokens(rest, end_line, end_col, acc2, false)
+  end
+
+  defp assemble_tokens(
+         [{:block_comment, [{:end_pos, end_line, end_col} | _chars]} | rest],
+         _line,
+         _col,
+         acc,
+         trim_next
+       ) do
+    assemble_tokens(rest, end_line, end_col, acc, trim_next)
+  end
+
+  defp assemble_tokens(
+         [{:inline_comment, [{:end_pos, end_line, end_col} | _chars]} | rest],
+         _line,
+         _col,
+         acc,
+         trim_next
+       ) do
+    assemble_tokens(rest, end_line, end_col, acc, trim_next)
+  end
+
+  defp assemble_tokens(
+         [{:raw_tag, [{:end_pos, end_line, end_col}, inner]} | rest],
+         line,
+         col,
+         acc,
+         _trim_next
+       ) do
+    meta = %{line: line, column: col}
+    {inner2, trim_left, trim_right} = extract_trim_markers(inner)
+    acc2 = maybe_trim_last_text(acc, trim_left)
+
+    case classify_raw_expr(inner2, meta) do
+      {:ok, token} -> assemble_tokens(rest, end_line, end_col, [token | acc2], trim_right)
+      :skip -> assemble_tokens(rest, end_line, end_col, acc2, trim_right)
+      {:error, message, emeta} -> {:error, message, emeta}
+    end
+  end
+
+  defp assemble_tokens(
+         [{:standard_tag, [{:end_pos, end_line, end_col}, inner]} | rest],
+         line,
+         col,
+         acc,
+         _trim_next
+       ) do
+    meta = %{line: line, column: col}
+    {inner2, trim_left, trim_right} = extract_trim_markers(inner)
+    acc2 = maybe_trim_last_text(acc, trim_left)
+
+    case classify(inner2, meta) do
+      {:ok, token} -> assemble_tokens(rest, end_line, end_col, [token | acc2], trim_right)
+      :skip -> assemble_tokens(rest, end_line, end_col, acc2, trim_right)
+      {:error, message, emeta} -> {:error, message, emeta}
+    end
+  end
+
+  defp maybe_trim_last_text(acc, false), do: acc
+
+  defp maybe_trim_last_text([{:text, text, meta} | rest], true) do
+    trimmed = String.replace(text, ~r/[\s]+\z/u, "")
+    if trimmed == "", do: rest, else: [{:text, trimmed, meta} | rest]
+  end
+
+  defp maybe_trim_last_text(acc, true), do: acc
+
+  # ---------------------------------------------------------------------------
+  # Tag classification
+  # ---------------------------------------------------------------------------
+
+  defp classify(inner, meta) do
+    tag = String.trim(inner)
+
+    cond do
+      String.contains?(tag, "{") or String.contains?(tag, "}") ->
+        {:error, "nested braces are not supported in Stem expressions", meta}
+
+      tag == "" ->
+        :skip
+
+      tag == "else" ->
+        {:ok, {:block_else, meta}}
+
+      first_word(tag) == "yield" ->
+        classify_yield(tag, meta)
+
+      String.starts_with?(tag, "#") ->
+        classify_open(tag, meta)
+
+      String.starts_with?(tag, "/") ->
+        classify_close(tag, meta)
+
+      String.starts_with?(tag, ">") ->
+        name = tag |> binary_part(1, byte_size(tag) - 1) |> String.trim()
+        {:ok, {:partial, name, meta}}
+
+      true ->
+        {:ok, {:expr, tag, :default, meta}}
+    end
+  end
+
+  defp classify_raw_expr(inner, meta) do
+    tag = String.trim(inner)
+
+    cond do
+      String.contains?(tag, "{") or String.contains?(tag, "}") ->
+        {:error, "nested braces are not supported in Stem expressions", meta}
+
+      tag == "" ->
+        :skip
+
+      true ->
+        {:ok, {:expr, tag, :none, meta}}
+    end
+  end
+
+  defp classify_open(tag, meta) do
+    {name, args} =
+      tag
+      |> binary_part(1, byte_size(tag) - 1)
+      |> split_first_word()
+
+    case Map.fetch(@block_kinds, name) do
+      {:ok, kind} -> {:ok, {:block_open, kind, args, meta}}
+      :error -> {:error, "unsupported Stem block helper '{{##{name}}}'", meta}
+    end
+  end
+
+  defp classify_yield(tag, meta) do
+    {_yield, args} = split_first_word(tag)
+    {:ok, {:yield, args, meta}}
+  end
+
+  defp classify_close(tag, meta) do
+    name = binary_part(tag, 1, byte_size(tag) - 1) |> String.trim()
+
+    case Map.fetch(@block_kinds, name) do
+      {:ok, kind} -> {:ok, {:block_close, kind, meta}}
+      :error -> {:error, "unsupported Stem closing tag '{{#{tag}}}'", meta}
+    end
+  end
+
+  defp split_first_word(string) do
+    case String.split(String.trim_leading(string), ~r/\s+/, parts: 2) do
+      [word] -> {word, ""}
+      [word, rest] -> {word, String.trim(rest)}
+    end
+  end
+
+  defp first_word(string) do
+    string
+    |> split_first_word()
+    |> elem(0)
+  end
+
+  defp extract_trim_markers(inner) do
+    trimmed = String.trim(inner)
+    trim_left = String.starts_with?(trimmed, "~")
+    trim_right = String.ends_with?(trimmed, "~")
+
+    normalized =
+      trimmed
+      |> maybe_trim_leading_marker(trim_left)
+      |> maybe_trim_trailing_marker(trim_right)
+      |> String.trim()
+
+    {normalized, trim_left, trim_right}
+  end
+
+  defp maybe_trim_leading_marker(inner, true), do: String.trim_leading(inner, "~")
+  defp maybe_trim_leading_marker(inner, false), do: inner
+
+  defp maybe_trim_trailing_marker(inner, true), do: String.trim_trailing(inner, "~")
+  defp maybe_trim_trailing_marker(inner, false), do: inner
+
+  # ---------------------------------------------------------------------------
+  # Error messages (lexer level)
+  # ---------------------------------------------------------------------------
+
+  defp unterminated_error(<<"{{!--", _::binary>>),
+    do: "expected closing '--}}' for Stem comment"
+
+  defp unterminated_error(<<"{{!", _::binary>>),
+    do: "expected closing '}}' for Stem comment"
+
+  defp unterminated_error(<<"{{{", _::binary>>),
+    do: "expected closing '}}}' for raw Stem expression"
+
+  defp unterminated_error(<<"{{", _::binary>>),
+    do: "expected closing '}}' for Stem expression"
+
+  # ---------------------------------------------------------------------------
+  # Position tracking (trim-next prefix only)
+  # ---------------------------------------------------------------------------
+
+  # Advances {line, col} through `binary`, computing the position of the first
+  # character that follows it.  Used only when a right-trim marker strips
+  # leading whitespace from the next text chunk and the chunk's start position
+  # must be updated accordingly.
+  #
+  # Unlike the former `advance_binary/3`, this function is non-recursive: it
+  # splits on newline boundaries once and computes the result with arithmetic.
+  defp advance_through("", line, col), do: {line, col}
+
+  defp advance_through(binary, line, col) do
+    case :binary.split(binary, ["\r\n", "\n"], [:global]) do
+      [only] ->
+        {line, col + String.length(only)}
+
+      parts ->
+        {line + length(parts) - 1, String.length(List.last(parts)) + 1}
+    end
+  end
+
+  # ---------------------------------------------------------------------------
+  # Structural parser helpers
+  # ---------------------------------------------------------------------------
+
+  # Tokenises and parses a nested source (used for partial expansion).
   defp parse_source(source, partials, stack) do
-    with {:ok, tokens} <- Tokenizer.tokenize(source) do
+    with {:ok, tokens} <- tokenize(source) do
       parse_stream(tokens, partials, stack)
     end
   end
