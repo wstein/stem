@@ -77,7 +77,7 @@ Greeting.render(name: "Nina")
 For dynamic contents or user-provided templates, use the runtime API:
 
 ```elixir
-Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"])
+Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 #=> "Hello Nina"
 ```
 
@@ -111,7 +111,7 @@ partials = %{
   layout: "<article><header>{{yield header}}</header><main>{{yield body}}</main></article>"
 }
 
-Stem.eval_string("{{#region header}}<h1>{{title}}</h1>{{/region}}{{#region body}}Hello {{name}}{{/region}}{{> layout}}",
+Stem.Unsafe.eval_string("{{#region header}}<h1>{{title}}</h1>{{/region}}{{#region body}}Hello {{name}}{{/region}}{{> layout}}",
   assigns: [title: "Stem", name: "Nina"],
   partials: partials
 )
@@ -128,13 +128,13 @@ quoted = Stem.compile_string("Hello {{name}}")
 {result, _binding} = Code.eval_quoted(quoted, assigns: [name: "Nina"], helpers: [])
 #=> {"Hello Nina", ...}
 
-Stem.eval_string("Hello {{name}}", assigns: [name: "Nina"])
+Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 #=> "Hello Nina"
 
-Stem.eval_string("{{name}}", assigns: [name: "Nina"], mode: :safe)
+Stem.Unsafe.eval_string("{{name}}", assigns: [name: "Nina"], mode: :safe)
 #=> "Nina"
 
-Stem.eval_string("{{name}}", assigns: [name: "Nina"], contract: [required: [:name]])
+Stem.Unsafe.eval_string("{{name}}", assigns: [name: "Nina"], contract: [required: [:name]])
 #=> "Nina"
 ```
 
@@ -225,15 +225,15 @@ You can override the default HTML escaping with the `:escape` option:
 
 ```elixir
 # HTML escaping (default, recommended)
-Stem.eval_string("{{name}}", assigns: [name: "<script>alert('xss')</script>"])
+Stem.Unsafe.eval_string("{{name}}", assigns: [name: "<script>alert('xss')</script>"])
 #=> "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;"
 
 # Raw output (use with caution)
-Stem.eval_string("{{name}}", assigns: [name: "<b>bold</b>"], escape: :none)
+Stem.Unsafe.eval_string("{{name}}", assigns: [name: "<b>bold</b>"], escape: :none)
 #=> "<b>bold</b>"
 
 # Other escape modes: :xml, :json, :url, or custom functions
-Stem.eval_string("{{name}}", assigns: [name: "hello&world"], escape: :xml)
+Stem.Unsafe.eval_string("{{name}}", assigns: [name: "hello&world"], escape: :xml)
 
 # Via CLI
 bin/stem data.json template.stem --escape none

@@ -36,12 +36,12 @@ defmodule Stem do
   Runtime APIs are also available for dynamic use cases:
 
     * `compile_string/2` and `compile_file/2` return quoted Elixir.
-    * `eval_string/3` and `eval_file/3` compile and evaluate templates.
+    * `Stem.Unsafe.eval_string/3` and `Stem.Unsafe.eval_file/3` compile and evaluate templates.
 
-  ⚠️ **Security**: Runtime evaluation APIs (`eval_string`, `eval_file`) should
+  ⚠️ **Security**: Runtime evaluation APIs (`Stem.Unsafe.eval_string/3`, `Stem.Unsafe.eval_file/3`) should
   only be used with **templates from trusted sources**. Use compile-time APIs
   (`function_from_string`, `compile_string`) for untrusted templates to prevent
-  server-side template injection attacks. See `Stem.Unsafe` for runtime APIs.
+  server-side template injection attacks.
 
   ## Pipeline
 
@@ -145,7 +145,7 @@ defmodule Stem do
   Missing assigns render as an empty string. Pass `warn_on_missing_assigns:
   true` to print a warning for missing values.
 
-      iex> Stem.eval_string("{{name |> trim |> upcase}}", assigns: [name: "  nina  "])
+      iex> Stem.Unsafe.eval_string("{{name |> trim |> upcase}}", assigns: [name: "  nina  "])
       "NINA"
   """
 
@@ -315,40 +315,6 @@ defmodule Stem do
     __compile_file__(filename, options)
   end
 
-  @doc """
-  Compiles and evaluates a template string using the provided bindings.
-
-  ⚠️ **WARNING**: This function is only safe when templates come from a trusted source.
-  For better security, use compile-time APIs like `function_from_string/5` instead.
-  See `Stem.Unsafe` for more information.
-  """
-  @spec eval_string(String.t(), keyword, [compile_opt]) :: term()
-  def eval_string(source, bindings \\ [], options \\ [])
-      when is_binary(source) and is_list(bindings) and is_list(options) do
-    bindings = normalize_runtime_bindings(bindings)
-    merged_options = load_and_merge_config(options)
-    quoted = __compile_string__(source, merged_options)
-    {result, _} = Code.eval_quoted(quoted, bindings)
-    result
-  end
-
-  @doc """
-  Compiles and evaluates a template file using the provided bindings.
-
-  ⚠️ **WARNING**: This function is only safe when the file path comes from a trusted source.
-  For better security, use compile-time APIs like `function_from_file/5` instead.
-  See `Stem.Unsafe` for more information.
-  """
-  @spec eval_file(Path.t(), keyword, [compile_opt]) :: String.t()
-  def eval_file(filename, bindings \\ [], options \\ [])
-      when is_list(bindings) and is_list(options) do
-    bindings = normalize_runtime_bindings(bindings)
-    merged_options = load_and_merge_config(options)
-    quoted = __compile_file__(filename, merged_options)
-    {result, _} = Code.eval_quoted(quoted, bindings)
-    result
-  end
-
   ### Helpers
 
   @doc false
@@ -395,12 +361,6 @@ defmodule Stem do
     source = File.read!(filename)
 
     compile_string_internal(source, Keyword.merge(options, file: filename, line: 1))
-  end
-
-  defp normalize_runtime_bindings(bindings) do
-    bindings
-    |> Keyword.put_new(:assigns, [])
-    |> Keyword.put_new(:helpers, [])
   end
 
   defp load_and_merge_config(options) do

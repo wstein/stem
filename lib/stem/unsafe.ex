@@ -34,7 +34,11 @@ defmodule Stem.Unsafe do
   @spec eval_string(String.t(), keyword, [Stem.compile_opt()]) :: term()
   def eval_string(source, bindings \\ [], options \\ [])
       when is_binary(source) and is_list(bindings) and is_list(options) do
-    Stem.eval_string(source, bindings, options)
+    bindings = normalize_runtime_bindings(bindings)
+    merged_options = load_and_merge_config(options)
+    quoted = Stem.__compile_string__(source, merged_options)
+    {result, _} = Code.eval_quoted(quoted, bindings)
+    result
   end
 
   @doc """
@@ -48,6 +52,34 @@ defmodule Stem.Unsafe do
   @spec eval_file(Path.t(), keyword, [Stem.compile_opt()]) :: String.t()
   def eval_file(filename, bindings \\ [], options \\ [])
       when is_list(bindings) and is_list(options) do
-    Stem.eval_file(filename, bindings, options)
+    bindings = normalize_runtime_bindings(bindings)
+    merged_options = load_and_merge_config(options)
+    quoted = Stem.__compile_file__(filename, merged_options)
+    {result, _} = Code.eval_quoted(quoted, bindings)
+    result
+  end
+
+  defp normalize_runtime_bindings(bindings) do
+    bindings
+    |> Keyword.put_new(:assigns, [])
+    |> Keyword.put_new(:helpers, [])
+  end
+
+  defp load_and_merge_config(options) do
+    cwd = System.get_env("EXBAR_CWD") || File.cwd!()
+
+    case Stem.Config.find_config(cwd) do
+      {:ok, config_path} ->
+        case Stem.Config.load_config(config_path) do
+          {:ok, config} ->
+            Keyword.merge(config, options)
+
+          {:error, _reason} ->
+            options
+        end
+
+      :not_found ->
+        options
+    end
   end
 end

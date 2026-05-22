@@ -95,28 +95,26 @@ defmodule Stem.StemTest do
     end
   end
 
-  describe "eval_string" do
-    test "eval_string returns rendered string" do
-      result = Stem.eval_string("Hello {{name}}", assigns: [name: "World"])
+  describe "runtime evaluation" do
+    test "Unsafe.eval_string returns rendered string" do
+      result = Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "World"])
 
       assert result == "Hello World"
     end
 
-    test "eval_string with empty source" do
-      result = Stem.eval_string("", assigns: [])
+    test "Unsafe.eval_string with empty source" do
+      result = Stem.Unsafe.eval_string("", assigns: [])
 
       assert result == ""
     end
 
-    test "eval_string with only text" do
-      result = Stem.eval_string("just text", assigns: [])
+    test "Unsafe.eval_string with only text" do
+      result = Stem.Unsafe.eval_string("just text", assigns: [])
 
       assert result == "just text"
     end
-  end
 
-  describe "eval_file" do
-    test "eval_file returns rendered string from file" do
+    test "Unsafe.eval_file returns rendered string from file" do
       temp_file =
         Path.join(System.tmp_dir!(), "eval_file_test_#{System.unique_integer([:positive])}.stem")
 
@@ -124,12 +122,12 @@ defmodule Stem.StemTest do
 
       on_exit(fn -> File.rm_rf!(temp_file) end)
 
-      result = Stem.eval_file(temp_file, assigns: [val: "success"])
+      result = Stem.Unsafe.eval_file(temp_file, assigns: [val: "success"])
 
       assert result == "Value: success"
     end
 
-    test "eval_file honors project escape defaults" do
+    test "Unsafe.eval_file honors project escape defaults" do
       temp_dir =
         Path.join(System.tmp_dir!(), "config_escape_eval_#{System.unique_integer([:positive])}")
 
@@ -145,7 +143,7 @@ defmodule Stem.StemTest do
       System.put_env("EXBAR_CWD", temp_dir)
 
       try do
-        result = Stem.eval_file(template_file, assigns: [html: "<b>safe</b>"])
+        result = Stem.Unsafe.eval_file(template_file, assigns: [html: "<b>safe</b>"])
 
         assert result == "&lt;b&gt;safe&lt;/b&gt;"
       after
@@ -185,16 +183,16 @@ defmodule Stem.StemTest do
 
       # Skip this test for now - requires module def at compile time
       # Just verify eval_file works instead
-      result = Stem.eval_file(temp_file, assigns: [content: "test"])
+      result = Stem.Unsafe.eval_file(temp_file, assigns: [content: "test"])
 
       assert result == "File test"
     end
   end
 
   describe "Config integration" do
-    test "eval_string loads config from project root" do
-      # This test verifies config loading doesn't break eval_string
-      result = Stem.eval_string("{{name}}", assigns: [name: "test"])
+    test "Unsafe.eval_string loads config from project root" do
+      # This test verifies config loading doesn't break runtime evaluation
+      result = Stem.Unsafe.eval_string("{{name}}", assigns: [name: "test"])
 
       assert result == "test"
     end
@@ -203,7 +201,7 @@ defmodule Stem.StemTest do
   describe "Error handling" do
     test "syntax error in template raises error" do
       assert_raise Stem.SyntaxError, fn ->
-        Stem.eval_string("{{#if missing_close }}", assigns: [])
+        Stem.Unsafe.eval_string("{{#if missing_close }}", assigns: [])
       end
     end
 

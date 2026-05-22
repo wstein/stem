@@ -403,7 +403,7 @@ defmodule StemTest do
     test "eval_file and compile_file work at runtime" do
       file = Path.join(__DIR__, "fixtures/stem_template_with_bindings.stem")
 
-      assert Stem.eval_file(file, assigns: [bar: 9]) == "foo 9\n"
+      assert Stem.Unsafe.eval_file(file, assigns: [bar: 9]) == "foo 9\n"
 
       quoted = Stem.compile_file(file)
       {result, _binding} = Code.eval_quoted(quoted, assigns: [bar: 7], helpers: [])

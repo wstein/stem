@@ -156,15 +156,15 @@ defmodule Stem.UnsafeTest do
     assert function_exported?(Stem.Unsafe, :eval_file, 3)
   end
 
-  test "Unsafe.eval_string delegates to Stem.eval_string" do
-    # Both should produce the same result
-    result_unsafe = Stem.Unsafe.eval_string("{{name}}", assigns: [name: "test"])
-    result_stem = Stem.eval_string("{{name}}", assigns: [name: "test"])
+  test "Stem.eval_string is no longer exported" do
+    refute function_exported?(Stem, :eval_string, 3)
 
-    assert result_unsafe == result_stem
+    assert_raise UndefinedFunctionError, fn ->
+      apply(Stem, :eval_string, ["{{name}}", [assigns: [name: "test"]], []])
+    end
   end
 
-  test "Unsafe.eval_file delegates to Stem.eval_file" do
+  test "Stem.eval_file is no longer exported" do
     temp_file =
       Path.join(System.tmp_dir!(), "delegate_test_#{System.unique_integer([:positive])}.stem")
 
@@ -172,9 +172,10 @@ defmodule Stem.UnsafeTest do
 
     on_exit(fn -> File.rm_rf!(temp_file) end)
 
-    result_unsafe = Stem.Unsafe.eval_file(temp_file, assigns: [content: "same"])
-    result_stem = Stem.eval_file(temp_file, assigns: [content: "same"])
+    refute function_exported?(Stem, :eval_file, 3)
 
-    assert result_unsafe == result_stem
+    assert_raise UndefinedFunctionError, fn ->
+      apply(Stem, :eval_file, [temp_file, [assigns: [content: "same"]], []])
+    end
   end
 end
