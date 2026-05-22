@@ -106,7 +106,8 @@ defmodule Stem.ParserTest do
 
   test "subexpressions are stored as expression AST" do
     assert [
-             {:expr, {:helper, "format", [{:helper, "uppercase", [{:identifier, "name"}]}]},
+             {:expr,
+              {:transformer, "format", [{:transformer, "uppercase", [{:identifier, "name"}]}]},
               :default, _}
            ] =
              ast("{{format (uppercase name)}}")

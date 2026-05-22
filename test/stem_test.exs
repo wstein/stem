@@ -41,7 +41,7 @@ defmodule StemTest do
   doctest Stem
 
   setup do
-    Stem.Helpers.clear()
+    Stem.Transformers.clear()
     :ok
   end
 
@@ -101,17 +101,10 @@ defmodule StemTest do
       assert eval("{{user.name}}", assigns: [user: %{name: "Nina"}]) == "Nina"
     end
 
-    test "pipelines compose helpers in declaration order" do
-      helpers = [
-        trim: fn [value], _ctx -> String.trim(to_string(value)) end,
-        upcase: fn [value], _ctx -> String.upcase(to_string(value)) end,
-        truncate: fn [value, count], _ctx -> String.slice(to_string(value), 0, count) end
-      ]
-
+    test "pipelines compose transformers in declaration order" do
       assert eval(
                "{{name |> trim |> upcase |> truncate(4)}}",
-               [assigns: [name: "  nina  "]],
-               helpers: helpers
+               assigns: [name: "  nina  "]
              ) == "NINA"
     end
 
@@ -196,7 +189,7 @@ defmodule StemTest do
 
   describe "helpers" do
     test "registered helper" do
-      Stem.Helpers.register(:upcase, fn [v], _ctx -> String.upcase(to_string(v)) end)
+      Stem.Transformers.register(:upcase, fn [v], _ctx -> String.upcase(to_string(v)) end)
       assert eval("{{upcase name}}", assigns: [name: "nina"]) == "NINA"
     end
 
@@ -221,20 +214,24 @@ defmodule StemTest do
                "true,false"
     end
 
-    test "helper with positional and keyword arguments" do
-      helpers = [tag: fn [label, href: href], _ctx -> "#{label}@#{href}" end]
+    test "transformer with positional and keyword arguments" do
+      transformers = %{"tag" => fn [label, href: href], _ctx -> "#{label}@#{href}" end}
 
-      assert eval(~s({{tag name href=url}}), [assigns: [name: "x", url: "u"]], helpers: helpers) ==
+      assert eval(~s({{tag name href=url}}), [assigns: [name: "x", url: "u"]],
+               transformers: transformers
+             ) ==
                "x@u"
     end
 
-    test "subexpressions compose helpers" do
-      helpers = [
-        uppercase: fn [value], _ctx -> String.upcase(to_string(value)) end,
-        format: fn [value], _ctx -> "[#{value}]" end
-      ]
+    test "subexpressions compose transformers" do
+      transformers = %{
+        "uppercase" => fn [value], _ctx -> String.upcase(to_string(value)) end,
+        "format" => fn [value], _ctx -> "[#{value}]" end
+      }
 
-      assert eval("{{format (uppercase name)}}", [assigns: [name: "nina"]], helpers: helpers) ==
+      assert eval("{{format (uppercase name)}}", [assigns: [name: "nina"]],
+               transformers: transformers
+             ) ==
                "[NINA]"
     end
   end
@@ -410,7 +407,7 @@ defmodule StemTest do
       quoted = Stem.compile_string("{{x}}")
       assert is_tuple(quoted)
 
-      {result, _binding} = Code.eval_quoted(quoted, assigns: [x: 2], helpers: [])
+      {result, _binding} = Code.eval_quoted(quoted, assigns: [x: 2], transformers: %{})
       assert result == "2"
     end
 
@@ -420,7 +417,7 @@ defmodule StemTest do
       assert Stem.Unsafe.eval_file(file, assigns: [bar: 9]) == "foo 9\n"
 
       quoted = Stem.compile_file(file)
-      {result, _binding} = Code.eval_quoted(quoted, assigns: [bar: 7], helpers: [])
+      {result, _binding} = Code.eval_quoted(quoted, assigns: [bar: 7], transformers: %{})
       assert result == "foo 7\n"
     end
 

@@ -4,7 +4,7 @@ defmodule Stem.StemTest do
   use ExUnit.Case, async: false
 
   setup do
-    Stem.Helpers.clear()
+    Stem.Transformers.clear()
     :ok
   end
 
@@ -100,7 +100,7 @@ defmodule Stem.StemTest do
 
       try do
         quoted = Stem.compile_file(template_file)
-        {result, _} = Code.eval_quoted(quoted, assigns: [], helpers: [])
+        {result, _} = Code.eval_quoted(quoted, assigns: [], transformers: %{})
         assert result == "2"
       after
         if original_cwd do

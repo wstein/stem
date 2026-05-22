@@ -34,11 +34,11 @@ defmodule Stem.TestTemplate do
 
   def eval_string(template, bindings \\ [], options \\ [])
       when is_binary(template) and is_list(bindings) and is_list(options) do
-    helper_bindings = Keyword.get(options, :helpers, [])
+    transformer_bindings = Keyword.get(options, :transformers, %{})
 
     bindings =
       if template_uses_helpers?(template) do
-        Keyword.put_new(bindings, :helpers, helper_bindings)
+        Keyword.put_new(bindings, :transformers, transformer_bindings)
       else
         bindings
       end
@@ -55,13 +55,13 @@ defmodule Stem.TestTemplate do
 
   def eval_file(filename, bindings \\ [], options \\ [])
       when is_list(bindings) and is_list(options) do
-    helper_bindings = Keyword.get(options, :helpers, [])
+    transformer_bindings = Keyword.get(options, :transformers, %{})
     filename = IO.chardata_to_string(filename)
     template = File.read!(filename)
 
     bindings =
       if template_uses_helpers?(template) do
-        Keyword.put_new(bindings, :helpers, helper_bindings)
+        Keyword.put_new(bindings, :transformers, transformer_bindings)
       else
         bindings
       end
@@ -107,14 +107,24 @@ defmodule Stem.TestTemplate do
     create_or_get(module, render_quoted(args, compiled), filename, 1)
   end
 
-  # The helper-usage heuristic can add a `:helpers` arg the compiled body never
-  # references, so mark every parameter used to keep compilation warning-free.
+  # The transformer-usage heuristic can add a `:transformers` arg the compiled body
+  # never references, so mark every parameter used to suppress compilation warnings.
+  # When `:transformers` is not a parameter, inject a default empty map so built-in
+  # transformer calls in the compiled body still have `transformers` in scope.
   defp render_quoted(args, compiled) do
     params = Enum.map(args, &Macro.var(&1, nil))
     noops = Enum.map(params, fn param -> quote(do: _ = unquote(param)) end)
 
+    transformer_setup =
+      if :transformers in args do
+        quote(do: _ = var!(transformers))
+      else
+        quote(do: transformers = %{})
+      end
+
     quote do
       def render(unquote_splicing(params)) do
+        unquote(transformer_setup)
         unquote_splicing(noops)
         unquote(compiled)
       end

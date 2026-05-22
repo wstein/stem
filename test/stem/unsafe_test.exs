@@ -4,7 +4,7 @@ defmodule Stem.UnsafeTest do
   use ExUnit.Case, async: false
 
   setup do
-    Stem.Helpers.clear()
+    Stem.Transformers.clear()
     :ok
   end
 
@@ -52,11 +52,14 @@ defmodule Stem.UnsafeTest do
     assert result == "123"
   end
 
-  test "Unsafe.eval_string with functions" do
-    functions = %{"shout" => fn [v], _ctx -> String.upcase(to_string(v)) <> "!" end}
+  test "Unsafe.eval_string with custom transformers" do
+    transformers = %{"shout" => fn [v], _ctx -> String.upcase(to_string(v)) <> "!" end}
 
     result =
-      Stem.Unsafe.eval_string("{{shout name}}", assigns: [name: "hello"], functions: functions)
+      Stem.Unsafe.eval_string("{{shout name}}",
+        assigns: [name: "hello"],
+        transformers: transformers
+      )
 
     assert result == "HELLO!"
   end

@@ -6,7 +6,7 @@ defmodule Stem.StemMigrationTest do
   use ExUnit.Case, async: false
 
   setup do
-    Stem.Helpers.clear()
+    Stem.Transformers.clear()
     :ok
   end
 
@@ -86,15 +86,15 @@ defmodule Stem.StemMigrationTest do
   end
 
   test "helper registry resolves inline helpers" do
-    Stem.Helpers.register(:upcase, fn [value], _ctx -> String.upcase(to_string(value)) end)
+    Stem.Transformers.register(:upcase, fn [value], _ctx -> String.upcase(to_string(value)) end)
     assert Stem.TestTemplate.eval_string("{{upcase name}}", assigns: [name: "nina"]) == "NINA"
   end
 
   test "local helper bindings can be passed via eval options" do
-    helpers = [suffix: fn [value, suffix], _ctx -> "#{value}#{suffix}" end]
+    transformers = %{"suffix" => fn [value, suffix], _ctx -> "#{value}#{suffix}" end}
 
     assert Stem.TestTemplate.eval_string("{{suffix name \"!\"}}", [assigns: [name: "nina"]],
-             helpers: helpers
+             transformers: transformers
            ) ==
              "nina!"
   end
@@ -102,18 +102,18 @@ defmodule Stem.StemMigrationTest do
   test "helper calls accept positional and keyword arguments" do
     template = Path.expand("fixtures/stem_template_with_helpers.stem", __DIR__)
 
-    helpers = [
-      progress: fn [label, percent, done], _ctx -> "#{label}:#{percent}:#{done}" end,
-      link: fn [label, href: href, class: class_name], _ctx ->
+    transformers = %{
+      "progress" => fn [label, percent, done], _ctx -> "#{label}:#{percent}:#{done}" end,
+      "link" => fn [label, href: href, class: class_name], _ctx ->
         "<a class=\"#{class_name}\" href=\"#{href}\">#{label}</a>"
       end
-    ]
+    }
 
     output =
       Stem.TestTemplate.eval_file(
         template,
         [assigns: [person: %{url: "https://yehudakatz.com/"}]],
-        helpers: helpers,
+        transformers: transformers,
         escape: :none
       )
 
@@ -126,7 +126,7 @@ defmodule Stem.StemMigrationTest do
   end
 
   test "helper can use current each-item context" do
-    Stem.Helpers.register(:wrap, fn [value], %{this: this} -> "#{value}:#{this}" end)
+    Stem.Transformers.register(:wrap, fn [value], %{this: this} -> "#{value}:#{this}" end)
     template = "{{#each items}}({{this}}:{{wrap \"item\"}}){{/each}}"
 
     assert Stem.TestTemplate.eval_string(template, assigns: [items: [1, 2]]) ==
@@ -153,7 +153,7 @@ defmodule Stem.StemMigrationTest do
     assert Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"]) == "Hello Nina"
 
     quoted = Stem.compile_string("Hello {{name}}")
-    {result, _binding} = Code.eval_quoted(quoted, assigns: [name: "Joe"], helpers: [])
+    {result, _binding} = Code.eval_quoted(quoted, assigns: [name: "Joe"], transformers: %{})
     assert result == "Hello Joe"
   end
 end

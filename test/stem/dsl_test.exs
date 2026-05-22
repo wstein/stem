@@ -42,7 +42,7 @@ defmodule Stem.DSLTest.SigilViews do
   import Stem.Sigil
 
   def hello(assigns), do: ~STEM"Hello {{name}}"
-  def upcase(assigns, helpers), do: ~STEM"{{upcase name}}"
+  def upcase(assigns, transformers), do: ~STEM"{{upcase name}}"
 end
 
 defmodule Stem.DSLTest.UseStemViews do
@@ -75,10 +75,10 @@ defmodule Stem.DSLTest do
     assert Stem.DSLTest.SigilViews.hello(name: "Nina") == "Hello Nina"
   end
 
-  test "~STEM can resolve helpers from surrounding scope" do
-    helpers = [upcase: fn [value], _ctx -> String.upcase(to_string(value)) end]
+  test "~STEM can resolve transformers from surrounding scope" do
+    transformers = %{"upcase" => fn [value], _ctx -> String.upcase(to_string(value)) end}
 
-    assert Stem.DSLTest.SigilViews.upcase([name: "Nina"], helpers) == "NINA"
+    assert Stem.DSLTest.SigilViews.upcase([name: "Nina"], transformers) == "NINA"
   end
 
   test "use Stem imports the DSL and sigil" do

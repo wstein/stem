@@ -24,7 +24,7 @@ defmodule Stem.CompilerDiagnosticsTest do
     stderr =
       capture_io(:stderr, fn ->
         quoted = compile_template("{{#if true}}ok{{/if}}")
-        Code.eval_quoted(quoted, assigns: %{}, helpers: [])
+        Code.eval_quoted(quoted, assigns: %{}, transformers: %{})
       end)
 
     assert stderr =~ "diagnostics.stem:1: if condition is constant"
@@ -45,7 +45,7 @@ defmodule Stem.CompilerDiagnosticsTest do
             warn_on_diagnostics: true
           )
 
-        Code.eval_quoted(quoted, assigns: %{}, helpers: [])
+        Code.eval_quoted(quoted, assigns: %{}, transformers: %{})
       end)
 
     assert stderr =~ "if condition is constant and will always evaluate falsy"
@@ -83,7 +83,7 @@ defmodule Stem.CompilerDiagnosticsTest do
 
         Code.eval_quoted(quoted,
           assigns: %{rows: [%{name: "root", children: [], meta: nil}]},
-          helpers: []
+          transformers: %{}
         )
       end)
 
@@ -104,7 +104,7 @@ defmodule Stem.CompilerDiagnosticsTest do
 
         Code.eval_quoted(quoted,
           assigns: %{rows: [%{name: "root", children: [], meta: nil}]},
-          helpers: []
+          transformers: %{}
         )
       end)
 
@@ -115,7 +115,7 @@ defmodule Stem.CompilerDiagnosticsTest do
     stderr =
       capture_io(:stderr, fn ->
         quoted = compile_template("{{#each rows as |row idx|}}{{row.name}}{{/each}}")
-        Code.eval_quoted(quoted, assigns: %{rows: [%{name: "a"}]}, helpers: [])
+        Code.eval_quoted(quoted, assigns: %{rows: [%{name: "a"}]}, transformers: %{})
       end)
 
     assert stderr =~ "unused each block parameter(s): idx"
@@ -129,7 +129,7 @@ defmodule Stem.CompilerDiagnosticsTest do
             "{{#unless false}}ok{{/unless}}{{#with story as |article|}}{{this.title}}{{/with}}"
           )
 
-        Code.eval_quoted(quoted, assigns: %{story: %{title: "Stem"}}, helpers: [])
+        Code.eval_quoted(quoted, assigns: %{story: %{title: "Stem"}}, transformers: %{})
       end)
 
     assert stderr =~ "unless condition is constant"
@@ -142,7 +142,7 @@ defmodule Stem.CompilerDiagnosticsTest do
     stderr =
       capture_io(:stderr, fn ->
         quoted = Compiler.compile(ast, file: "diagnostics.stem")
-        Code.eval_quoted(quoted, assigns: %{}, helpers: [])
+        Code.eval_quoted(quoted, assigns: %{}, transformers: %{})
       end)
 
     assert stderr == ""
@@ -159,7 +159,7 @@ defmodule Stem.CompilerDiagnosticsTest do
 
         Code.eval_quoted(quoted,
           assigns: %{zero: 0, empty_map: %{}, empty_list: []},
-          helpers: []
+          transformers: %{}
         )
       end)
 
@@ -186,7 +186,7 @@ defmodule Stem.CompilerDiagnosticsTest do
           assigns: %{
             rows: [%{ok: true, skip: false, name: "root", children: [1]}]
           },
-          helpers: []
+          transformers: %{}
         )
       end)
 
@@ -209,7 +209,7 @@ defmodule Stem.CompilerDiagnosticsTest do
 
         Code.eval_quoted(quoted,
           assigns: %{rows: [%{name: "root", empty: [], nothing: nil}]},
-          helpers: []
+          transformers: %{}
         )
       end)
 
@@ -232,7 +232,7 @@ defmodule Stem.CompilerDiagnosticsTest do
 
         Code.eval_quoted(quoted,
           assigns: %{rows: [%{name: "root", children: [1], meta: nil}]},
-          helpers: []
+          transformers: %{}
         )
       end)
 
@@ -253,7 +253,7 @@ defmodule Stem.CompilerDiagnosticsTest do
 
           Code.eval_quoted(quoted,
             assigns: %{rows: [%{name: "root", empty: [], missing: nil}]},
-            helpers: []
+            transformers: %{}
           )
         end)
 

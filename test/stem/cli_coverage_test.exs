@@ -4,7 +4,7 @@ defmodule Stem.CLICoverageTest do
   use ExUnit.Case, async: false
 
   setup do
-    Stem.Helpers.clear()
+    Stem.Transformers.clear()
     :ok
   end
 

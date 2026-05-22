@@ -16,7 +16,7 @@ defmodule Stem.RuntimeSecurityTest do
 
   test "compile_string returns quoted expressions" do
     quoted = Stem.compile_string("Hello {{name}}")
-    {result, _binding} = Code.eval_quoted(quoted, assigns: [name: "Nina"], helpers: [])
+    {result, _binding} = Code.eval_quoted(quoted, assigns: [name: "Nina"], transformers: %{})
     assert result == "Hello Nina"
   end
 
@@ -52,12 +52,10 @@ defmodule Stem.RuntimeSecurityTest do
              "Hello Nina"
   end
 
-  test "allow_elixir_expressions: false allows helper pipelines" do
-    helpers = [trim: fn [value], _ctx -> String.trim(to_string(value)) end]
-
+  test "allow_elixir_expressions: false allows transformer pipelines" do
     assert Stem.Unsafe.eval_string(
              "{{name |> trim}}",
-             [assigns: [name: " Nina "], helpers: helpers],
+             [assigns: [name: " Nina "]],
              allow_elixir_expressions: false
            ) == "Nina"
   end

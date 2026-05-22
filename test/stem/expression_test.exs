@@ -50,27 +50,27 @@ defmodule Stem.ExpressionTest do
 
   test "helper invocation with positional, literal, and numeric args" do
     assert t(~s|progress "Search" 10 false|) ==
-             ~s|Stem.Helpers.invoke(:progress, ["Search", 10, false], [assigns: assigns, functions: functions])|
+             ~s|Stem.Transformers.invoke(:progress, ["Search", 10, false], [assigns: assigns, transformers: transformers])|
   end
 
   test "helper invocation with keyword args and identifiers" do
     assert t(~s|link label href=url class="c"|) ==
-             ~s|Stem.Helpers.invoke(:link, [@label, href: @url, class: "c"], [assigns: assigns, functions: functions])|
+             ~s|Stem.Transformers.invoke(:link, [@label, href: @url, class: "c"], [assigns: assigns, transformers: transformers])|
   end
 
   test "subexpressions compose helper calls" do
     assert t("format (uppercase name)") ==
-             "Stem.Helpers.invoke(:format, [Stem.Helpers.invoke(:uppercase, [@name], [assigns: assigns, functions: functions])], [assigns: assigns, functions: functions])"
+             "Stem.Transformers.invoke(:format, [Stem.Transformers.invoke(:uppercase, [@name], [assigns: assigns, transformers: transformers])], [assigns: assigns, transformers: transformers])"
   end
 
   test "parse returns structured helper AST" do
-    assert {:ok, {:helper, "format", [{:helper, "uppercase", [{:identifier, "name"}]}]}} =
+    assert {:ok, {:transformer, "format", [{:transformer, "uppercase", [{:identifier, "name"}]}]}} =
              p("format (uppercase name)")
   end
 
   test "helper invocation inside each adds this/key context and resolves args" do
     assert t(~s|wrap this @index ../top|, true) ==
-             ~s|Stem.Helpers.invoke(:wrap, [current, stem_index, @top], [this: current, key: stem_key, assigns: assigns, functions: functions])|
+             ~s|Stem.Transformers.invoke(:wrap, [current, stem_index, @top], [this: current, key: stem_key, assigns: assigns, transformers: transformers])|
   end
 
   test "non-helper expressions fall back to assigns rewriting" do
@@ -85,12 +85,12 @@ defmodule Stem.ExpressionTest do
 
   test "a bare word followed by arguments is treated as a helper call" do
     assert t("a b c") ==
-             "Stem.Helpers.invoke(:a, [@b, @c], [assigns: assigns, functions: functions])"
+             "Stem.Transformers.invoke(:a, [@b, @c], [assigns: assigns, transformers: transformers])"
   end
 
   test "@key is resolved as a helper argument inside each" do
     assert t("wrap @key", true) ==
-             "Stem.Helpers.invoke(:wrap, [stem_key], [this: current, key: stem_key, assigns: assigns, functions: functions])"
+             "Stem.Transformers.invoke(:wrap, [stem_key], [this: current, key: stem_key, assigns: assigns, transformers: transformers])"
   end
 
   test "an argument with an empty key is not a helper" do

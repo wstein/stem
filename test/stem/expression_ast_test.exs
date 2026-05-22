@@ -17,21 +17,22 @@ defmodule Stem.ExpressionAstTest do
     assert Expression.format({:path, :this, ["title"]}) == "this.title"
 
     assert Expression.format(
-             {:helper, "link", [{:identifier, "label"}, {:kw, "href", {:identifier, "url"}}]}
+             {:transformer, "link", [{:identifier, "label"}, {:kw, "href", {:identifier, "url"}}]}
            ) ==
              "link label href=url"
 
     assert Expression.format(
-             {:helper, "format", [{:helper, "uppercase", [{:identifier, "name"}]}]}
+             {:transformer, "format", [{:transformer, "uppercase", [{:identifier, "name"}]}]}
            ) ==
              "format (uppercase name)"
 
     assert Expression.format(
-             {:helper, "wrap", [{:kw, "value", {:helper, "uppercase", [{:identifier, "name"}]}}]}
+             {:transformer, "wrap",
+              [{:kw, "value", {:transformer, "uppercase", [{:identifier, "name"}]}}]}
            ) == "wrap value=(uppercase name)"
 
     assert Expression.format(
-             {:helper, "wrap",
+             {:transformer, "wrap",
               [
                 {:pipeline, {:identifier, "name"}, [{:stage, "trim", []}]},
                 {:kw, "value", {:pipeline, {:identifier, "name"}, [{:stage, "trim", []}]}}
@@ -62,11 +63,14 @@ defmodule Stem.ExpressionAstTest do
     assert Expression.references_identifier?({:path, :implicit, ["name", "title"]}, "name")
 
     assert Expression.references_identifier?(
-             {:helper, "wrap", [{:kw, "value", {:identifier, "name"}}]},
+             {:transformer, "wrap", [{:kw, "value", {:identifier, "name"}}]},
              "name"
            )
 
-    assert Expression.references_identifier?({:helper, "wrap", [{:identifier, "name"}]}, "name")
+    assert Expression.references_identifier?(
+             {:transformer, "wrap", [{:identifier, "name"}]},
+             "name"
+           )
 
     assert Expression.references_identifier?(
              {:pipeline, {:identifier, "name"}, [{:stage, "trim", []}]},
@@ -102,7 +106,7 @@ defmodule Stem.ExpressionAstTest do
   end
 
   test "parse handles escaped quoted helper arguments" do
-    assert {:ok, {:helper, "say", [{:literal, "\"a\\\"b\""}]}} =
+    assert {:ok, {:transformer, "say", [{:literal, "\"a\\\"b\""}]}} =
              Expression.parse("say \"a\\\"b\"")
   end
 
@@ -124,7 +128,7 @@ defmodule Stem.ExpressionAstTest do
              Expression.parse("name |> default(fallback=\"x\")")
 
     assert {:ok,
-            {:helper, "format", [{:pipeline, {:identifier, "name"}, [{:stage, "trim", []}]}]}} =
+            {:transformer, "format", [{:pipeline, {:identifier, "name"}, [{:stage, "trim", []}]}]}} =
              Expression.parse("format (name |> trim)")
   end
 

@@ -1,28 +1,26 @@
 # SPDX-License-Identifier: Apache-2.0
 
-# This demonstrates how to use individual helpers without loading entire groups.
-# Useful when you only need one or two specific helpers.
+# This demonstrates how to use individual transformer groups and custom transformers.
+# Useful when you only need one or two specific operations.
 
-defmodule ExamplesIndividualHelpersTest do
+defmodule ExamplesIndividualTransformersTest do
   use ExUnit.Case
 
   setup do
-    Stem.Helpers.clear()
+    Stem.Transformers.clear()
     :ok
   end
 
-  test "Example 1: Using only the reverse helper from Collections" do
+  test "Example 1: Using only the reverse transformer from Collections" do
     assigns = [items: ["a", "b", "c"]]
 
-    # Create a minimal helpers map with ONLY reverse
     template = "{{items |> reverse |> join(\", \")}}"
 
-    # Load full Collections group, but in production you'd only need reverse
     result =
       Stem.Unsafe.eval_string(
         template,
         assigns: assigns,
-        helper_groups: [Stem.Helpers.Collections]
+        transformers: Stem.Transformers.Collections.all()
       )
 
     assert result == "c, b, a"
@@ -31,28 +29,22 @@ defmodule ExamplesIndividualHelpersTest do
   test "Example 2: Using only upcase from Strings" do
     assigns = [name: "alice"]
 
-    # Only need upcase transformation
     template = "Hello {{name |> upcase}}!"
 
     result =
       Stem.Unsafe.eval_string(
         template,
         assigns: assigns,
-        helper_groups: [Stem.Helpers.Strings]
+        transformers: Stem.Transformers.Strings.all()
       )
 
     assert result == "Hello ALICE!"
   end
 
-  test "Example 3: Custom helper only (no groups)" do
+  test "Example 3: Custom transformer only (no groups)" do
     assigns = [price: 19.99]
 
-    # Define a custom helper for formatting
-    custom_helpers = [
-      format_price: fn [amount], _ctx ->
-        "$#{Float.round(amount, 2)}"
-      end
-    ]
+    custom = %{"format_price" => fn [amount], _ctx -> "$#{Float.round(amount, 2)}" end}
 
     template = "Price: {{price |> format_price}}"
 
@@ -60,141 +52,121 @@ defmodule ExamplesIndividualHelpersTest do
       Stem.Unsafe.eval_string(
         template,
         assigns: assigns,
-        helpers: custom_helpers
-        # Note: helper_groups is empty - only custom helper available
+        transformers: custom
       )
 
     assert result == "Price: $19.99"
   end
 
-  test "Example 4: Mix custom helper with one group" do
+  test "Example 4: Mix custom transformer with a group" do
     assigns = [text: "  hello world  "]
 
-    custom_helpers = [
-      shout: fn [str], _ctx -> String.upcase(to_string(str)) end
-    ]
+    custom = %{"shout" => fn [str], _ctx -> String.upcase(to_string(str)) end}
 
-    # Both custom helper AND Strings group available
     template = "{{text |> trim |> shout}}"
 
     result =
       Stem.Unsafe.eval_string(
         template,
         assigns: assigns,
-        helpers: custom_helpers,
-        helper_groups: [Stem.Helpers.Strings]
+        transformers: Map.merge(Stem.Transformers.Strings.all(), custom)
       )
 
     assert result == "HELLO WORLD"
   end
 
-  test "Example 5: Secure minimum only (no groups, no custom)" do
+  test "Example 5: No transformers — only built-ins" do
     assigns = [name: "alice", fallback: "guest"]
 
-    # Only Minimum helpers available (no groups, no custom helpers)
     template = "User: {{name |> default(fallback)}}"
 
     result =
       Stem.Unsafe.eval_string(
         template,
         assigns: assigns
-        # No helper_groups, no helpers - only Minimum available
       )
 
     assert result == "User: alice"
   end
 
-  test "Example 6: Only join (from Minimum)" do
+  test "Example 6: join is a built-in, no group needed" do
     assigns = [items: ["apple", "banana", "cherry"]]
 
-    # Join is from Minimum group, available by default
     template = "Items: {{items |> join(\", \")}}"
 
     result =
       Stem.Unsafe.eval_string(
         template,
         assigns: assigns
-        # Only Minimum available - join is in it
       )
 
     assert result == "Items: apple, banana, cherry"
   end
 
-  test "Example 7: Only escape_html (from Minimum)" do
+  test "Example 7: escape mode override" do
     assigns = [html: "<b>bold</b>"]
 
-    # escape_html in Minimum - plain strings to show the effect
     template = "{{{html}}}"
 
-    # Using triple braces to output unescaped, then show how escape_html works
     result =
       Stem.Unsafe.eval_string(
         template,
         assigns: assigns,
-        # Disable default escaping to show escape_html working alone
         escape: :none
       )
 
     assert result == "<b>bold</b>"
   end
 
-  test "Example 8: Progressive enhancement - start minimal, add as needed" do
+  test "Example 8: Progressive enhancement — start minimal, add as needed" do
     assigns = [numbers: [1, 2, 3, 4, 5]]
 
-    # Scenario 1: Just need to join
+    # Scenario 1: join is built-in
     template1 = "{{numbers |> join(\", \")}}"
     result1 = Stem.Unsafe.eval_string(template1, assigns: assigns)
     assert result1 == "1, 2, 3, 4, 5"
 
-    # Scenario 2: Need to reverse too - add Collections
+    # Scenario 2: reverse requires Collections
     template2 = "{{numbers |> reverse |> join(\", \")}}"
 
     result2 =
-      Stem.Unsafe.eval_string(
-        template2,
+      Stem.Unsafe.eval_string(template2,
         assigns: assigns,
-        helper_groups: [Stem.Helpers.Collections]
+        transformers: Stem.Transformers.Collections.all()
       )
 
     assert result2 == "5, 4, 3, 2, 1"
 
-    # Scenario 3: Need to take and filter - use only Collections
+    # Scenario 3: reverse + take
     template3 = "{{numbers |> reverse |> take(2) |> join(\" | \")}}"
 
     result3 =
-      Stem.Unsafe.eval_string(
-        template3,
+      Stem.Unsafe.eval_string(template3,
         assigns: assigns,
-        helper_groups: [Stem.Helpers.Collections, Stem.Helpers.Strings]
+        transformers: Stem.Transformers.Collections.all()
       )
 
-    # reverse: [5, 4, 3, 2, 1], take 2: [5, 4]
     assert result3 == "5 | 4"
   end
 
-  test "Example 9: Template-specific helpers via config" do
-    # For a template that only needs trim + upcase, you could configure:
-    # .stem.config.json with just Strings group
-
+  test "Example 9: Template-specific transformers via config" do
     assigns = [message: "  welcome  "]
 
-    # Only Strings group - has trim, upcase but not Collections
     template = "{{message |> trim |> upcase}}"
 
     result =
       Stem.Unsafe.eval_string(
         template,
         assigns: assigns,
-        helper_groups: [Stem.Helpers.Strings]
+        transformers: Stem.Transformers.Strings.all()
       )
 
     assert result == "WELCOME"
   end
 
-  test "Example 10: Predicates-only for conditional logic" do
+  test "Example 10: Predicates for conditional logic" do
     assigns = [items: ["a", "b", "c"], value: nil]
 
-    # Only need predicates for if conditions
     template = """
     Items: {{#if items}}{{items |> join(\", \")}}{{else}}empty{{/if}}
     Value: {{#if value}}present{{else}}missing{{/if}}
@@ -204,7 +176,7 @@ defmodule ExamplesIndividualHelpersTest do
       Stem.Unsafe.eval_string(
         template,
         assigns: assigns,
-        helper_groups: [Stem.Helpers.Predicates]
+        transformers: Stem.Transformers.Predicates.all()
       )
 
     assert result =~ "Items: a, b, c"
