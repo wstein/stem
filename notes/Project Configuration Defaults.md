@@ -14,7 +14,7 @@ This keeps template source purely about rendering structure while giving applica
 
 #### How
 
-Define global defaults by creating a `.stem.config.json` file in your project root. Stem discovers that file automatically and merges it beneath explicit compile or eval options. The effective precedence is: explicit API options > CLI flags > `.stem.config.json` > engine defaults.
+Define global defaults by creating a `.stem.config.json` file in your project root. Stem discovers that file automatically and merges it beneath explicit compile or eval options. The effective precedence is: explicit API options > CLI flags > `.stem.config.json` > engine defaults. The compiler defaults to `mode: :safe`; set `"mode": "permissive"` in the config file only when templates authored by your team need arbitrary Elixir expressions.
 
 #### Links
 

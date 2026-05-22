@@ -131,14 +131,17 @@ quoted = Stem.compile_string("Hello {{name}}")
 Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 #=> "Hello Nina"
 
-Stem.Unsafe.eval_string("{{name}}", assigns: [name: "Nina"], mode: :safe)
+Stem.Unsafe.eval_string("{{name}}", assigns: [name: "Nina"])
 #=> "Nina"
 
 Stem.Unsafe.eval_string("{{name}}", assigns: [name: "Nina"], contract: [required: [:name]])
 #=> "Nina"
+
+Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], mode: :permissive)
+#=> "3"
 ```
 
-`mode: :safe` disables the arbitrary Elixir fallback path and only accepts structured Stem expressions, literals, helpers, and paths.
+Both `eval_string/3` and `eval_file/3` default to `mode: :safe`, which only accepts structured Stem expressions, literals, helpers, and paths. Pass `mode: :permissive` to allow arbitrary Elixir expressions — only do this when the template source is fully controlled by your team.
 `contract:` lets templates declare required assigns at the call boundary.
 Helper pipelines are safe-mode compatible because they lower to helper invocations instead of arbitrary Elixir.
 
@@ -176,7 +179,7 @@ Create a `.stem.config.json` file in your project root to set default options fo
 {
   "escape": "html",
   "warn_on_missing_assigns": false,
-  "mode": "permissive"
+  "mode": "safe"
 }
 ```
 
@@ -184,7 +187,7 @@ Create a `.stem.config.json` file in your project root to set default options fo
 
 * `escape` - Default escape mode: `none`, `html` (default), `xml`, `json`, `url`
 * `warn_on_missing_assigns` - Print warnings for missing assigns: `true` or `false`
-* `mode` - Template evaluation mode: `permissive` (default) or `safe`
+* `mode` - Template evaluation mode: `safe` (default) or `permissive`
 
 **Config discovery**: Stem walks up the directory tree from the current working directory to find `.stem.config.json`. It stops at the project root (when `mix.exs` is found) or the filesystem root.
 
