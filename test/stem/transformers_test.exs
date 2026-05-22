@@ -603,4 +603,24 @@ defmodule Stem.TransformersTest do
       end
     end
   end
+
+  describe "Stem.Transformers.Standard" do
+    test "pre-merges Minimum and Strings transformers" do
+      standard = Stem.Transformers.Standard.all()
+      expected = Map.merge(Stem.Transformers.Minimum.all(), Stem.Transformers.Strings.all())
+
+      assert Enum.sort(Map.keys(standard)) == Enum.sort(Map.keys(expected))
+      assert Map.has_key?(standard, "escape_html")
+      assert Map.has_key?(standard, "trim")
+      assert Map.has_key?(standard, "upcase")
+    end
+
+    test "excludes Collections-only transformers to limit SSTI gadget chains" do
+      standard = Stem.Transformers.Standard.all()
+
+      for key <- ~w(map filter sort sort_by group_by compact uniq flatten) do
+        refute Map.has_key?(standard, key), "Standard must not expose Collections helper #{key}"
+      end
+    end
+  end
 end
