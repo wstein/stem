@@ -23,7 +23,8 @@ defmodule Mix.Tasks.Stem.AuditTest do
   end
 
   test "fails when an explicitly listed file does not exist" do
-    missing = Path.join(System.tmp_dir!(), "nonexistent_#{:erlang.unique_integer([:positive])}.exs")
+    missing =
+      Path.join(System.tmp_dir!(), "nonexistent_#{:erlang.unique_integer([:positive])}.exs")
 
     assert_raise Mix.Error, ~r/Stem audit failed.*1 violation/, fn ->
       capture_io(:stderr, fn -> Mix.Tasks.Stem.Audit.run(["--paths", missing]) end)

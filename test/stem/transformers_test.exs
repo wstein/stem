@@ -25,7 +25,8 @@ defmodule Stem.TransformersTest do
     |> Map.merge(Stem.Transformers.Predicates.all())
   end
 
-  defp invoke_all(name, args), do: Transformers.invoke(name, args, transformers: all_transformers())
+  defp invoke_all(name, args),
+    do: Transformers.invoke(name, args, transformers: all_transformers())
 
   setup do
     Transformers.clear()

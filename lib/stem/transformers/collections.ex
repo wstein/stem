@@ -66,7 +66,10 @@ defmodule Stem.Transformers.Collections do
   end
 
   defp filter([collection, selector], _ctx) do
-    Enum.filter(Shared.enumerable_list(collection), &Shared.truthy?(Shared.select_value(&1, selector)))
+    Enum.filter(
+      Shared.enumerable_list(collection),
+      &Shared.truthy?(Shared.select_value(&1, selector))
+    )
   end
 
   defp filter(args, _ctx) do
