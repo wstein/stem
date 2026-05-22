@@ -152,6 +152,67 @@ defmodule Stem.Bytecode do
     Enum.join(lines, "\n") <> "\n"
   end
 
+  @doc """
+  Serializes a program to a JSON-encodable map — the portable wire form.
+
+  Instructions and expression ops become tagged maps (`%{"t" => kind, ...}`) so a
+  non-BEAM consumer (e.g. the Rust/WASM core) can deserialize and render them.
+  Atoms (assign names, escape modes, block params, path segments) become strings,
+  since assign resolution is by name across the boundary.
+  """
+  @spec to_wire(Program.t()) :: map()
+  def to_wire(%Program{version: version, instructions: instructions}) do
+    %{"version" => version, "instructions" => Enum.map(instructions, &wire_instruction/1)}
+  end
+
+  defp wire_instruction({:text, text}), do: %{"t" => "text", "text" => text}
+
+  defp wire_instruction({:emit, value_op, escape}) do
+    %{"t" => "emit", "value" => wire_value(value_op), "escape" => Atom.to_string(escape)}
+  end
+
+  defp wire_instruction({:if, cond_op, then_branch, else_branch}) do
+    %{
+      "t" => "if",
+      "cond" => wire_value(cond_op),
+      "then" => Enum.map(then_branch, &wire_instruction/1),
+      "else" => Enum.map(else_branch, &wire_instruction/1)
+    }
+  end
+
+  defp wire_instruction({block, value_op, params, body, else_branch})
+       when block in [:each, :with] do
+    %{
+      "t" => Atom.to_string(block),
+      "subject" => wire_value(value_op),
+      "params" => Enum.map(params, &Atom.to_string/1),
+      "body" => Enum.map(body, &wire_instruction/1),
+      "else" => Enum.map(else_branch, &wire_instruction/1)
+    }
+  end
+
+  defp wire_value({:lit, value}), do: %{"t" => "lit", "value" => value}
+  defp wire_value({:assign, name}), do: %{"t" => "assign", "name" => Atom.to_string(name)}
+  defp wire_value({:local, name}), do: %{"t" => "local", "name" => Atom.to_string(name)}
+  defp wire_value({:this}), do: %{"t" => "this"}
+  defp wire_value({:index}), do: %{"t" => "index"}
+  defp wire_value({:index1}), do: %{"t" => "index1"}
+  defp wire_value({:key}), do: %{"t" => "key"}
+
+  defp wire_value({:get, base, segments}) do
+    %{"t" => "get", "base" => wire_value(base), "segments" => Enum.map(segments, &to_string/1)}
+  end
+
+  defp wire_value({:call, name, positional, keyword}) do
+    %{
+      "t" => "call",
+      "name" => name,
+      "args" => Enum.map(positional, &wire_value/1),
+      "kwargs" =>
+        Map.new(keyword, fn {key, value} -> {Atom.to_string(key), wire_value(value)} end)
+    }
+  end
+
   # ── Node lowering ────────────────────────────────────────────────────────────
 
   defp compile_nodes(nodes, scope, regions, region_stack, escape_default) do

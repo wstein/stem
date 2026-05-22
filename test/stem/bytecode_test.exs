@@ -15,6 +15,15 @@ defmodule Stem.BytecodeTest do
     Bytecode.compile(ast, opts)
   end
 
+  # Recursively gathers every "t" tag from a to_wire/1 structure.
+  defp collect_tags(term) when is_map(term) do
+    own = for {"t", tag} <- term, do: tag
+    own ++ Enum.flat_map(Map.values(term), &collect_tags/1)
+  end
+
+  defp collect_tags(term) when is_list(term), do: Enum.flat_map(term, &collect_tags/1)
+  defp collect_tags(_term), do: []
+
   test "version/0 reports the bytecode format version" do
     assert Bytecode.version() == "stem-bc/v1"
   end
@@ -190,6 +199,54 @@ defmodule Stem.BytecodeTest do
       assert_raise UnsupportedError, ~r/Elixir expression/, fn ->
         compile("{{1 + 1}}", allow_elixir_expressions: true)
       end
+    end
+  end
+
+  describe "to_wire/1" do
+    test "serializes text and expression ops to tagged maps" do
+      wire = "Hi {{user.name |> upcase}}" |> compile() |> Bytecode.to_wire()
+
+      assert wire["version"] == "stem-bc/v1"
+
+      assert wire["instructions"] == [
+               %{"t" => "text", "text" => "Hi "},
+               %{
+                 "t" => "emit",
+                 "escape" => "html",
+                 "value" => %{
+                   "t" => "call",
+                   "name" => "upcase",
+                   "args" => [
+                     %{
+                       "t" => "get",
+                       "base" => %{"t" => "assign", "name" => "user"},
+                       "segments" => ["name"]
+                     }
+                   ],
+                   "kwargs" => %{}
+                 }
+               }
+             ]
+    end
+
+    test "serializes every block and block-scoped op, and JSON-encodes cleanly" do
+      wire =
+        """
+        A{{#each xs as |item|}}{{@key}}/{{@index}}/{{@index1}}/{{this}}/{{item}}\
+        {{#if item}}{{default name "x"}}{{else}}{{../p}}{{/if}}\
+        {{/each}}B{{#with u as |w|}}{{w.k}}{{/with}}
+        """
+        |> compile()
+        |> Bytecode.to_wire()
+
+      tags = collect_tags(wire["instructions"])
+
+      for tag <- ~w(each with if emit text assign local this index index1 key get call lit) do
+        assert tag in tags, "expected wire output to contain a #{tag} node"
+      end
+
+      # The whole structure must be JSON-encodable (it is the portable artifact).
+      assert is_binary(JSON.encode!(wire))
     end
   end
 
