@@ -1,0 +1,7 @@
+# friends
+
+|no|name|age|
+|--|----|---|
+{{#each friends as |f _ i1|~}}
+|{{i1}}|{{f.name}}|{{f.age}}|
+{{/each}}
