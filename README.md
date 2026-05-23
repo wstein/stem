@@ -228,6 +228,32 @@ For common string + escaping work, `Stem.Transformers.Standard.all()` bundles `M
 
 Selector-based transformers such as `map`, `filter`, `sort_by`, and `group_by` accept a simple dotted path string like `"author.name"` so templates can stay declarative without anonymous functions.
 
+### Trusted vs untrusted templates
+
+Pick the recipe by who authors the template — you rarely need per-call flags:
+
+* **Untrusted** (user bios, comments, multi-tenant themes): keep the default.
+  Only `Minimum` is reachable; load extra groups *per render*, and only the ones
+  a given template needs.
+* **Trusted internal** (your own `.stem` files): load a richer baseline **once**
+  at startup so views never pass flags:
+
+  ```elixir
+  # application.ex — runs once, app-wide
+  Stem.Transformers.register_all(Stem.Transformers.Standard.all())
+  # add Collections too if internal templates need map/filter/sort:
+  Stem.Transformers.register_all(Stem.Transformers.Collections.all())
+  ```
+
+  `register_all/1` populates the global registry, so every render sees those
+  transformers without a `transformers:` binding. Use it only when the app never
+  renders untrusted templates; otherwise prefer the per-render form above.
+
+Loading `Stem.Transformers.Collections` emits a `[:stem, :capability_group, :loaded]`
+telemetry event so operators can audit who reaches for the most powerful group.
+The human-facing log is **off by default** (telemetry-only) to avoid alert
+fatigue; opt into a once-per-VM line with `config :stem, capability_log_level: :info`.
+
 ## Tooling
 
 Stem can format template files with:

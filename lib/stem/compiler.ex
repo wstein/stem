@@ -156,7 +156,11 @@ defmodule Stem.Compiler do
         file: state.file,
         line: meta.line,
         description:
-          "arbitrary Elixir expressions are not allowed in Stem tags (set allow_elixir_expressions: true to enable)"
+          "arbitrary Elixir expressions are not allowed in Stem tags. " <>
+            "Templates accept only structured Stem syntax — assigns, dotted paths, " <>
+            "literals, and transformer pipelines (e.g. `{{name |> upcase}}`). " <>
+            "Move logic into the controller, or, for fully trusted templates only, " <>
+            "set allow_elixir_expressions: true."
     end
 
     source = Expression.to_source(expr_ast, %{in_each: state.in_each, locals: state.locals})

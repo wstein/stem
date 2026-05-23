@@ -25,6 +25,24 @@ defmodule Stem.Transformers do
     :ok
   end
 
+  @doc """
+  Registers a whole map of transformers (e.g. a group's `.all()`) into the global
+  registry in one call, making them available to every render without a per-call
+  `transformers:` binding.
+
+  Intended for trusted-internal apps that want a richer baseline app-wide — call
+  it once at startup, e.g. `Stem.Transformers.register_all(Stem.Transformers.Standard.all())`.
+  Do **not** use it in an app that also renders untrusted templates, since it
+  widens the default capability set for *all* renders; pass `transformers:`
+  per-render there instead.
+  """
+  @spec register_all(%{optional(atom() | String.t()) => transformer()}) :: :ok
+  def register_all(functions) when is_map(functions) do
+    additions = Map.new(functions, fn {name, fun} -> {normalize_name(name), fun} end)
+    :persistent_term.put(@registry_key, Map.merge(registry(), additions))
+    :ok
+  end
+
   @spec unregister(atom() | String.t()) :: :ok
   def unregister(name) do
     key = normalize_name(name)

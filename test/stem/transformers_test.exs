@@ -49,6 +49,15 @@ defmodule Stem.TransformersTest do
     assert Transformers.invoke(:up, ["nina"], []) == "NINA"
   end
 
+  test "register_all loads a whole group into the global registry" do
+    assert_raise Stem.SyntaxError, ~r/unknown transformer 'upcase'/, fn ->
+      Transformers.invoke(:upcase, ["nina"], [])
+    end
+
+    Transformers.register_all(Stem.Transformers.Strings.all())
+    assert Transformers.invoke(:upcase, ["nina"], []) == "NINA"
+  end
+
   test "transformers passed as a keyword list or map override the registry" do
     assert Transformers.invoke(:x, ["a"], transformers: [x: fn [v], _ -> v <> "!" end]) == "a!"
     assert Transformers.invoke(:x, ["a"], transformers: %{x: fn [v], _ -> v <> "?" end}) == "a?"
@@ -643,16 +652,28 @@ defmodule Stem.TransformersTest do
   end
 
   describe "Collections capability audit signal" do
-    test "does not re-emit the Logger warning on repeated loads" do
-      # First load ensures the once-per-VM latch is set regardless of prior
-      # test state. Any subsequent load (here or in a concurrent process) must
-      # then stay silent. When :telemetry is available the audit signal is a
-      # telemetry event rather than a log, so this stays quiet there too.
-      Stem.Transformers.Collections.all()
+    setup do
+      # Reset the per-VM log latch so the assertions below are deterministic.
+      :persistent_term.erase({Stem.Transformers.Collections, :capability_logged})
+      original = Application.get_env(:stem, :capability_log_level, false)
+      on_exit(fn -> Application.put_env(:stem, :capability_log_level, original) end)
+      :ok
+    end
 
+    test "is silent by default (telemetry-only)" do
+      Application.put_env(:stem, :capability_log_level, false)
       log = capture_log(fn -> Stem.Transformers.Collections.all() end)
-
       refute log =~ "capability group loaded"
+    end
+
+    test "logs once per VM at the configured level when opted in" do
+      Application.put_env(:stem, :capability_log_level, :info)
+
+      first = capture_log(fn -> Stem.Transformers.Collections.all() end)
+      second = capture_log(fn -> Stem.Transformers.Collections.all() end)
+
+      assert first =~ "capability group loaded"
+      refute second =~ "capability group loaded"
     end
   end
 

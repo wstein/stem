@@ -133,32 +133,36 @@ defmodule Stem.Transformers.Collections do
 
   # ── Telemetry / audit event ────────────────────────────────────────────────
 
-  # Signals that the Collections group — the most powerful transformer set —
-  # was loaded, so operators can audit which processes reach for it.
+  # Signals that the Collections group — the most powerful transformer set — was
+  # loaded, so operators can audit which processes reach for it.
   #
-  # When :telemetry (an optional dep) is available we emit a
-  # [:stem, :capability_group, :loaded] event on *every* load: telemetry
-  # dispatch is cheap, throttling is the handler's concern, and a per-load event
-  # is what lets an auditor see each distinct caller. Without :telemetry we fall
-  # back to a Logger warning, which we throttle to once per VM so it does not
-  # flood logs on repeated loads.
+  # The primary, always-on channel (when the optional :telemetry dep is present)
+  # is a `[:stem, :capability_group, :loaded]` event emitted on every load;
+  # handlers decide how to throttle. The human-facing Logger line is **off by
+  # default** to avoid alert fatigue for normal use — enable it with
+  #
+  #     config :stem, capability_log_level: :info   # or :warning, :debug, ...
+  #
+  # and it is logged once per VM at the configured level.
   defp emit_capability_loaded_event do
     if Code.ensure_loaded?(:telemetry) do
       metadata = %{group: __MODULE__, caller: Process.info(self(), :current_stacktrace)}
       apply(:telemetry, :execute, [[:stem, :capability_group, :loaded], %{count: 1}, metadata])
-    else
-      warn_capability_loaded_once()
     end
+
+    maybe_log_capability_loaded()
   end
 
-  defp warn_capability_loaded_once do
-    key = {__MODULE__, :capability_warned}
+  defp maybe_log_capability_loaded do
+    level = Application.get_env(:stem, :capability_log_level, false)
+    key = {__MODULE__, :capability_logged}
 
-    unless :persistent_term.get(key, false) do
+    if level && not :persistent_term.get(key, false) do
       :persistent_term.put(key, true)
       require Logger
 
-      Logger.warning(
+      Logger.log(
+        level,
         "[Stem] #{inspect(__MODULE__)} capability group loaded. " <>
           "This group contains powerful data-manipulation transformers " <>
           "(map, group_by, sort_by, filter, etc.). " <>
