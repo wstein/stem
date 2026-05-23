@@ -33,6 +33,9 @@
       pre#output { background: #f4f4f5; padding: 0.75rem; border-radius: 6px; white-space: pre-wrap; word-break: break-word; min-height: 2rem; }
       #error { color: #b91c1c; font-size: 0.85rem; min-height: 1.2rem; margin: 0.35rem 0 0; white-space: pre-wrap; }
       #error:empty::before { content: "no errors"; color: #16a34a; }
+      iframe#preview { width: 100%; min-height: 2rem; border: 1px solid #d4d4d8; border-radius: 6px; background: #fff; overflow: hidden; }
+      .seg { font-weight: normal; display: inline-flex; align-items: center; gap: 0.25rem; margin: 0; }
+      [hidden] { display: none !important; }
     </style>
   </head>
   <body>
@@ -70,8 +73,18 @@
       </select>
     </div>
 
-    <label>Rendered output (escaped output shown verbatim)</label>
-    <pre id="output"></pre>
+    <div class="row" style="margin-top: 1rem;">
+      <label style="margin: 0;">Output</label>
+      <label class="seg"><input type="radio" name="view" value="rendered" checked /> Rendered</label>
+      <label class="seg"><input type="radio" name="view" value="source" /> Source</label>
+    </div>
+    <!-- Rendered in a locked-down iframe. `allow-same-origin` (but NOT
+         allow-scripts) lets the parent measure the content height to auto-size
+         the frame, while scripts, inline handlers, forms, and plugins stay
+         disabled — reinforced by the CSP in previewDoc — so even a shared link
+         can't run code in the viewer. -->
+    <iframe id="preview" sandbox="allow-same-origin" title="Rendered output"></iframe>
+    <pre id="output" hidden></pre>
 
     <script type="module">
       import { createRenderer } from "./stem.mjs";
@@ -156,6 +169,42 @@
         return { ...program, instructions: rewrite(program.instructions) };
       }
 
+      // Show the output as raw source (escaped, verbatim) and as live HTML in a
+      // locked-down iframe. The CSP is defence-in-depth on top of sandbox="".
+      function previewDoc(body) {
+        const csp = "default-src 'none'; img-src * data:; style-src 'unsafe-inline'; font-src *;";
+        return (
+          '<!doctype html><html><head><meta charset="utf-8">' +
+          `<meta http-equiv="Content-Security-Policy" content="${csp}">` +
+          "<style>body{font:14px/1.5 system-ui,sans-serif;margin:.5rem;color:#18181b}</style>" +
+          `</head><body>${body}</body></html>`
+        );
+      }
+      function setOutput(str) {
+        $("output").textContent = str;
+        $("preview").srcdoc = previewDoc(str);
+      }
+      function setView(view) {
+        const rendered = view !== "source";
+        $("preview").hidden = !rendered;
+        $("output").hidden = rendered;
+        // The frame can't be measured while display:none, so size it once shown.
+        if (rendered) requestAnimationFrame(resizePreview);
+      }
+
+      // Grow the rendered iframe to fit its content so it expands like the source
+      // <pre> instead of scrolling inside a fixed box. Reading the content height
+      // needs sandbox="allow-same-origin" (scripts stay disabled).
+      function resizePreview() {
+        const el = $("preview");
+        try {
+          const doc = el.contentDocument;
+          if (doc && doc.body) {
+            el.style.height = Math.max(doc.documentElement.scrollHeight, doc.body.scrollHeight) + "px";
+          }
+        } catch {}
+      }
+
       // ── Run: compile the template, then render against the data ─────────────
       function run() {
         const template = $("template").value;
@@ -165,7 +214,7 @@
           const { message, start, end } = compiled.error;
           paint(template, [byteToChar(template, start), byteToChar(template, end)]);
           $("error").textContent = message;
-          $("output").textContent = "";
+          setOutput("");
           updateHash();
           return;
         }
@@ -176,27 +225,31 @@
           data = JSON.parse($("data").value || "null");
         } catch (err) {
           $("error").textContent = "invalid JSON data: " + err.message;
-          $("output").textContent = "";
+          setOutput("");
           updateHash();
           return;
         }
 
         try {
           const program = applyEscape(compiled.program, $("escape").value);
-          $("output").textContent = renderer.render(program, data);
+          setOutput(renderer.render(program, data));
           $("error").textContent = "";
         } catch (err) {
           $("error").textContent = "render error: " + err.message;
-          $("output").textContent = "";
+          setOutput("");
         }
         updateHash();
+      }
+
+      function currentView() {
+        return document.querySelector('input[name="view"]:checked').value;
       }
 
       // ── Shareable state in the URL hash ─────────────────────────────────────
       // Encoded client-side for now; a future "save" could POST this same
       // payload to a server and put a short id in the hash instead.
       function state() {
-        return { t: $("template").value, d: $("data").value, e: $("escape").value };
+        return { t: $("template").value, d: $("data").value, e: $("escape").value, v: currentView() };
       }
       function updateHash() {
         const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(state()))));
@@ -209,6 +262,9 @@
           $("template").value = s.t ?? "";
           $("data").value = s.d ?? "";
           $("escape").value = s.e ?? "";
+          const view = s.v === "source" ? "source" : "rendered";
+          document.querySelector(`input[name="view"][value="${view}"]`).checked = true;
+          setView(view);
           return true;
         } catch {
           return false;
@@ -227,6 +283,12 @@
       $("data").addEventListener("input", run);
       $("preview").addEventListener("load", resizePreview);
       $("escape").addEventListener("change", run);
+      for (const radio of document.querySelectorAll('input[name="view"]')) {
+        radio.addEventListener("change", () => {
+          setView(currentView());
+          updateHash();
+        });
+      }
       $("template").addEventListener("scroll", () => {
         $("backdrop").scrollTop = $("template").scrollTop;
         $("backdrop").scrollLeft = $("template").scrollLeft;
@@ -238,6 +300,7 @@
         setTimeout(() => ($("share").textContent = "Copy link"), 1200);
       });
 
+      setView(currentView());
       if (restoreHash()) run();
       else load(examples[0]);
     </script>
