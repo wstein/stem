@@ -50,9 +50,13 @@ Pin defaults in `.stem.config.json` as comma-separated module names:
 { "transformers": "Stem.Transformers.Strings,Stem.Transformers.Collections" }
 ```
 
+### Discovering the right group
+
+`Stem.Transformers.Standard.all/0` bundles Minimum + Strings (no Collections) for common string work. When a template uses a transformer from an unloaded group, `invoke/3` raises a `Stem.SyntaxError` naming the providing group(s) and how to enable them — so the fix is loading a group, never `allow_elixir_expressions: true`. Each group exposes a side-effect-free `names/0` that powers this lookup.
+
 ### Auditing Collections usage
 
-`Collections.all/0` emits an audit signal on every call: a `[:stem, :capability_group, :loaded]` telemetry event (measurements `%{count: 1}`, metadata `%{group:, caller:}`) when `:telemetry` is in the application tree, or a `Logger.warning` fallback otherwise. Attach a handler with `:telemetry.attach/4` to log, alert, or rate-limit. See the arch *cross-cutting concepts* page for a full handler example.
+`Collections.all/0` emits an audit signal: a `[:stem, :capability_group, :loaded]` telemetry event when `:telemetry` is present, else a `Logger.warning`. Attach via `:telemetry.attach/4`; see the arch cross-cutting-concepts page for a handler example.
 
 ### Custom transformers
 
@@ -60,7 +64,7 @@ Register globally with `Stem.Transformers.register/2`, or pass per-call by mergi
 
 ## Migration
 
-Module-level access to all `Stem.Transformers` helpers is unchanged; the capability system is opt-in for runtime eval. To adopt: identify which templates need which operations, add `transformers: SomeGroup.all()` (or `Map.merge/2`) to `eval_string/3`/`eval_file/3`, and pin defaults in `.stem.config.json`. Compile-time templates need no changes — the compiler inlines operations into AST at build time.
+To adopt: add `transformers: SomeGroup.all()` (or a `Map.merge/2` of groups) to `eval_string/3`/`eval_file/3`, and pin defaults in `.stem.config.json`. Compile-time templates inline operations at build time and need no changes.
 
 ## Links
 

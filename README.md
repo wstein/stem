@@ -224,6 +224,8 @@ Or pin defaults in `.stem.config.json`:
 }
 ```
 
+For common string + escaping work, `Stem.Transformers.Standard.all()` bundles `Minimum` + `Strings` in one call (Collections is deliberately excluded). If a template uses a transformer from a group that isn't loaded, the error names the providing group and the exact way to enable it (the `transformers:` option, the `--transformers` CLI flag, or `.stem.config.json`) — so the fix never requires reaching for `allow_elixir_expressions: true`.
+
 Selector-based transformers such as `map`, `filter`, `sort_by`, and `group_by` accept a simple dotted path string like `"author.name"` so templates can stay declarative without anonymous functions.
 
 ## Tooling
@@ -238,6 +240,12 @@ mix stem.format --check-formatted path/to/template.stem
 Compiler diagnostics are available with `warn_on_diagnostics: true` and currently cover constant block conditions and unused block parameters.
 
 Pass `warn_on_falsy_coercion: true` to log when values such as `0`, `""`, `[]`, or `%{}` are coerced into false by Stem's Handlebars-style truthiness rules at render time.
+When the option is not passed it falls back to application config, so enabling it for development and test is a one-liner — recommended so Elixir developers see when a value is coerced to false:
+
+```elixir
+# config/dev.exs and config/test.exs
+config :stem, warn_on_falsy_coercion: true
+```
 
 ## Configuration
 

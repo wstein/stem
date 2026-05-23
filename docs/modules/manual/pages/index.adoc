@@ -212,6 +212,99 @@ Add to `.github/workflows/ci.yml`:
 * **Inject all data via `assigns`.** Do not allow templates to read environment variables or access global state.
 * **Register custom helpers instead of enabling arbitrary expressions.** Helper functions keep business logic out of templates.
 
+== Migration Recipes
+
+Stem forbids the in-template logic that Jinja2 and Handlebars allow, so migrating legacy templates is mostly a matter of moving logic to the controller or to a capability-group transformer. These before/after recipes show the mechanical transformation.
+
+=== Recipe 1 — Jinja2 `{% set %}` → controller-computed assign
+
+Jinja2 lets a template mutate state. Stem forbids it; compute the value in Elixir and pass it in `assigns`.
+
+*Before (Jinja2):*
+[source,jinja]
+----
+{% set full_name = user.first ~ " " ~ user.last %}
+<h1>{{ full_name }}</h1>
+----
+
+*After (Stem):* compute in the controller, render a plain assign.
+[source,elixir]
+----
+# controller / context function
+assigns = [full_name: user.first <> " " <> user.last]
+----
+[source,handlebars]
+----
+<h1>{{full_name}}</h1>
+----
+
+=== Recipe 2 — Handlebars dynamic block helper → capability transformer + `{{#each}}`
+
+A Handlebars custom block helper that filters a list at render time becomes a registered transformer (from a capability group) piped into the hard-coded `{{#each}}` block.
+
+*Before (Handlebars):*
+[source,handlebars]
+----
+{{#activeUsers users}}
+  <li>{{this.name}}</li>
+{{/activeUsers}}
+----
+
+*After (Stem):* enable the `Collections` group, filter declaratively, iterate with the native block.
+[source,elixir]
+----
+Stem.Unsafe.eval_string(template, assigns: [users: users],
+  transformers: Stem.Transformers.Collections.all())
+----
+[source,handlebars]
+----
+{{#each users |> filter("active")}}
+  <li>{{this.name}}</li>
+{{/each}}
+----
+
+=== Recipe 3 — Jinja2 inline math → precomputed assign or helper
+
+Inline arithmetic (`{{ price * quantity }}`) is rejected in safe mode. Precompute it, or register a transformer.
+
+*Before (Jinja2):* `{{ price * quantity }}`
+
+*After (Stem):* pass `total: price * quantity` in `assigns` and render `{{total}}`, or register a `multiply` transformer and write `{{price |> multiply(quantity)}}`.
+
+=== Recipe 4 — Mustache overloaded sections → explicit `{{#if}}` / `{{#each}}`
+
+Mustache's `{{#section}}` is overloaded: it iterates a list, renders once for a truthy non-list value, and skips for falsy/empty values. Stem makes the intent explicit by choosing the right block, turns the inverted section `{{^…}}` into `{{#unless}}`, and replaces the implicit item `{{.}}` with `{{this}}`.
+
+*Before (Mustache):*
+[source,mustache]
+----
+{{#items}}
+  <li>{{.}}</li>
+{{/items}}
+{{#user}}
+  Hi {{name}}
+{{/user}}
+{{^items}}
+  No items.
+{{/items}}
+----
+
+*After (Stem):* `{{#each}}` for lists, `{{#with}}` (or `{{#if}}`) for single values, `{{#unless}}` for inverted sections.
+[source,handlebars]
+----
+{{#each items}}
+  <li>{{this}}</li>
+{{/each}}
+{{#with user}}
+  Hi {{name}}
+{{/with}}
+{{#unless items}}
+  No items.
+{{/unless}}
+----
+
+Escaping (`{{name}}`), raw output (`{{{name}}}`), comments (`{{! ... }}`), and partials (`{{> name}}`) carry over unchanged. Mustache lambdas (functions placed in the context) have no in-template equivalent — move that logic to the Elixir controller or register a transformer and pipe the value (`{{value |> my_transformer}}`).
+
 == Relationship To The Other Docs
 
 * Keep project orientation in xref:onboarding:index.adoc[Onboarding].
