@@ -33,7 +33,18 @@
     <label for="data">Data (edit me — JSON)</label>
     <textarea id="data" rows="4"></textarea>
 
-    <label>Rendered output (escaped HTML shown verbatim)</label>
+    <div class="row">
+      <label for="escape" style="margin: 0;">Escape</label>
+      <select id="escape">
+        <option value="">(as compiled)</option>
+        <option value="html">html</option>
+        <option value="xml">xml</option>
+        <option value="json">json</option>
+        <option value="none">none</option>
+      </select>
+    </div>
+
+    <label>Rendered output (escaped output shown verbatim)</label>
     <pre id="output"></pre>
 
     <script type="module">
@@ -64,14 +75,33 @@
       function run() {
         try {
           const data = JSON.parse($("data").value);
-          $("output").textContent = renderer.render(current.program, data);
+          const program = applyEscape(current.program, $("escape").value);
+          $("output").textContent = renderer.render(program, data);
         } catch (err) {
           $("output").textContent = "error: " + err.message;
         }
       }
 
+      // Override every emit's escape mode so the playground can show how one
+      // program renders under each escaping; "" keeps the mode baked in offline.
+      function applyEscape(program, mode) {
+        if (!mode) return program;
+        const rewrite = (instrs) =>
+          instrs.map((instr) => {
+            const next = { ...instr };
+            if (next.t === "emit") next.escape = mode;
+            for (const key of ["then", "else", "body"]) {
+              if (Array.isArray(next[key])) next[key] = rewrite(next[key]);
+            }
+            return next;
+          });
+        return { ...program, instructions: rewrite(program.instructions) };
+      }
+
       $("example").addEventListener("change", (e) => load(examples[Number(e.target.value)]));
       $("data").addEventListener("input", run);
+      $("preview").addEventListener("load", resizePreview);
+      $("escape").addEventListener("change", run);
       load(examples[0]);
     </script>
   </body>
