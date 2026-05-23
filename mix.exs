@@ -22,9 +22,11 @@ defmodule Stem.MixProject do
         ignore_modules: [
           Stem.CoverageMetrics,
           Mix.Tasks.Coveralls.Branchcov,
-          # PoC verifier: needs the Rust/WASM toolchain + Node, so it runs via
-          # `mix stem.native.verify`, not the unit suite.
-          Mix.Tasks.Stem.Native.Verify
+          # Native PoC harness: needs the Rust/WASM toolchain + Node, so it runs
+          # via `mix stem.native.verify` / `mix stem.native.fuzz`, not the unit suite.
+          Mix.Tasks.Stem.Native.Verify,
+          Mix.Tasks.Stem.Native.Fuzz,
+          Stem.Native.Engine
         ]
       ]
     ]

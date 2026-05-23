@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: Apache-2.0
+
+defmodule Stem.Native.Engine do
+  @moduledoc false
+
+  # Support for the native PoC verification tasks (`mix stem.native.verify`,
+  # `mix stem.native.fuzz`): resolve the engine command and run a batch of
+  # `{program, data}` requests through it in a single process.
+
+  @default_wasm "native/stem_native/target/wasm32-wasip1/release/stem_native.wasm"
+
+  @doc "Resolves the engine command from `--engine`/`--wasm` options (default: the wasm via Node WASI)."
+  @spec resolve(keyword()) :: String.t()
+  def resolve(opts) do
+    cond do
+      engine = opts[:engine] ->
+        engine
+
+      true ->
+        wasm = opts[:wasm] || @default_wasm
+
+        unless File.exists?(wasm) do
+          Mix.raise(
+            "native engine not found at #{wasm}. Build it with:\n" <>
+              "  cd native/stem_native && cargo build --release --target wasm32-wasip1\n" <>
+              "or pass --engine \"<command reading stdin>\"."
+          )
+        end
+
+        "node native/run.mjs #{wasm}"
+    end
+  end
+
+  @doc "Builds a `{program, data}` request map for a template + assigns."
+  @spec request(String.t(), map() | keyword(), atom()) :: map()
+  def request(template, data, escape) do
+    {:ok, ast} = Stem.Parser.parse_with_spans(template)
+    program = Stem.Bytecode.compile(ast, escape: escape)
+    %{"program" => Stem.Bytecode.to_wire(program), "data" => data}
+  end
+
+  @doc """
+  Runs a batch of requests through the engine in one invocation, returning the
+  rendered strings in order.
+  """
+  @spec render_batch(String.t(), [map()]) :: [String.t()]
+  def render_batch(engine, requests) do
+    payload = JSON.encode!(%{"batch" => requests})
+
+    tmp =
+      Path.join(System.tmp_dir!(), "stem_native_batch_#{System.unique_integer([:positive])}.json")
+
+    File.write!(tmp, payload)
+
+    try do
+      {output, _status} = System.cmd("sh", ["-c", "#{engine} < #{tmp} 2>/dev/null"])
+      JSON.decode!(output)
+    after
+      File.rm!(tmp)
+    end
+  end
+end

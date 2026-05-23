@@ -79,10 +79,11 @@ enum Op {
         base: Box<Op>,
         segments: Vec<String>,
     },
+    // Keyword args (the wire format's "kwargs") are only used by host
+    // transformers, which the native PoC does not run, so they are ignored.
     Call {
         name: String,
         args: Vec<Op>,
-        kwargs: HashMap<String, Op>,
     },
 }
 
@@ -102,16 +103,43 @@ fn main() {
         std::process::exit(1);
     }
 
-    let input: Input = match serde_json::from_str(&raw) {
-        Ok(input) => input,
+    let request: Value = match serde_json::from_str(&raw) {
+        Ok(value) => value,
         Err(err) => {
             eprintln!("stem_native: invalid input JSON: {err}");
             std::process::exit(1);
         }
     };
 
+    // `{"batch": [{program, data}, ...]}` renders many requests and emits a JSON
+    // array of outputs (used by the differential fuzz harness, one process per
+    // batch). Otherwise a single `{program, data}` renders to a raw string.
+    let output = if let Some(batch) = request.get("batch") {
+        let inputs: Vec<Input> = decode(batch.clone());
+        let outputs: Vec<String> = inputs.iter().map(render_input).collect();
+        serde_json::to_string(&outputs).expect("serializable outputs")
+    } else {
+        render_input(&decode(request))
+    };
+
+    let mut stdout = std::io::stdout();
+    let _ = stdout.write_all(output.as_bytes());
+    let _ = stdout.flush();
+}
+
+fn decode<T: serde::de::DeserializeOwned>(value: Value) -> T {
+    match serde_json::from_value(value) {
+        Ok(decoded) => decoded,
+        Err(err) => {
+            eprintln!("stem_native: invalid request shape: {err}");
+            std::process::exit(1);
+        }
+    }
+}
+
+fn render_input(input: &Input) -> String {
     let ctx = Ctx {
-        root: input.data,
+        root: input.data.clone(),
         this: Value::Null,
         index: 0,
         key: Value::Null,
@@ -119,10 +147,7 @@ fn main() {
         locals: HashMap::new(),
     };
 
-    let out = render(&input.program.instructions, &ctx);
-    let mut stdout = std::io::stdout();
-    let _ = stdout.write_all(out.as_bytes());
-    let _ = stdout.flush();
+    render(&input.program.instructions, &ctx)
 }
 
 fn render(instructions: &[Instr], ctx: &Ctx) -> String {
@@ -267,13 +292,9 @@ fn eval(op: &Op, ctx: &Ctx) -> Value {
             }
             value
         }
-        Op::Call { name, args, kwargs } => {
+        Op::Call { name, args } => {
             let positional: Vec<Value> = args.iter().map(|a| eval(a, ctx)).collect();
-            let keyword: HashMap<String, Value> = kwargs
-                .iter()
-                .map(|(k, v)| (k.clone(), eval(v, ctx)))
-                .collect();
-            call(name, &positional, &keyword)
+            call(name, &positional)
         }
     }
 }
@@ -358,15 +379,40 @@ fn escape_with(s: &str, mode: &str) -> String {
     }
 }
 
-// ── Transformer stdlib (subset; mirror Stem.Transformers) ────────────────────
+// ── Transformer stdlib (mirror Stem.Transformers) ───────────────────────────
+//
+// Implements the built-in transformers that can match the BEAM byte-for-byte.
+// Deliberately excluded (no byte-parity is possible, so they panic loudly and
+// are kept out of the differential fuzzer):
+//   * json / inspect — Elixir-specific serialization formatting and map key
+//     ordering;
+//   * i18n `t` — delegates to a host-provided translator (a host closure), so
+//     the bytecode marks it a host transformer the native core cannot run.
+// Unicode-cased transforms match for ASCII; the fuzzer restricts inputs to
+// ASCII, where String.upcase/downcase and Rust's casing agree.
 
-fn call(name: &str, args: &[Value], _kwargs: &HashMap<String, Value>) -> Value {
+fn call(name: &str, args: &[Value]) -> Value {
     match name {
+        // Strings
         "upcase" => Value::from(to_string(&args[0]).to_uppercase()),
         "downcase" => Value::from(to_string(&args[0]).to_lowercase()),
         "trim" => Value::from(to_string(&args[0]).trim().to_string()),
         "capitalize" => Value::from(capitalize(&to_string(&args[0]))),
-        "reverse" => Value::from(to_string(&args[0]).chars().rev().collect::<String>()),
+        "replace" => {
+            Value::from(to_string(&args[0]).replace(&to_string(&args[1]), &to_string(&args[2])))
+        }
+        "truncate" => Value::from(truncate(&args[0], &args[1], args.get(2))),
+        "starts_with" => Value::from(to_string(&args[0]).starts_with(&to_string(&args[1]))),
+        "ends_with" => Value::from(to_string(&args[0]).ends_with(&to_string(&args[1]))),
+
+        // Shared sequence ops (string- and list-aware)
+        "reverse" => reverse(&args[0]),
+        "take" => take(&args[0], &args[1]),
+        "drop" => drop(&args[0], &args[1]),
+        "slice" => slice(&args[0], &args[1], &args[2]),
+        "first" => first(&args[0]),
+
+        // Minimum
         "default" => {
             if present(&args[0]) {
                 args[0].clone()
@@ -375,17 +421,41 @@ fn call(name: &str, args: &[Value], _kwargs: &HashMap<String, Value>) -> Value {
             }
         }
         "join" => {
-            let sep = if args.len() > 1 {
-                to_string(&args[1])
-            } else {
-                String::new()
-            };
+            let sep = args.get(1).map(to_string).unwrap_or_default();
             Value::from(join(&args[0], &sep))
         }
         "lookup" => lookup(&args[0], &args[1]),
-        "map" => map_select(&args[0], &to_string(&args[1])),
+        "escape_html" => Value::from(escape_with(&to_string(&args[0]), "html")),
+        "escape_json" => Value::from(escape_json(&to_string(&args[0]))),
+
+        // Collections
+        "map" => Value::Array(
+            enumerable(&args[0])
+                .iter()
+                .map(|i| select(i, &to_string(&args[1])))
+                .collect(),
+        ),
+        "filter" => filter(&args[0], args.get(1)),
+        "sort" => sort(&args[0]),
+        "sort_by" => sort_by(&args[0], &to_string(&args[1])),
+        "group_by" => group_by(&args[0], &to_string(&args[1])),
+        "compact" => Value::Array(
+            enumerable(&args[0])
+                .into_iter()
+                .filter(|v| !v.is_null())
+                .collect(),
+        ),
+        "uniq" => uniq(&args[0]),
+        "flatten" => Value::Array(flatten(&args[0])),
+
+        // Predicates
         "contains" => Value::from(contains(&args[0], &args[1])),
-        other => panic!("stem_native: transformer '{other}' is not in the PoC stdlib"),
+        "empty?" => Value::from(!present(&args[0])),
+        "present?" => Value::from(present(&args[0])),
+
+        other => {
+            panic!("stem_native: transformer '{other}' is not byte-parity capable in this PoC")
+        }
     }
 }
 
@@ -414,19 +484,22 @@ fn join(value: &Value, sep: &str) -> String {
         .join(sep)
 }
 
-fn map_select(value: &Value, selector: &str) -> Value {
-    let segments: Vec<&str> = selector.split('.').filter(|s| !s.is_empty()).collect();
-    let mapped: Vec<Value> = enumerable(value)
-        .iter()
-        .map(|item| {
-            let mut current = item.clone();
-            for segment in &segments {
-                current = get_field(&current, segment);
-            }
-            current
+// Navigate a dotted selector (e.g. "meta.rank"), mirroring Stem's select_value:
+// object keys, and integer indices into lists.
+fn select(value: &Value, selector: &str) -> Value {
+    selector
+        .split('.')
+        .filter(|s| !s.is_empty())
+        .fold(value.clone(), |acc, segment| match &acc {
+            Value::Object(map) => map.get(segment).cloned().unwrap_or(Value::Null),
+            Value::Array(items) => segment
+                .parse::<usize>()
+                .ok()
+                .and_then(|i| items.get(i))
+                .cloned()
+                .unwrap_or(Value::Null),
+            _ => Value::Null,
         })
-        .collect();
-    Value::Array(mapped)
 }
 
 fn lookup(collection: &Value, key: &Value) -> Value {
@@ -450,5 +523,173 @@ fn contains(collection: &Value, needle: &Value) -> bool {
             _ => false,
         },
         _ => false,
+    }
+}
+
+fn truncate(value: &Value, count: &Value, omission: Option<&Value>) -> String {
+    let text = to_string(value);
+    let chars: Vec<char> = text.chars().collect();
+    let count = count_arg(count);
+    let omission = omission.map(to_string).unwrap_or_default();
+
+    if chars.len() <= count {
+        text
+    } else if omission.is_empty() {
+        chars[..count].iter().collect()
+    } else {
+        let keep = count.saturating_sub(omission.chars().count());
+        chars[..keep].iter().collect::<String>() + &omission
+    }
+}
+
+fn reverse(value: &Value) -> Value {
+    match value {
+        Value::String(s) => Value::from(s.chars().rev().collect::<String>()),
+        other => Value::Array(enumerable(other).into_iter().rev().collect()),
+    }
+}
+
+fn take(value: &Value, count: &Value) -> Value {
+    let n = count_arg(count);
+    match value {
+        Value::String(s) => Value::from(s.chars().take(n).collect::<String>()),
+        other => Value::Array(enumerable(other).into_iter().take(n).collect()),
+    }
+}
+
+fn drop(value: &Value, count: &Value) -> Value {
+    let n = count_arg(count);
+    match value {
+        Value::String(s) => Value::from(s.chars().skip(n).collect::<String>()),
+        other => Value::Array(enumerable(other).into_iter().skip(n).collect()),
+    }
+}
+
+fn slice(value: &Value, start: &Value, length: &Value) -> Value {
+    let start = count_arg(start);
+    let length = count_arg(length);
+    match value {
+        Value::String(s) => Value::from(s.chars().skip(start).take(length).collect::<String>()),
+        other => Value::Array(
+            enumerable(other)
+                .into_iter()
+                .skip(start)
+                .take(length)
+                .collect(),
+        ),
+    }
+}
+
+fn first(value: &Value) -> Value {
+    match value {
+        Value::String(s) => Value::from(s.chars().next().map(String::from).unwrap_or_default()),
+        other => enumerable(other).into_iter().next().unwrap_or(Value::Null),
+    }
+}
+
+fn filter(value: &Value, selector: Option<&Value>) -> Value {
+    let items = enumerable(value);
+    let kept = match selector {
+        None => items.into_iter().filter(truthy).collect(),
+        Some(sel) => {
+            let sel = to_string(sel);
+            items
+                .into_iter()
+                .filter(|i| truthy(&select(i, &sel)))
+                .collect()
+        }
+    };
+    Value::Array(kept)
+}
+
+fn sort(value: &Value) -> Value {
+    let mut items = enumerable(value);
+    items.sort_by(value_cmp);
+    Value::Array(items)
+}
+
+fn sort_by(value: &Value, selector: &str) -> Value {
+    let mut items = enumerable(value);
+    items.sort_by(|a, b| value_cmp(&select(a, selector), &select(b, selector)));
+    Value::Array(items)
+}
+
+fn group_by(value: &Value, selector: &str) -> Value {
+    let mut groups = serde_json::Map::new();
+    for item in enumerable(value) {
+        let key = to_string(&select(&item, selector));
+        groups
+            .entry(key)
+            .or_insert_with(|| Value::Array(vec![]))
+            .as_array_mut()
+            .unwrap()
+            .push(item);
+    }
+    Value::Object(groups)
+}
+
+fn uniq(value: &Value) -> Value {
+    let mut seen: Vec<Value> = vec![];
+    for item in enumerable(value) {
+        if !seen.contains(&item) {
+            seen.push(item);
+        }
+    }
+    Value::Array(seen)
+}
+
+fn flatten(value: &Value) -> Vec<Value> {
+    enumerable(value)
+        .into_iter()
+        .flat_map(|item| match item {
+            Value::Array(_) => flatten(&item),
+            other => vec![other],
+        })
+        .collect()
+}
+
+fn escape_json(s: &str) -> String {
+    let encoded = serde_json::to_string(&Value::from(s)).unwrap_or_default();
+    encoded
+        .strip_prefix('"')
+        .and_then(|e| e.strip_suffix('"'))
+        .unwrap_or(&encoded)
+        .to_string()
+}
+
+fn count_arg(value: &Value) -> usize {
+    match value {
+        Value::Number(n) => n
+            .as_i64()
+            .filter(|i| *i >= 0)
+            .map(|i| i as usize)
+            .unwrap_or(0),
+        Value::String(s) => s.parse::<usize>().unwrap_or(0),
+        _ => 0,
+    }
+}
+
+// Approximate Elixir term ordering for the homogeneous lists the fuzzer sorts:
+// by JSON kind, then by value within numbers and strings.
+fn value_cmp(a: &Value, b: &Value) -> std::cmp::Ordering {
+    use std::cmp::Ordering;
+    fn rank(v: &Value) -> u8 {
+        match v {
+            Value::Null => 0,
+            Value::Bool(_) => 1,
+            Value::Number(_) => 2,
+            Value::String(_) => 3,
+            Value::Array(_) => 4,
+            Value::Object(_) => 5,
+        }
+    }
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => x
+            .as_f64()
+            .partial_cmp(&y.as_f64())
+            .unwrap_or(Ordering::Equal),
+        (Value::String(x), Value::String(y)) => x.cmp(y),
+        (Value::Bool(x), Value::Bool(y)) => x.cmp(y),
+        _ => rank(a).cmp(&rank(b)),
     }
 }

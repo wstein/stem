@@ -53,9 +53,36 @@ mix stem.native.verify --engine "native/stem_native/target/release/stem_native"
 The task compiles each conformance vector to bytecode, feeds it to the engine,
 and asserts the output matches `Stem.compile_string/2`. Expected result:
 
-```
+```text
 Conformance: 27/27 vectors match the BEAM reference byte-for-byte.
 ```
+
+## Differential fuzz (BEAM = oracle)
+
+```sh
+mix stem.native.fuzz                 # 200 random templates, random seed
+mix stem.native.fuzz --count 1000
+mix stem.native.fuzz --seed 42       # reproduce a run
+```
+
+Generates random templates over the matchable grammar, renders each on the BEAM
+and the native engine (one batched wasm process), and asserts byte-for-byte
+equality. The seed is printed so any failure is reproducible.
+
+## Parity scope
+
+The engine reimplements the built-in transformers that *can* match the BEAM
+byte-for-byte: the Strings, Collections, and Predicates groups plus the
+Minimum group's `default`/`join`/`lookup`/`escape_html`/`escape_json`. Three are
+deliberately **out of scope** (no cross-language byte-parity is achievable, so
+they panic loudly and are excluded from the fuzzer):
+
+- `json` / `inspect` — Elixir-specific serialization formatting and map key order;
+- `i18n` `t` — delegates to a host translator (a host closure), so the bytecode
+  marks it a host transformer the native core cannot run.
+
+Cased transforms (`upcase`/`downcase`/`capitalize`) match for ASCII; the fuzzer
+restricts inputs accordingly.
 
 ## Try it directly
 
