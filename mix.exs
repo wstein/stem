@@ -26,6 +26,7 @@ defmodule Stem.MixProject do
           # via `mix stem.native.verify` / `mix stem.native.fuzz`, not the unit suite.
           Mix.Tasks.Stem.Native.Verify,
           Mix.Tasks.Stem.Native.Fuzz,
+          Mix.Tasks.Stem.Native.CompileDiff,
           Stem.Native.Engine
         ]
       ]

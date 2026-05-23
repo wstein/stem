@@ -59,4 +59,27 @@ defmodule Stem.Native.Engine do
       File.rm!(tmp)
     end
   end
+
+  @doc """
+  Compiles a batch of template sources through the engine's native compiler in
+  one invocation, returning each result as a wire-program map or an
+  `%{"error" => %{...}}` map, in order. Used by the BEAM-vs-Rust differential
+  harness (`mix stem.native.compile_diff`).
+  """
+  @spec compile_batch(String.t(), [String.t()]) :: [map()]
+  def compile_batch(engine, sources) do
+    payload = JSON.encode!(%{"compile_batch" => sources})
+
+    tmp =
+      Path.join(System.tmp_dir!(), "stem_native_compile_#{System.unique_integer([:positive])}.json")
+
+    File.write!(tmp, payload)
+
+    try do
+      {output, _status} = System.cmd("sh", ["-c", "#{engine} < #{tmp} 2>/dev/null"])
+      JSON.decode!(output)
+    after
+      File.rm!(tmp)
+    end
+  end
 end

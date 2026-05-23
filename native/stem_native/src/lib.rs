@@ -14,8 +14,10 @@
 // can be checked byte-for-byte against the BEAM reference.
 
 use serde::Deserialize;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashMap;
+
+mod compile;
 
 #[derive(Deserialize)]
 struct Input {
@@ -110,6 +112,27 @@ pub fn handle(raw: &str) -> String {
         Err(err) => return format!("stem_native error: invalid input JSON: {err}"),
     };
 
+    // `{"compile": "<template source>"}` returns the wire program, or
+    // `{"error": {message, start, end}}` with a source span — the playground's
+    // backend-free compile step.
+    if let Some(Value::String(source)) = request.get("compile") {
+        return serde_json::to_string(&compile_result(source)).unwrap_or_default();
+    }
+
+    // `{"compile_batch": ["<src>", ...]}` compiles many templates in one process
+    // and returns a JSON array of wire-program-or-error objects, mirroring the
+    // render `batch` shape — used by the BEAM-vs-Rust differential harness.
+    if let Some(Value::Array(sources)) = request.get("compile_batch") {
+        let outputs: Vec<Value> = sources
+            .iter()
+            .map(|source| match source {
+                Value::String(src) => compile_result(src),
+                _ => json!({ "error": { "message": "compile_batch entries must be strings", "start": 0, "end": 0 } }),
+            })
+            .collect();
+        return serde_json::to_string(&outputs).unwrap_or_default();
+    }
+
     if let Some(batch) = request.get("batch") {
         match serde_json::from_value::<Vec<Input>>(batch.clone()) {
             Ok(inputs) => {
@@ -164,6 +187,17 @@ pub unsafe extern "C" fn stem_render(ptr: *const u8, len: usize) -> u64 {
     let out_ptr = stem_alloc(out_len);
     std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr, out_len);
     ((out_ptr as u64) << 32) | (out_len as u64)
+}
+
+// Compile one template to its wire program, or an `{"error": {message, span}}`
+// object the playground can underline.
+fn compile_result(source: &str) -> Value {
+    match compile::compile_to_wire(source) {
+        Ok(program) => program,
+        Err(err) => json!({
+            "error": { "message": err.message, "start": err.start, "end": err.end }
+        }),
+    }
 }
 
 fn render_input(input: &Input) -> String {
