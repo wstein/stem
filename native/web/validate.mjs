@@ -21,23 +21,38 @@ const expected = {
   Getter: "Ada Lovelace",
 };
 
-const { render } = await createRenderer(await readFile(WASM));
+const { render, compile } = await createRenderer(await readFile(WASM));
 const examples = JSON.parse(await readFile("native/web/examples.json", "utf8"));
 
 let failures = 0;
 for (const ex of examples) {
-  const actual = render(ex.program, ex.data);
   const want = expected[ex.label];
-  if (actual === want) {
-    console.log(`  ok  ${ex.label}: ${JSON.stringify(actual)}`);
-  } else {
+
+  // 1. Render the precompiled (BEAM) program.
+  const rendered = render(ex.program, ex.data);
+  if (rendered !== want) {
     failures++;
-    console.error(`  FAIL ${ex.label}: got ${JSON.stringify(actual)}, want ${JSON.stringify(want)}`);
+    console.error(`  FAIL ${ex.label} (render): got ${JSON.stringify(rendered)}, want ${JSON.stringify(want)}`);
+  }
+
+  // 2. Backend-free path: compile the template in-browser, then render it.
+  const compiled = compile(ex.template);
+  if (compiled.error) {
+    failures++;
+    console.error(`  FAIL ${ex.label} (compile): ${compiled.error.message}`);
+  } else {
+    const roundTrip = render(compiled.program, ex.data);
+    if (roundTrip === want) {
+      console.log(`  ok  ${ex.label}: ${JSON.stringify(roundTrip)} (compiled in-browser)`);
+    } else {
+      failures++;
+      console.error(`  FAIL ${ex.label} (compile→render): got ${JSON.stringify(roundTrip)}, want ${JSON.stringify(want)}`);
+    }
   }
 }
 
 if (failures > 0) {
-  console.error(`browser glue: ${failures} example(s) diverged`);
+  console.error(`browser glue: ${failures} check(s) diverged`);
   process.exit(1);
 }
-console.log(`browser glue: ${examples.length}/${examples.length} examples render correctly`);
+console.log(`browser glue: ${examples.length}/${examples.length} examples compile + render correctly`);
