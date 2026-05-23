@@ -19,6 +19,22 @@ const expected = {
   // Native-only: the {"$getter": "full_name"} sentinel is computed by a
   // host-authored getter, with the user object as its "self".
   Getter: "Ada Lovelace",
+  // Each + if + pipeline rendering a card grid (shown via the Rendered view).
+  "HTML cards":
+    '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;font-family:system-ui">' +
+    '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#faf5ff">' +
+    '<div style="font-weight:600">1. ADA LOVELACE</div>' +
+    '<div style="color:#6b7280;font-size:13px">Compiler · <span style="color:#7c3aed">★ lead</span></div></div>' +
+    '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#fff">' +
+    '<div style="font-weight:600">2. GRACE HOPPER</div>' +
+    '<div style="color:#6b7280;font-size:13px">Runtime</div></div>' +
+    '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#fff">' +
+    '<div style="font-weight:600">3. ALAN TURING</div>' +
+    '<div style="color:#6b7280;font-size:13px">Parser</div></div>' +
+    '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#faf5ff">' +
+    '<div style="font-weight:600">4. BARBARA LISKOV</div>' +
+    '<div style="color:#6b7280;font-size:13px">Type systems · <span style="color:#7c3aed">★ lead</span></div></div>' +
+    "</div>",
 };
 
 const { render, compile } = await createRenderer(await readFile(WASM));

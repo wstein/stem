@@ -275,6 +275,9 @@
         $("template").value = ex.template;
         $("data").value = JSON.stringify(ex.data, null, 2);
         $("escape").value = "";
+        const view = ex.view === "source" ? "source" : "rendered";
+        document.querySelector(`input[name="view"][value="${view}"]`).checked = true;
+        setView(view);
         run();
       }
 
