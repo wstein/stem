@@ -1,0 +1,78 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Stem Native — in-browser WASM rendering</title>
+    <style>
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
+      h1 { font-size: 1.4rem; }
+      label { display: block; font-weight: 600; margin: 1rem 0 0.25rem; }
+      textarea { width: 100%; font-family: ui-monospace, monospace; font-size: 13px; }
+      pre { background: #f4f4f5; padding: 0.75rem; border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
+      .row { display: flex; gap: 0.5rem; align-items: center; }
+      .muted { color: #6b7280; font-size: 0.85rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Stem Native — rendering in the browser via WebAssembly</h1>
+    <p class="muted">
+      The template is compiled to portable bytecode on the BEAM; this page renders it
+      entirely in a <code>wasm32-unknown-unknown</code> module — no server, no Elixir.
+    </p>
+
+    <div class="row">
+      <label for="example" style="margin: 0;">Example</label>
+      <select id="example"></select>
+    </div>
+
+    <label for="template">Template (compiled offline to the bytecode below)</label>
+    <textarea id="template" rows="2" readonly></textarea>
+
+    <label for="data">Data (edit me — JSON)</label>
+    <textarea id="data" rows="4"></textarea>
+
+    <label>Rendered output (escaped HTML shown verbatim)</label>
+    <pre id="output"></pre>
+
+    <script type="module">
+      import { createRenderer } from "./stem.mjs";
+
+      const WASM = "../stem_native/target/wasm32-unknown-unknown/release/stem_native.wasm";
+
+      const $ = (id) => document.getElementById(id);
+      const renderer = await createRenderer(await (await fetch(WASM)).arrayBuffer());
+      const examples = await (await fetch("./examples.json")).json();
+
+      examples.forEach((ex, i) => {
+        const opt = document.createElement("option");
+        opt.value = String(i);
+        opt.textContent = ex.label;
+        $("example").append(opt);
+      });
+
+      let current = examples[0];
+
+      function load(ex) {
+        current = ex;
+        $("template").value = ex.template;
+        $("data").value = JSON.stringify(ex.data, null, 2);
+        run();
+      }
+
+      function run() {
+        try {
+          const data = JSON.parse($("data").value);
+          $("output").textContent = renderer.render(current.program, data);
+        } catch (err) {
+          $("output").textContent = "error: " + err.message;
+        }
+      }
+
+      $("example").addEventListener("change", (e) => load(examples[Number(e.target.value)]));
+      $("data").addEventListener("input", run);
+      load(examples[0]);
+    </script>
+  </body>
+</html>

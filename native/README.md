@@ -25,9 +25,13 @@ the host, escaping done natively.
 
 ## Layout
 
-- `stem_native/` — the Rust crate (`src/main.rs`): reads a JSON request
-  `{"program": …, "data": …}` on stdin, writes the rendered string to stdout.
+- `stem_native/` — the Rust crate. `src/lib.rs` is the engine (`handle/1` plus
+  the `stem_alloc`/`stem_dealloc`/`stem_render` C ABI); `src/main.rs` is a thin
+  WASI bin reading stdin / writing stdout.
 - `run.mjs` — a Node WASI runner that loads the wasm module and forwards stdio.
+- `web/` — the browser demo: `stem.mjs` (glue), `index.html` (live page),
+  `examples.json` (templates precompiled on the BEAM), `validate.mjs` (a
+  browserless check of the no-WASI module + glue).
 
 ## Build
 
@@ -83,6 +87,28 @@ they panic loudly and are excluded from the fuzzer):
 
 Cased transforms (`upcase`/`downcase`/`capitalize`) match for ASCII; the fuzzer
 restricts inputs accordingly.
+
+## Browser / edge (no WASI)
+
+The same engine compiles to `wasm32-unknown-unknown` and renders in a browser
+with a ~30-line glue module — no WASI, no server, no Elixir at runtime:
+
+```sh
+rustup target add wasm32-unknown-unknown          # one-time
+cd native/stem_native
+cargo build --release --target wasm32-unknown-unknown --lib
+
+# browserless check of the module + glue (Node uses the same WebAssembly API):
+node native/web/validate.mjs
+# => browser glue: 3/3 examples render correctly
+
+# live demo (must be served over HTTP so fetch() can load the .wasm):
+python3 -m http.server   # then open http://localhost:8000/native/web/
+```
+
+The host writes the request JSON into wasm memory via `stem_alloc`, calls
+`stem_render(ptr, len)` (returns a packed `out_ptr<<32 | out_len`), reads the
+UTF-8 output, and frees both buffers with `stem_dealloc`. See `web/stem.mjs`.
 
 ## Try it directly
 
