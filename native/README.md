@@ -30,12 +30,13 @@ the host, escaping done natively.
   WASI bin reading stdin / writing stdout.
 - `run.mjs` — a Node WASI runner that loads the wasm module and forwards stdio.
 - `web/` — the browser demo: `stem.mjs` (glue), `index.html` (live page),
-  `examples.json` (templates precompiled on the BEAM), `playground_utils.mjs`
-  (shared browser utilities), and `validate.mjs` (a browserless check of the
-  no-WASI module + glue). The page is now a lightweight IDE-style, multi-tab
-  editor built with CodeMirror 6: the first tab is the rendered entry template
-  and the rest are partials, pulled in with `{{> name}}` and compiled fully in
-  the browser.
+  `examples.json` (a small manifest indexing the examples), `examples/<id>/`
+  (each example as individual files: `main.stem`, one `.stem` per partial, and
+  `data.json`), `playground_utils.mjs` (shared browser utilities), and
+  `validate.mjs` (a browserless check of the no-WASI module + glue that loads
+  those same files). The page is a lightweight IDE-style, multi-tab editor built
+  with CodeMirror 6: the first tab is the rendered entry template and the rest
+  are partials, pulled in with `{{> name}}` and compiled fully in the browser.
   `compile(source, partials)` sends `{ "compile": source, "partials": {name:
   source} }`; the engine expands partials inline with the same recursion guard
   as `Stem.Parser`.

@@ -1,0 +1,4 @@
+<header class="banner">
+  <h2>{{team}} team</h2>
+  <p>Who builds Stem · hover for a note, click cards to select</p>
+</header>

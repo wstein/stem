@@ -1,0 +1,18 @@
+<style>
+  .banner { font-family: system-ui; margin: 0 0 12px; }
+  .banner h2 { margin: 0; font-size: 1.1rem; }
+  .banner p { margin: 2px 0 0; color: #6b7280; font-size: 13px; }
+  .team { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; font-family: system-ui; }
+  .card { position: relative; display: block; border: 1px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; background: #fff; cursor: pointer; transition: transform .12s ease, box-shadow .12s ease, border-color .12s ease; }
+  .card:hover { transform: translateY(-2px); box-shadow: 0 6px 18px rgba(24, 24, 27, 0.08); border-color: #c4b5fd; }
+  .card.lead { background: #faf5ff; }
+  .card:has(.pick:checked) { border-color: #7c3aed; box-shadow: 0 0 0 2px #ddd6fe; }
+  .pick { position: absolute; opacity: 0; pointer-events: none; }
+  .tip { position: absolute; left: 14px; bottom: calc(100% + 6px); max-width: 90%; background: #18181b; color: #fff; font-size: 12px; padding: 4px 8px; border-radius: 6px; opacity: 0; transform: translateY(4px); transition: opacity .12s ease, transform .12s ease; pointer-events: none; }
+  .card:hover .tip { opacity: 1; transform: translateY(0); }
+  .head { display: flex; align-items: center; gap: 10px; }
+  .avatar { width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #ede9fe; font-size: 18px; }
+  .name { font-weight: 600; }
+  .role { color: #6b7280; font-size: 13px; }
+  .badge { color: #7c3aed; }
+</style>

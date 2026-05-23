@@ -1,0 +1,5 @@
+{{!-- A member: name line + role, each its own partial. --}}
+<div>
+  {{> name}}
+  {{> role}}
+</div>

@@ -1,0 +1,12 @@
+{
+  "people": [
+    {
+      "name": "Ada",
+      "role": "Compiler"
+    },
+    {
+      "name": "Grace",
+      "role": "Runtime"
+    }
+  ]
+}

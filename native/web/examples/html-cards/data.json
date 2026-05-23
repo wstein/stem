@@ -1,0 +1,33 @@
+{
+  "team": "Engineering",
+  "members": [
+    {
+      "name": "ada lovelace",
+      "role": "Compiler",
+      "lead": true,
+      "emoji": "⚙️",
+      "note": "Lowers templates to portable bytecode"
+    },
+    {
+      "name": "grace hopper",
+      "role": "Runtime",
+      "lead": false,
+      "emoji": "🚀",
+      "note": "Renders bytecode on every host"
+    },
+    {
+      "name": "alan turing",
+      "role": "Parser",
+      "lead": false,
+      "emoji": "🧩",
+      "note": "Turns source into a clean AST"
+    },
+    {
+      "name": "barbara liskov",
+      "role": "Type systems",
+      "lead": true,
+      "emoji": "🔭",
+      "note": "Keeps the contracts honest"
+    }
+  ]
+}

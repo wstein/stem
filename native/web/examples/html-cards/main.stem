@@ -1,0 +1,5 @@
+{{> styles}}
+{{> header}}
+<div class="team">
+  {{#each members}}{{> card}}{{/each}}
+</div>

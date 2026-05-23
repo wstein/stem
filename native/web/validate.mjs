@@ -1,13 +1,16 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Validates the wasm32-unknown-unknown module + browser glue without a browser:
-// renders the demo examples through the glue and checks them against expected
-// outputs. Node uses the same WebAssembly API as browsers, so a pass here proves
-// the browser path. Run from the repo root:
+// Validates the wasm32-unknown-unknown module + browser glue without a browser.
+// For each example it loads the same individual files the browser fetches
+// (examples/<id>/main.stem, one .stem per partial, and data.json), compiles them
+// through the glue, renders, and checks against the expected output. Node uses
+// the same WebAssembly API as browsers, so a pass here proves the browser path.
+// Run from the repo root:
 //
 //   node native/web/validate.mjs
 
 import { readFile } from "node:fs/promises";
+import path from "node:path";
 import { createRenderer } from "./stem.mjs";
 
 const WASM = "native/stem_native/target/wasm32-unknown-unknown/release/stem_native.wasm";
@@ -24,33 +27,43 @@ const expected = {
   "Partial arguments": "<ul><li>Ada — member</li><li>Grace — member</li></ul>",
 };
 
+const EXAMPLES_DIR = "native/web/examples";
+
 const { render, compile } = await createRenderer(await readFile(WASM));
-const examples = JSON.parse(await readFile("native/web/examples.json", "utf8"));
+const manifest = JSON.parse(await readFile(`${EXAMPLES_DIR}.json`, "utf8"));
+
+// Load an example's individual files: main.stem, one .stem per partial, and
+// data.json — the same files the browser fetches at runtime.
+async function loadExample(ex) {
+  const dir = path.join(EXAMPLES_DIR, ex.id);
+  const main = await readFile(path.join(dir, ex.main), "utf8");
+  const data = JSON.parse(await readFile(path.join(dir, ex.data), "utf8"));
+  const partials = {};
+  for (const name of ex.partials) {
+    partials[name] = await readFile(path.join(dir, `${name}.stem`), "utf8");
+  }
+  return { main, partials, data };
+}
 
 let failures = 0;
-for (const ex of examples) {
+for (const ex of manifest) {
   const want = expected[ex.label];
+  const { main, partials, data } = await loadExample(ex);
 
-  // 1. Render the precompiled (BEAM) program.
-  const rendered = render(ex.program, ex.data);
-  if (rendered !== want) {
-    failures++;
-    console.error(`  FAIL ${ex.label} (render): got ${JSON.stringify(rendered)}, want ${JSON.stringify(want)}`);
-  }
-
-  // 2. Backend-free path: compile the template in-browser, then render it.
-  const compiled = compile(ex.template, ex.partials || {});
+  // Compile the entry (with its partials) through the engine, then render.
+  const compiled = compile(main, partials);
   if (compiled.error) {
     failures++;
     console.error(`  FAIL ${ex.label} (compile): ${compiled.error.message}`);
+    continue;
+  }
+
+  const rendered = render(compiled.program, data);
+  if (rendered === want) {
+    console.log(`  ok  ${ex.label}: ${JSON.stringify(rendered)}`);
   } else {
-    const roundTrip = render(compiled.program, ex.data);
-    if (roundTrip === want) {
-      console.log(`  ok  ${ex.label}: ${JSON.stringify(roundTrip)} (compiled in-browser)`);
-    } else {
-      failures++;
-      console.error(`  FAIL ${ex.label} (compile→render): got ${JSON.stringify(roundTrip)}, want ${JSON.stringify(want)}`);
-    }
+    failures++;
+    console.error(`  FAIL ${ex.label}: got ${JSON.stringify(rendered)}, want ${JSON.stringify(want)}`);
   }
 }
 
@@ -58,4 +71,4 @@ if (failures > 0) {
   console.error(`browser glue: ${failures} check(s) diverged`);
   process.exit(1);
 }
-console.log(`browser glue: ${examples.length}/${examples.length} examples compile + render correctly`);
+console.log(`browser glue: ${manifest.length}/${manifest.length} examples compile + render correctly`);

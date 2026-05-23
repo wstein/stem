@@ -940,16 +940,24 @@
         await selected.action();
       }
 
-      function loadExample(example) {
-        tabs = [{ name: "main", source: example.template }];
-        if (example.partials) {
-          for (const [name, source] of Object.entries(example.partials)) {
-            tabs.push({ name, source });
-          }
-        }
+      // Each example lives in examples/<id>/ as individual files: main.stem, one
+      // .stem per partial, and data.json. Fetch them, populate the tabs, and
+      // show the data as YAML in the editor.
+      async function loadExample(example) {
+        const dir = `./examples/${example.id}/`;
+        const [mainSource, dataText, ...partialSources] = await Promise.all([
+          fetch(dir + example.main).then((response) => response.text()),
+          fetch(dir + example.data).then((response) => response.text()),
+          ...example.partials.map((name) =>
+            fetch(`${dir}${name}.stem`).then((response) => response.text()),
+          ),
+        ]);
+
+        tabs = [{ name: "main", source: mainSource }];
+        example.partials.forEach((name, i) => tabs.push({ name, source: partialSources[i] }));
 
         active = 0;
-        setEditorText(dataView, dumpYaml(example.data, { indent: 2, lineWidth: -1, noRefs: true }));
+        setEditorText(dataView, dumpYaml(JSON.parse(dataText), { indent: 2, lineWidth: -1, noRefs: true }));
         $("escape").value = "";
 
         const view = example.view === "source" ? "source" : "rendered";
@@ -1063,7 +1071,7 @@
       });
 
       setView(currentView());
-      if (!restoreHash()) loadExample(examples[0]);
+      if (!restoreHash()) await loadExample(examples[0]);
     </script>
   </body>
 </html>

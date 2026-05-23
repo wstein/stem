@@ -1,0 +1,4 @@
+{{> header heading="Our team"}}
+<ul>
+  {{#each people}}{{> row this}}{{/each}}
+</ul>
