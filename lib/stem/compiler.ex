@@ -92,10 +92,12 @@ defmodule Stem.Compiler do
     collection = compile_expression(expr_ast, meta, state)
     warn_on_unused_block_params(:each, params, body, meta, state)
 
+    param_bindings = block_param_bindings(params)
+
     body_state = %{
       state
       | in_each: true,
-        locals: Map.merge(state.locals, block_param_locals(:each, params))
+        locals: Map.merge(state.locals, Map.new(param_bindings))
     }
 
     body_ast = compile_nodes(body, body_state)
@@ -117,7 +119,7 @@ defmodule Stem.Compiler do
           )
         ),
         fn {unquote(current), unquote(stem_key)}, unquote(stem_index) ->
-          unquote_splicing(block_param_assignments(:each, params, current, stem_key, stem_index))
+          unquote_splicing(each_param_assignments(param_bindings, current, stem_key, stem_index))
           unquote(body_ast)
         end,
         fn -> unquote(else_ast) end
@@ -129,7 +131,8 @@ defmodule Stem.Compiler do
     subject = compile_expression(expr_ast, meta, state)
     this = genvar(:this)
     warn_on_unused_block_params(:with, params, body, meta, state)
-    body_state = %{state | locals: Map.merge(state.locals, block_param_locals(:with, params))}
+    param_bindings = block_param_bindings(params)
+    body_state = %{state | locals: Map.merge(state.locals, Map.new(param_bindings))}
 
     quote do
       unquote(this) = Stem.Runtime.resolve(unquote(subject))
@@ -143,7 +146,7 @@ defmodule Stem.Compiler do
          ),
          do:
            (
-             unquote_splicing(block_param_assignments(:with, params, this, nil, nil))
+             unquote_splicing(with_param_assignments(param_bindings, this))
              unquote(compile_nodes(body, body_state))
            ),
          else: unquote(compile_nodes(else_body, state))
@@ -193,62 +196,76 @@ defmodule Stem.Compiler do
 
   defp rewrite_assign({:@, meta, [{name, _name_meta, atom}]}, warn)
        when is_atom(name) and is_atom(atom) do
+    rewrite_assign_key(name, meta, warn)
+  end
+
+  # Literal assign keys lower to `@(:"first-name")`, which parses to an `@` with
+  # a bare atom argument rather than a variable node.
+  defp rewrite_assign({:@, meta, [key]}, warn) when is_atom(key) do
+    rewrite_assign_key(key, meta, warn)
+  end
+
+  defp rewrite_assign(node, _warn), do: node
+
+  defp rewrite_assign_key(key, meta, warn) do
     line = meta[:line] || 0
     assigns = Macro.var(:assigns, nil)
 
     quote line: line do
-      Stem.Runtime.fetch_assign!(unquote(assigns), unquote(name), unquote(warn))
+      Stem.Runtime.fetch_assign!(unquote(assigns), unquote(key), unquote(warn))
     end
   end
-
-  defp rewrite_assign(node, _warn), do: node
 
   # Variables introduced by the compiler. The `generated: true` flag keeps the
   # compiler from warning when a loop or `with` binding goes unused in a body.
   defp genvar(name), do: {name, [generated: true], nil}
 
-  defp block_param_locals(:each, []), do: %{}
-  defp block_param_locals(:each, [item]), do: %{item => item}
-  defp block_param_locals(:each, [item, index]), do: %{item => item, index => index}
+  # Bind each block parameter to a fresh, collision-free variable rather than to
+  # a variable named after the author's chosen name. The author's name can be
+  # any string (uppercase, dashes, leading digits) that is not a valid Elixir
+  # variable, so the locals map points it at the gensym instead. The gensym's
+  # string name round-trips through `Stem.Expression` source generation.
+  defp block_param_bindings(params) do
+    Enum.map(params, fn name -> {name, "stem_blk_#{System.unique_integer([:positive])}"} end)
+  end
 
-  defp block_param_locals(:each, [item, index0, index1]),
-    do: %{item => item, index0 => index0, index1 => index1}
+  defp each_param_assignments([], _current, _stem_key, _stem_index), do: []
 
-  defp block_param_locals(:with, []), do: %{}
-  defp block_param_locals(:with, [item]), do: %{item => item}
-
-  defp block_param_assignments(:each, [], _current, _stem_key, _stem_index), do: []
-
-  defp block_param_assignments(:each, [item], current, _stem_key, _stem_index) do
-    [quote(do: unquote(local_var(item)) = unquote(current))]
+  defp each_param_assignments([{_, item}], current, _stem_key, _stem_index) do
+    [quote(do: unquote(block_var(item)) = unquote(current))]
   end
 
   # Two-param form `as |value key|`: the second param is the iteration key —
   # the map key when iterating a map, the numeric index when iterating a list
   # (stem_key is nil for lists), matching Handlebars `{{#each obj as |v k|}}`.
-  defp block_param_assignments(:each, [item, key], current, stem_key, stem_index) do
+  defp each_param_assignments([{_, item}, {_, key}], current, stem_key, stem_index) do
     [
-      quote(do: unquote(local_var(item)) = unquote(current)),
-      quote(do: unquote(local_var(key)) = unquote(stem_key) || unquote(stem_index))
+      quote(do: unquote(block_var(item)) = unquote(current)),
+      quote(do: unquote(block_var(key)) = unquote(stem_key) || unquote(stem_index))
     ]
   end
 
   # Three-param form `as |item i0 i1|`: explicit zero- and one-based positions.
-  defp block_param_assignments(:each, [item, index0, index1], current, _stem_key, stem_index) do
+  defp each_param_assignments(
+         [{_, item}, {_, index0}, {_, index1}],
+         current,
+         _stem_key,
+         stem_index
+       ) do
     [
-      quote(do: unquote(local_var(item)) = unquote(current)),
-      quote(do: unquote(local_var(index0)) = unquote(stem_index)),
-      quote(do: unquote(local_var(index1)) = unquote(stem_index) + 1)
+      quote(do: unquote(block_var(item)) = unquote(current)),
+      quote(do: unquote(block_var(index0)) = unquote(stem_index)),
+      quote(do: unquote(block_var(index1)) = unquote(stem_index) + 1)
     ]
   end
 
-  defp block_param_assignments(:with, [], _this, _stem_key, _stem_index), do: []
+  defp with_param_assignments([], _this), do: []
 
-  defp block_param_assignments(:with, [item], this, _stem_key, _stem_index) do
-    [quote(do: unquote(local_var(item)) = unquote(this))]
+  defp with_param_assignments([{_, item}], this) do
+    [quote(do: unquote(block_var(item)) = unquote(this))]
   end
 
-  defp local_var(name), do: {String.to_atom(name), [generated: true], nil}
+  defp block_var(name), do: {String.to_atom(name), [generated: true], nil}
 
   defp warn_on_constant_condition(kind, {:literal, source}, meta, state) do
     truthy = literal_truthy?(source)
@@ -278,7 +295,10 @@ defmodule Stem.Compiler do
   defp warn_on_unused_block_params(_kind, [], _body, _meta, _state), do: :ok
 
   defp warn_on_unused_block_params(kind, params, body, meta, state) do
-    unused = Enum.reject(params, &body_references_identifier?(body, &1))
+    unused =
+      params
+      |> Enum.reject(&String.starts_with?(&1, "_"))
+      |> Enum.reject(&body_references_identifier?(body, &1))
 
     if unused != [] do
       warn("unused #{kind} block parameter(s): #{Enum.join(unused, ", ")}", meta, state)

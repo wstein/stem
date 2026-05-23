@@ -173,19 +173,27 @@ defmodule Stem.Expression do
   def to_source({:identifier, name}, context) do
     case local_source(context, name) do
       {:ok, source} -> source
-      :error -> if(context.in_each, do: "current.#{name}", else: "@#{name}")
+      :error -> if(context.in_each, do: "current" <> dot_access(name), else: assign_marker(name))
     end
   end
 
   def to_source({:parent, name}, _context), do: "@#{name}"
-  def to_source({:path, :this, segments}, _context), do: Enum.join(["this" | segments], ".")
+
+  def to_source({:path, :this, segments}, _context),
+    do: "this" <> Enum.map_join(segments, &dot_access/1)
 
   def to_source({:path, :implicit, [root | rest]}, context) do
-    path = Enum.join([root | rest], ".")
+    rest_source = Enum.map_join(rest, &dot_access/1)
 
     case local_source(context, root) do
-      {:ok, source} -> Enum.join([source | rest], ".")
-      :error -> if(context.in_each, do: "this.#{path}", else: "@#{path}")
+      {:ok, source} ->
+        source <> rest_source
+
+      :error ->
+        root_source =
+          if(context.in_each, do: "current" <> dot_access(root), else: assign_marker(root))
+
+        root_source <> rest_source
     end
   end
 
@@ -205,14 +213,18 @@ defmodule Stem.Expression do
 
   @spec format(expr_t()) :: binary()
   def format({:literal, source}), do: source
-  def format({:identifier, name}), do: name
+  def format({:identifier, name}), do: format_segment(name)
   def format({:special, :index}), do: "@index"
   def format({:special, :index1}), do: "@index1"
   def format({:special, :key}), do: "@key"
   def format({:special, :this}), do: "this"
   def format({:parent, name}), do: "../#{name}"
-  def format({:path, :this, segments}), do: Enum.join(["this" | segments], ".")
-  def format({:path, :implicit, segments}), do: Enum.join(segments, ".")
+
+  def format({:path, :this, segments}),
+    do: Enum.join(["this" | Enum.map(segments, &format_segment/1)], ".")
+
+  def format({:path, :implicit, segments}),
+    do: Enum.map_join(segments, ".", &format_segment/1)
 
   def format({:transformer, name, args}) do
     formatted_args =
@@ -488,14 +500,11 @@ defmodule Stem.Expression do
       String.starts_with?(trimmed, "../") and valid_parent_identifier?(trimmed) ->
         {:ok, {:parent, strip_parent_segments(trimmed)}}
 
-      path_expression?(trimmed) ->
-        {:ok, parse_path(trimmed)}
-
-      simple_identifier?(trimmed) ->
-        {:ok, {:identifier, trimmed}}
-
       true ->
-        helper_invocation_ast(trimmed)
+        case reference_expression(trimmed) do
+          {:ok, node} -> {:ok, node}
+          :no_reference -> helper_invocation_ast(trimmed)
+        end
     end
   end
 
@@ -603,14 +612,11 @@ defmodule Stem.Expression do
       String.starts_with?(trimmed, "../") and valid_parent_identifier?(trimmed) ->
         {:ok, {:parent, strip_parent_segments(trimmed)}}
 
-      path_expression?(trimmed) ->
-        {:ok, parse_path(trimmed)}
-
-      simple_identifier?(trimmed) ->
-        {:ok, {:identifier, trimmed}}
-
       true ->
-        :error
+        case reference_expression(trimmed) do
+          {:ok, node} -> {:ok, node}
+          :no_reference -> :error
+        end
     end
   end
 
@@ -627,13 +633,63 @@ defmodule Stem.Expression do
     end
   end
 
-  defp path_expression?(expr) do
-    String.match?(expr, ~r/^[a-z_][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)+$/) or
-      String.starts_with?(expr, "this.")
+  # A reference is a dotted chain of segments, each either a bare identifier
+  # (`name`, `Item1`) or a bracketed literal key (`[first-name]`, `[a.b]`).
+  # Bracket segments escape characters a bare identifier cannot carry — dashes,
+  # spaces, dots, leading digits, or reserved words like `this`.
+  @reference_segment ~r/\[[^\]]+\]|[A-Za-z_][A-Za-z0-9_]*/
+
+  defp reference_expression(trimmed) do
+    segments = @reference_segment |> Regex.scan(trimmed) |> List.flatten()
+
+    if segments != [] and Enum.join(segments, ".") == trimmed do
+      build_reference(segments)
+    else
+      :no_reference
+    end
   end
 
-  defp parse_path("this." <> rest), do: {:path, :this, :binary.split(rest, ".", [:global])}
-  defp parse_path(expr), do: {:path, :implicit, :binary.split(expr, ".", [:global])}
+  defp build_reference([raw_root | _] = segments) do
+    [root_key | rest_keys] = Enum.map(segments, &strip_segment/1)
+
+    cond do
+      segments == ["this"] ->
+        :no_reference
+
+      match?([_single], segments) ->
+        {:ok, {:identifier, root_key}}
+
+      raw_root == "this" ->
+        {:ok, {:path, :this, rest_keys}}
+
+      true ->
+        {:ok, {:path, :implicit, [root_key | rest_keys]}}
+    end
+  end
+
+  defp strip_segment("[" <> rest), do: binary_part(rest, 0, byte_size(rest) - 1)
+  defp strip_segment(bare), do: bare
+
+  # Emits a member access (`.name`), quoting any key that is not a bare Elixir
+  # identifier so dashes/spaces/leading digits survive the source round-trip.
+  defp dot_access(name) do
+    if simple_identifier?(name), do: ".#{name}", else: "." <> inspect(name)
+  end
+
+  # Emits an assign read. A bare key keeps the familiar `@name` marker; a literal
+  # key becomes `@(:"key")` so `Stem.Compiler.rewrite_assign/2` still recognizes
+  # it without the key having to be a valid identifier.
+  defp assign_marker(name) do
+    if simple_identifier?(name),
+      do: "@#{name}",
+      else: "@(" <> inspect(String.to_atom(name)) <> ")"
+  end
+
+  defp format_segment(name) do
+    if binding_name?(name), do: name, else: "[#{name}]"
+  end
+
+  defp binding_name?(name), do: String.match?(name, ~r/^[A-Za-z_][A-Za-z0-9_]*$/)
 
   defp helper_context_expression(context) do
     base = ["assigns: assigns", "transformers: transformers"]

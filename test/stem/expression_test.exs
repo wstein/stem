@@ -59,8 +59,41 @@ defmodule Stem.ExpressionTest do
 
   test "dotted paths" do
     assert t("user.name") == "@user.name"
-    assert t("user.name", true) == "this.user.name"
+    # Inside an each body the loop item is bound to `current`, so a non-local
+    # implicit path resolves against it (the previous `this.` reference was never
+    # bound and raised at compile time).
+    assert t("user.name", true) == "current.user.name"
     assert t("this.title") == "this.title"
+  end
+
+  test "bracketed literal keys lower to quoted atoms" do
+    assert t("[first-name]") == ~s|@(:"first-name")|
+    assert t("[first-name]", true) == ~s|current."first-name"|
+    assert t("user.[first-name]") == ~s|@user."first-name"|
+    assert t("[user-id].[first-name]") == ~s|@(:"user-id")."first-name"|
+    assert t("this.[full name]") == ~s|this."full name"|
+  end
+
+  test "uppercase identifiers are valid keys without brackets" do
+    assert t("I1") == "@(:I1)"
+    assert t("Item.Name") == ~s|@(:Item)."Name"|
+  end
+
+  test "bracket segments may contain dots and reserved words" do
+    assert {:ok, {:identifier, "a.b"}} = p("[a.b]")
+    assert {:ok, {:identifier, "this"}} = p("[this]")
+  end
+
+  test "bracketed keys round-trip through format" do
+    assert {:ok, expr} = p("[first-name]")
+    assert Expression.format(expr) == "[first-name]"
+
+    assert {:ok, expr} = p("user.[first-name]")
+    assert Expression.format(expr) == "user.[first-name]"
+  end
+
+  test "bare keys with non-identifier characters are not references" do
+    assert {:ok, {:elixir, "a-b"}} = p("a-b")
   end
 
   test "helper invocation with positional, literal, and numeric args" do

@@ -673,7 +673,7 @@ defmodule Stem.Parser do
 
   defp validate_identifier_list(params) do
     cond do
-      Enum.any?(params, &(not String.match?(&1, ~r/^[a-z_][a-zA-Z0-9_]*$/))) ->
+      Enum.any?(params, &(not String.match?(&1, ~r/^[A-Za-z_][A-Za-z0-9_]*$/))) ->
         {:error, "block parameters must be simple identifiers"}
 
       length(params) != length(Enum.uniq(params)) ->

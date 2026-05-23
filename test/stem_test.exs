@@ -101,6 +101,20 @@ defmodule StemTest do
       assert eval("{{user.name}}", assigns: [user: %{name: "Nina"}]) == "Nina"
     end
 
+    test "bracketed literal keys read assigns and nested values" do
+      assert eval("{{[first-name]}}", assigns: [{:"first-name", "Ada"}]) == "Ada"
+
+      assert eval("{{user.[first-name]}}", assigns: [user: %{:"first-name" => "Grace"}]) ==
+               "Grace"
+    end
+
+    test "uppercase block params and literal item fields render in each" do
+      assert eval(
+               "{{#each people as |p _ I1|}}{{I1}}:{{p.[first-name]}} {{/each}}",
+               assigns: [people: [%{:"first-name" => "Ada"}, %{:"first-name" => "Grace"}]]
+             ) == "1:Ada 2:Grace "
+    end
+
     test "pipelines compose transformers in declaration order" do
       assert eval(
                "{{name |> trim |> upcase |> truncate(4)}}",
