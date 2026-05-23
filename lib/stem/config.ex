@@ -157,7 +157,11 @@ defmodule Stem.Config do
           |> Enum.map(&parse_module_name/1)
           |> Enum.filter(&(!is_nil(&1)))
           |> Enum.reduce(%{}, fn mod, acc ->
-            if function_exported?(mod, :all, 0), do: Map.merge(acc, mod.all()), else: acc
+            # ensure_loaded?/1 first: function_exported?/3 is false for an
+            # unloaded module, which would silently drop a configured group.
+            if Code.ensure_loaded?(mod) and function_exported?(mod, :all, 0),
+              do: Map.merge(acc, mod.all()),
+              else: acc
           end)
 
         if transformers == %{} do

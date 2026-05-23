@@ -446,5 +446,13 @@ defmodule Mix.Tasks.StemTest do
       template = "{{#each items}}{{../prefix}}:{{this}};{{/each}}"
       assert Stem.CLI.render_template!(template, %{items: ["a", "b"], prefix: "P"}) == "P:a;P:b;"
     end
+
+    test "detects a pipeline whose left-hand side is a path (loads transformers)" do
+      assert Stem.CLI.render_template!(
+               "{{user.name |> upcase}}",
+               %{user: %{name: "ada"}},
+               transformers: Stem.Transformers.Strings.all()
+             ) == "ADA"
+    end
   end
 end

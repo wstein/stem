@@ -160,6 +160,12 @@ defmodule Stem.CLI do
           String.starts_with?(tag, "!") ->
             false
 
+          # A pipeline always invokes transformers, even when its left-hand
+          # side is a path/literal rather than a bare helper name
+          # (e.g. `{{user.name |> upcase}}`).
+          String.contains?(tag, "|>") ->
+            true
+
           true ->
             case helper_tokens(tag) do
               [name | args] -> helper_name?(name) and args != []
@@ -370,7 +376,12 @@ defmodule Stem.CLI do
     |> Enum.map(&parse_module_name/1)
     |> Enum.filter(&(!is_nil(&1)))
     |> Enum.reduce(%{}, fn mod, acc ->
-      if function_exported?(mod, :all, 0), do: Map.merge(acc, mod.all()), else: acc
+      # Code.ensure_loaded?/1 is required: function_exported?/3 returns false for
+      # a module that has not been loaded yet, which it usually has not in a cold
+      # CLI run — silently dropping the group.
+      if Code.ensure_loaded?(mod) and function_exported?(mod, :all, 0),
+        do: Map.merge(acc, mod.all()),
+        else: acc
     end)
   end
 
