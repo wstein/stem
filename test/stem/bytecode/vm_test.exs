@@ -172,4 +172,43 @@ defmodule Stem.Bytecode.VMTest do
              ) == "1:Ada 2:Grace "
     end
   end
+
+  describe "render/2 partial arguments" do
+    test "context argument sets the partial scope" do
+      assert render("{{> card user}}", [assigns: [user: %{name: "Nina"}]],
+               partials: %{card: "Name: {{name}}"}
+             ) == "Name: Nina"
+    end
+
+    test "hash arguments are available by name" do
+      assert render(~s({{> badge label="VIP"}}), [assigns: []], partials: %{badge: "[{{label}}]"}) ==
+               "[VIP]"
+    end
+
+    test "hash arguments override matching context keys" do
+      assert render(~s({{> card user name="Override"}}), [assigns: [user: %{name: "Nina"}]],
+               partials: %{card: "{{name}}"}
+             ) == "Override"
+    end
+
+    test "context argument works inside each" do
+      assert render(
+               "{{#each users}}{{> card this}}{{/each}}",
+               [assigns: [users: [%{name: "A"}, %{name: "B"}]]],
+               partials: %{card: "[{{name}}]"}
+             ) == "[A][B]"
+    end
+
+    test "hash arguments combine with an inherited caller scope" do
+      assert render(~s({{> line label="Total"}}), [assigns: [amount: 42]],
+               partials: %{line: "{{label}}: {{amount}}"}
+             ) == "Total: 42"
+    end
+
+    test "scalar context argument yields an empty scope" do
+      assert render("{{> card greeting}}", [assigns: [greeting: "hi"]],
+               partials: %{card: "[{{name}}]"}
+             ) == "[]"
+    end
+  end
 end

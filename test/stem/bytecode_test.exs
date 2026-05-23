@@ -209,6 +209,63 @@ defmodule Stem.BytecodeTest do
     end
   end
 
+  describe "compile/2 partial arguments" do
+    test "lowers a context argument to a scope instruction" do
+      program = compile("{{> card user}}", partials: %{card: "{{name}}"})
+
+      assert [{:scope, {:assign, :user}, [], [{:emit, {:assign, :name}, :html}]}] =
+               program.instructions
+    end
+
+    test "lowers hash arguments and inherits assigns when no context is given" do
+      program = compile(~s({{> badge label="VIP"}}), partials: %{badge: "{{label}}"})
+
+      assert [{:scope, {:assigns}, [label: {:lit, "VIP"}], [{:emit, {:assign, :label}, :html}]}] =
+               program.instructions
+    end
+
+    test "uses this as the scope base inside each" do
+      program =
+        compile("{{#each users}}{{> card this}}{{/each}}", partials: %{card: "{{name}}"})
+
+      assert [{:each, _subject, _params, [{:scope, {:this}, [], _body}], _else}] =
+               program.instructions
+    end
+
+    test "serializes a scope instruction to wire and JSON-encodes cleanly" do
+      wire =
+        ~s({{> card user label="x"}})
+        |> compile(partials: %{card: "{{name}}"})
+        |> Bytecode.to_wire()
+
+      assert [
+               %{
+                 "t" => "scope",
+                 "base" => %{"t" => "assign", "name" => "user"},
+                 "hash" => %{"label" => %{"t" => "lit", "value" => "x"}},
+                 "body" => [%{"t" => "emit"}]
+               }
+             ] = wire["instructions"]
+
+      assert "scope" in collect_tags(wire)
+      assert is_binary(JSON.encode!(wire))
+    end
+
+    test "disassembles scope instructions, including the inherited-assigns base" do
+      with_context =
+        ~s({{> card user label="x"}})
+        |> compile(partials: %{card: "{{name}}"})
+        |> Bytecode.disasm()
+
+      assert with_context =~ ~s(SCOPE ASSIGN user {label=LIT "x"})
+
+      inherited =
+        "{{> badge label=title}}" |> compile(partials: %{badge: "{{label}}"}) |> Bytecode.disasm()
+
+      assert inherited =~ "SCOPE ASSIGNS {label=ASSIGN title}"
+    end
+  end
+
   describe "to_wire/1" do
     test "serializes text and expression ops to tagged maps" do
       wire = "Hi {{user.name |> upcase}}" |> compile() |> Bytecode.to_wire()
