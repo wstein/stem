@@ -266,6 +266,17 @@ defmodule StemTest do
                "x@u"
     end
 
+    test "keyword args are kept last even when written before positional ones" do
+      # Regression: a kw arg before a positional one must not emit invalid Elixir
+      # (`[label, href: x, positional]` is a syntax error). Keywords move last.
+      transformers = %{"tag" => fn [label, href: href], _ctx -> "#{label}@#{href}" end}
+
+      assert eval(~s({{tag href=url name}}), [assigns: [name: "x", url: "u"]],
+               transformers: transformers
+             ) ==
+               "x@u"
+    end
+
     test "subexpressions compose transformers" do
       transformers = %{
         "uppercase" => fn [value], _ctx -> String.upcase(to_string(value)) end,

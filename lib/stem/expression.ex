@@ -287,8 +287,13 @@ defmodule Stem.Expression do
   end
 
   defp helper_call_source(name, args, context, precompiled \\ false) do
+    # Emit positional args before keyword args so the generated Elixir list is
+    # always valid (keywords must come last), regardless of source order. This
+    # matches how the bytecode backend lowers calls.
+    {positional, keyword} = Enum.split_with(args, &(not match?({:kw, _, _}, &1)))
+
     compiled_args =
-      args
+      (positional ++ keyword)
       |> Enum.map(fn
         value when is_binary(value) and precompiled -> value
         {:kw, key, value} -> "#{key}: #{to_source(value, context)}"
