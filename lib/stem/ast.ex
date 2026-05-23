@@ -24,6 +24,8 @@ defmodule Stem.AST do
           | {:unless, Stem.Expression.expr_t(), [node_t()], [node_t()], meta()}
           | {:each, Stem.Expression.expr_t(), [binary()], [node_t()], [node_t()], meta()}
           | {:with, Stem.Expression.expr_t(), [binary()], [node_t()], [node_t()], meta()}
+          | {:partial_scope, Stem.Expression.expr_t() | nil, [{atom(), Stem.Expression.expr_t()}],
+             [node_t()], meta()}
 
   @type t :: [node_t()]
 end

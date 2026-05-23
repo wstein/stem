@@ -154,6 +154,46 @@ defmodule Stem.Expression do
     |> to_source(context)
   end
 
+  @doc """
+  Parses partial arguments into an optional context expression and hash pairs.
+
+  Accepts the raw argument string that follows a partial name in
+  `{{> name context key=value ...}}`. Returns the leading positional argument as
+  the context expression (or `nil` when absent) and the keyword arguments as a
+  list of `{atom_key, expr_t()}` hash pairs evaluated against the caller scope.
+  """
+  @spec parse_partial_args(binary()) ::
+          {:ok, expr_t() | nil, [{atom(), expr_t()}]} | {:error, binary()}
+  def parse_partial_args(raw) when is_binary(raw) do
+    case String.trim(raw) do
+      "" ->
+        {:ok, nil, []}
+
+      trimmed ->
+        case parse_helper_args(split_top_level(trimmed)) do
+          {:ok, args} ->
+            classify_partial_args(args)
+
+          :error ->
+            {:error, "partial arguments must be assigns, paths, literals, or key=value pairs"}
+        end
+    end
+  end
+
+  defp classify_partial_args(args) do
+    {positional, keyword} = Enum.split_with(args, &(not match?({:kw, _, _}, &1)))
+
+    case positional do
+      [] -> {:ok, nil, partial_hash(keyword)}
+      [context] -> {:ok, context, partial_hash(keyword)}
+      _ -> {:error, "partials accept at most one context argument before key=value pairs"}
+    end
+  end
+
+  defp partial_hash(keyword) do
+    Enum.map(keyword, fn {:kw, key, value} -> {String.to_atom(key), value} end)
+  end
+
   @spec to_source(expr_t(), context()) :: binary()
   def to_source({:literal, "null"}, _context), do: "nil"
   def to_source({:literal, source}, _context), do: source

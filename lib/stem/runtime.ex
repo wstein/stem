@@ -45,6 +45,30 @@ defmodule Stem.Runtime do
   end
 
   @doc """
+  Builds the assign scope for a partial invoked with arguments.
+
+  `base` is the context argument value (or the caller's current data context
+  when no context argument is given). It is coerced to a map so the partial body
+  can read it by key. `hash` carries the partial's hash arguments and is merged
+  on top, so hash keys win over matching context keys.
+  """
+  @spec partial_scope(term(), map()) :: map()
+  def partial_scope(base, hash) when is_map(hash) do
+    base
+    |> resolve()
+    |> to_scope_map()
+    |> Map.merge(hash)
+  end
+
+  defp to_scope_map(map) when is_map(map), do: map
+
+  defp to_scope_map(list) when is_list(list) do
+    if Keyword.keyword?(list), do: Map.new(list), else: %{}
+  end
+
+  defp to_scope_map(_other), do: %{}
+
+  @doc """
   Checks if a value is truthy according to Handlebars semantics.
 
   Falsey values: false, nil, 0, "", [], %{}

@@ -38,7 +38,7 @@ defmodule Stem.Parser do
           | {:block_else, meta()}
           | {:block_close, kind(), meta()}
           | {:yield, binary(), meta()}
-          | {:partial, binary(), meta()}
+          | {:partial, binary(), binary(), meta()}
           | {:eof, meta()}
 
   @block_kinds %{
@@ -329,8 +329,12 @@ defmodule Stem.Parser do
         classify_close(tag, meta)
 
       String.starts_with?(tag, ">") ->
-        name = tag |> binary_part(1, byte_size(tag) - 1) |> String.trim()
-        {:ok, {:partial, name, meta}}
+        {name, args} =
+          tag
+          |> binary_part(1, byte_size(tag) - 1)
+          |> split_first_word()
+
+        {:ok, {:partial, name, args, meta}}
 
       true ->
         {:ok, {:expr, tag, :default, meta}}
@@ -496,6 +500,10 @@ defmodule Stem.Parser do
     {:region, name, strip_ast_spans(body), strip_meta_spans(meta)}
   end
 
+  defp strip_node_spans({:partial_scope, context, hash, body, meta}) do
+    {:partial_scope, context, hash, strip_ast_spans(body), strip_meta_spans(meta)}
+  end
+
   defp strip_meta_spans(%{line: line, column: column}), do: %{line: line, column: column}
 
   defp strip_token_spans({:text, text, meta}), do: {:text, text, strip_meta_spans(meta)}
@@ -512,7 +520,10 @@ defmodule Stem.Parser do
     do: {:block_close, kind, strip_meta_spans(meta)}
 
   defp strip_token_spans({:yield, name, meta}), do: {:yield, name, strip_meta_spans(meta)}
-  defp strip_token_spans({:partial, name, meta}), do: {:partial, name, strip_meta_spans(meta)}
+
+  defp strip_token_spans({:partial, name, args, meta}),
+    do: {:partial, name, args, strip_meta_spans(meta)}
+
   defp strip_token_spans({:eof, meta}), do: {:eof, strip_meta_spans(meta)}
 
   defp parse_stream(tokens, partials, stack) do
@@ -552,8 +563,8 @@ defmodule Stem.Parser do
     end
   end
 
-  defp collect([{:partial, name, meta} | rest], partials, stack, acc) do
-    case expand_partial(name, meta, partials, stack) do
+  defp collect([{:partial, name, args, meta} | rest], partials, stack, acc) do
+    case expand_partial(name, args, meta, partials, stack) do
       {:ok, nodes} -> collect(rest, partials, stack, Enum.reverse(nodes, acc))
       {:error, _message, _meta} = error -> error
     end
@@ -709,21 +720,43 @@ defmodule Stem.Parser do
     "expected a closing '{{/#{@kind_tags[kind]}}}' for block expression in Stem"
   end
 
-  defp expand_partial("", meta, _partials, _stack) do
+  defp expand_partial("", _args, meta, _partials, _stack) do
     {:error, "partial name is required in '{{> ...}}'", meta}
   end
 
-  defp expand_partial(name, meta, partials, stack) do
+  defp expand_partial(name, args, meta, partials, stack) do
     cond do
       name in stack ->
         {:error, "partial recursion detected for '#{name}'", meta}
 
       true ->
         case Map.fetch(partials, name) do
-          {:ok, content} -> parse_source(content, partials, [name | stack])
-          :error -> {:error, "unknown partial '#{name}'", meta}
+          {:ok, content} ->
+            with {:ok, context, hash} <- parse_partial_args(args, meta),
+                 {:ok, nodes} <- parse_source(content, partials, [name | stack]) do
+              {:ok, wrap_partial_scope(context, hash, nodes, meta)}
+            end
+
+          :error ->
+            {:error, "unknown partial '#{name}'", meta}
         end
     end
+  end
+
+  defp parse_partial_args(args, meta) do
+    case Expression.parse_partial_args(args) do
+      {:ok, context, hash} -> {:ok, context, hash}
+      {:error, message} -> {:error, message, meta}
+    end
+  end
+
+  # Partials without arguments expand inline, inheriting the caller's scope.
+  # Arguments establish a fresh scope, so the inlined nodes are wrapped in a
+  # `:partial_scope` node the compiler lowers to a rebound `assigns` binding.
+  defp wrap_partial_scope(nil, [], nodes, _meta), do: nodes
+
+  defp wrap_partial_scope(context, hash, nodes, meta) do
+    [{:partial_scope, context, hash, nodes, meta}]
   end
 
   defp normalize_partials(partials) when is_map(partials) do

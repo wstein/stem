@@ -153,6 +153,42 @@ defmodule Stem.Compiler do
     end
   end
 
+  # A partial invoked with arguments renders in a fresh, non-each scope: the
+  # context argument (or, when absent, the caller's current data context)
+  # becomes the new `assigns`, with hash arguments merged on top. The inlined
+  # partial nodes are compiled with `assigns` rebound inside a closure so the
+  # rebinding never leaks to sibling nodes.
+  defp compile_node({:partial_scope, context_ast, hash_kw, body, meta}, state) do
+    base =
+      cond do
+        context_ast != nil -> compile_expression(context_ast, meta, state)
+        state.in_each -> Macro.var(:current, nil)
+        true -> Macro.var(:assigns, nil)
+      end
+
+    hash = compile_partial_hash(hash_kw, meta, state)
+    body_ast = compile_nodes(body, %{state | in_each: false, locals: %{}})
+    assigns = Macro.var(:assigns, nil)
+
+    quote do
+      (fn ->
+         unquote(assigns) = Stem.Runtime.partial_scope(unquote(base), unquote(hash))
+         unquote(body_ast)
+       end).()
+    end
+  end
+
+  defp compile_partial_hash([], _meta, _state), do: quote(do: %{})
+
+  defp compile_partial_hash(hash_kw, meta, state) do
+    pairs =
+      Enum.map(hash_kw, fn {key, value_ast} ->
+        {key, compile_expression(value_ast, meta, state)}
+      end)
+
+    {:%{}, [], pairs}
+  end
+
   defp compile_expression(expr_ast, meta, state) do
     if not state.allow_elixir_expressions and match?({:elixir, _}, expr_ast) do
       raise CompileError,
@@ -336,6 +372,13 @@ defmodule Stem.Compiler do
     do:
       Expression.references_identifier?(expr_ast, name) or body_references_identifier?(body, name) or
         body_references_identifier?(else_body, name)
+
+  # The partial body runs in its own scope, so an outer block param can only be
+  # referenced through the context argument or a hash value, never the body.
+  defp node_references_identifier?({:partial_scope, context_ast, hash_kw, _body, _meta}, name),
+    do:
+      (context_ast != nil and Expression.references_identifier?(context_ast, name)) or
+        Enum.any?(hash_kw, fn {_key, value} -> Expression.references_identifier?(value, name) end)
 
   defp apply_escape(value, :default, state) do
     case state.escape do
