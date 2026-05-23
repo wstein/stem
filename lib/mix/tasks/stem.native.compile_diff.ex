@@ -100,11 +100,16 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "{{'single'}}"
   ]
 
-  # `{entry, %{name => source}}` cases exercising `{{> partial}}` expansion.
+  # `{entry, %{name => source}}` cases exercising `{{> partial}}` expansion,
+  # including Handlebars-style partial arguments (context + hash).
   @partial_cases [
     {"{{> greeting}}", %{"greeting" => "Hi {{name}}!"}},
     {"{{> header}}<ul>{{#each items}}{{> row}}{{/each}}</ul>",
-     %{"header" => "<h1>{{title}}</h1>", "row" => "<li>{{this.name}}</li>"}}
+     %{"header" => "<h1>{{title}}</h1>", "row" => "<li>{{this.name}}</li>"}},
+    {"{{> card user}}", %{"card" => "{{name}}"}},
+    {~s({{> badge label="VIP"}}), %{"badge" => "[{{label}}]"}},
+    {~s({{> card user role="admin"}}), %{"card" => "{{name}} ({{role}})"}},
+    {"{{#each users}}{{> card this}}{{/each}}", %{"card" => "[{{name}}]"}}
   ]
 
   @impl true
@@ -132,7 +137,9 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
   # A bare source string when there are no partials, else a `{template, partials}`
   # object — both shapes are accepted by the native `compile_batch` handler.
   defp compile_request({template, partials}) when map_size(partials) == 0, do: template
-  defp compile_request({template, partials}), do: %{"template" => template, "partials" => partials}
+
+  defp compile_request({template, partials}),
+    do: %{"template" => template, "partials" => partials}
 
   defp beam_wire(template, partials) do
     {:ok, ast} = Stem.Parser.parse_with_spans(template, partials: partials)
