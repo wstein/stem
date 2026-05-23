@@ -100,6 +100,13 @@ defmodule Stem.BytecodeTest do
       end)
     end
 
+    test "maps both the null and nil literals to nil" do
+      for source <- ["{{default x null}}", "{{default x nil}}"] do
+        assert [{:emit, {:call, "default", [{:assign, :x}, {:lit, nil}], []}, :html}] =
+                 compile(source).instructions
+      end
+    end
+
     test "rejects a non-literal source in argument position" do
       # `compile/2` accepts any Stem.AST; guard against a literal node whose
       # source is not actually a literal term (e.g. string interpolation).

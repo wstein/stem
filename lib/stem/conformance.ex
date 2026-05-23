@@ -89,6 +89,12 @@ defmodule Stem.Conformance do
       transformers: [:predicates]
     },
     %{
+      name: "null literal fallback",
+      template: "x={{default missing null}}=y",
+      data: %{},
+      transformers: [:minimum]
+    },
+    %{
       name: "json escape mode",
       template: "{{x}}",
       data: %{x: "quote \" here"},

@@ -11,6 +11,7 @@
   {"data":{},"escape":"html","expected":"none","name":"default with literal","template":"{{default missing \"none\"}}","transformers":["minimum"]},
   {"data":{"name":"NiNa"},"escape":"html","expected":"NINA","name":"builtin subexpression","template":"{{upcase (downcase name)}}","transformers":["strings"]},
   {"data":{"tags":["a","b"]},"escape":"html","expected":"true","name":"predicate","template":"{{contains tags \"a\"}}","transformers":["predicates"]},
+  {"data":{},"escape":"html","expected":"x==y","name":"null literal fallback","template":"x={{default missing null}}=y","transformers":["minimum"]},
   {"data":{"x":"quote \" here"},"escape":"json","expected":"quote \\\" here","name":"json escape mode","template":"{{x}}","transformers":[]},
   {"data":{"n":42},"escape":"html","expected":"n=42","name":"numeric assign","template":"n={{n}}","transformers":[]},
   {"data":{"active":true},"escape":"html","expected":"on","name":"if/else true","template":"{{#if active}}on{{else}}off{{/if}}","transformers":[]},

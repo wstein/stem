@@ -407,6 +407,11 @@ defmodule Stem.Bytecode do
     {Enum.reverse(positional), Enum.reverse(keyword)}
   end
 
+  # `null` is Stem's canonical nil literal (the parser stores both `nil` and
+  # `null` as the source "null"); map it to nil, the same value the compiled
+  # backend produces via to_source/2.
+  defp literal_value!("null"), do: nil
+
   # Resolve a literal's source to its value via the same parse Elixir uses, then
   # confirm it really is a literal term. Interpolation and any non-literal form
   # (which the parser's permissive literal check can still admit) is rejected so
