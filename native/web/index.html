@@ -14,6 +14,14 @@
       select, button { font: inherit; padding: 0.2rem 0.5rem; border: 1px solid #d4d4d8; border-radius: 6px; background: #fff; }
       button { cursor: pointer; }
 
+      /* Template tabs: first tab is the rendered entry, the rest are partials. */
+      #tabs { gap: 0.25rem; margin: 1rem 0 0.25rem; }
+      #tabs .tab { display: inline-flex; align-items: center; gap: 0.3rem; }
+      #tabs .tab > button[aria-current="true"] { border-color: #7c3aed; color: #7c3aed; font-weight: 600; }
+      #tabs .tab-x { border: 1px solid #d4d4d8; border-radius: 6px; padding: 0.1rem 0.35rem; color: #9ca3af; line-height: 1; }
+      #addPartial { border-style: dashed; color: #6b7280; }
+      #partialNameRow input { font: 13px/1.5 ui-monospace, monospace; padding: 0.2rem 0.4rem; border: 1px solid #d4d4d8; border-radius: 6px; }
+
       /* Highlighted-textarea overlay: a transparent textarea on top of a
          syntax-coloured backdrop that mirrors it character-for-character. */
       .editor { position: relative; border: 1px solid #d4d4d8; border-radius: 6px; background: #fff; }
@@ -52,7 +60,17 @@
       <button id="share" title="Copy a link that restores this template and data">Copy link</button>
     </div>
 
-    <label for="template">Template (compiled in-browser)</label>
+    <label>Templates (compiled in-browser)</label>
+    <p class="muted" style="margin: 0 0 0.25rem;">
+      The first tab is the rendered entry; the rest are partials, pulled in with
+      <code>{{&gt; name}}</code>.
+    </p>
+    <div class="row" id="tabs"></div>
+    <div class="row" id="partialNameRow" hidden>
+      <label for="partialName" style="margin: 0;">Partial name</label>
+      <input id="partialName" spellcheck="false" />
+      <span class="muted">referenced as <code id="partialRef"></code></span>
+    </div>
     <div class="editor">
       <pre id="backdrop" aria-hidden="true"></pre>
       <textarea id="template" spellcheck="false" rows="6"></textarea>
@@ -100,6 +118,81 @@
         opt.textContent = ex.label;
         $("example").append(opt);
       });
+
+      // ── Template tabs ───────────────────────────────────────────────────────
+      // `tabs[0]` is the rendered entry; `tabs[1..]` are partials keyed by name.
+      let tabs = [{ name: "main", source: "" }];
+      let active = 0;
+      const activeTab = () => tabs[active];
+
+      function partialsMap() {
+        const map = {};
+        for (let i = 1; i < tabs.length; i++) map[tabs[i].name] = tabs[i].source;
+        return map;
+      }
+
+      function renderTabs() {
+        const bar = $("tabs");
+        bar.innerHTML = "";
+        tabs.forEach((tab, i) => {
+          const wrap = document.createElement("span");
+          wrap.className = "tab";
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.textContent = i === 0 ? "main" : tab.name || "(unnamed)";
+          btn.title = i === 0 ? "entry template (rendered)" : `partial · {{> ${tab.name}}}`;
+          if (i === active) btn.setAttribute("aria-current", "true");
+          btn.addEventListener("click", () => selectTab(i));
+          wrap.append(btn);
+          if (i !== 0) {
+            const x = document.createElement("button");
+            x.type = "button";
+            x.className = "tab-x";
+            x.textContent = "✕";
+            x.title = "remove partial";
+            x.addEventListener("click", (e) => { e.stopPropagation(); removeTab(i); });
+            wrap.append(x);
+          }
+          bar.append(wrap);
+        });
+        const add = document.createElement("button");
+        add.type = "button";
+        add.id = "addPartial";
+        add.textContent = "+ partial";
+        add.addEventListener("click", addPartial);
+        bar.append(add);
+      }
+
+      // Reflect the active tab into the editor (and the partial-name field).
+      function syncEditor() {
+        $("template").value = activeTab().source;
+        const isPartial = active !== 0;
+        $("partialNameRow").hidden = !isPartial;
+        if (isPartial) {
+          $("partialName").value = activeTab().name;
+          $("partialRef").textContent = `{{> ${activeTab().name}}}`;
+        }
+        renderTabs();
+        run();
+      }
+
+      function selectTab(i) { active = i; syncEditor(); }
+
+      function addPartial() {
+        let n = 1, name;
+        do { name = "partial" + n++; } while (tabs.some((t) => t.name === name));
+        tabs.push({ name, source: "" });
+        active = tabs.length - 1;
+        syncEditor();
+      }
+
+      function removeTab(i) {
+        if (i === 0) return; // the entry is permanent
+        if (active === i) active = i - 1;
+        else if (active > i) active -= 1;
+        tabs.splice(i, 1);
+        syncEditor();
+      }
 
       // ── Helpers ────────────────────────────────────────────────────────────
       const escapeHTML = (s) =>
@@ -205,21 +298,24 @@
         } catch {}
       }
 
-      // ── Run: compile the template, then render against the data ─────────────
+      // ── Run: compile the entry template, then render against the data ───────
       function run() {
-        const template = $("template").value;
-        const compiled = renderer.compile(template);
+        // The first tab is the entry; every other tab is a partial by its name.
+        const compiled = renderer.compile(tabs[0].source, partialsMap());
+        const shown = activeTab().source;
 
         if (compiled.error) {
           const { message, start, end } = compiled.error;
-          paint(template, [byteToChar(template, start), byteToChar(template, end)]);
+          // The span indexes the entry source; only underline when it's on screen.
+          const range = active === 0 ? [byteToChar(shown, start), byteToChar(shown, end)] : null;
+          paint(shown, range);
           $("error").textContent = message;
           setOutput("");
           updateHash();
           return;
         }
 
-        paint(template, null);
+        paint(shown, null);
         let data;
         try {
           data = JSON.parse($("data").value || "null");
@@ -249,7 +345,12 @@
       // Encoded client-side for now; a future "save" could POST this same
       // payload to a server and put a short id in the hash instead.
       function state() {
-        return { t: $("template").value, d: $("data").value, e: $("escape").value, v: currentView() };
+        return {
+          tabs: tabs.map((t) => ({ n: t.name, s: t.source })),
+          d: $("data").value,
+          e: $("escape").value,
+          v: currentView(),
+        };
       }
       function updateHash() {
         const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(state()))));
@@ -259,12 +360,18 @@
         if (!location.hash.length) return false;
         try {
           const s = JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(1)))));
-          $("template").value = s.t ?? "";
+          // New multi-tab shape, falling back to the legacy single-template `t`.
+          tabs =
+            Array.isArray(s.tabs) && s.tabs.length
+              ? s.tabs.map((t, i) => ({ name: i === 0 ? "main" : t.n ?? "partial", source: t.s ?? "" }))
+              : [{ name: "main", source: s.t ?? "" }];
+          active = 0;
           $("data").value = s.d ?? "";
           $("escape").value = s.e ?? "";
           const view = s.v === "source" ? "source" : "rendered";
           document.querySelector(`input[name="view"][value="${view}"]`).checked = true;
           setView(view);
+          syncEditor();
           return true;
         } catch {
           return false;
@@ -272,17 +379,31 @@
       }
 
       function load(ex) {
-        $("template").value = ex.template;
+        tabs = [{ name: "main", source: ex.template }];
+        if (ex.partials) {
+          for (const [name, source] of Object.entries(ex.partials)) tabs.push({ name, source });
+        }
+        active = 0;
         $("data").value = JSON.stringify(ex.data, null, 2);
         $("escape").value = "";
         const view = ex.view === "source" ? "source" : "rendered";
         document.querySelector(`input[name="view"][value="${view}"]`).checked = true;
         setView(view);
-        run();
+        syncEditor();
       }
 
       $("example").addEventListener("change", (e) => load(examples[Number(e.target.value)]));
-      $("template").addEventListener("input", run);
+      $("template").addEventListener("input", () => {
+        activeTab().source = $("template").value;
+        run();
+      });
+      $("partialName").addEventListener("input", () => {
+        if (active === 0) return;
+        activeTab().name = $("partialName").value;
+        $("partialRef").textContent = `{{> ${activeTab().name}}}`;
+        renderTabs();
+        run();
+      });
       $("data").addEventListener("input", run);
       $("preview").addEventListener("load", resizePreview);
       $("escape").addEventListener("change", run);
@@ -304,8 +425,7 @@
       });
 
       setView(currentView());
-      if (restoreHash()) run();
-      else load(examples[0]);
+      if (!restoreHash()) load(examples[0]);
     </script>
   </body>
 </html>

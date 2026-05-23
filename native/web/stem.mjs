@@ -38,12 +38,14 @@ export async function createRenderer(wasmBytes) {
     return call({ program, data });
   }
 
-  // Compile template source to a wire program with no backend. Returns
-  // `{ program }` on success, or `{ error: { message, start, end } }` when the
-  // source uses a construct the native compiler does not yet support — the
-  // span lets the editor underline the offending tag.
-  function compile(source) {
-    const result = JSON.parse(call({ compile: source }));
+  // Compile template source to a wire program with no backend. `partials` is an
+  // optional `{ name: source }` map expanded inline at `{{> name}}` sites.
+  // Returns `{ program }` on success, or `{ error: { message, start, end } }`
+  // when the source uses a construct the native compiler does not yet support
+  // (or references an unknown/recursive partial) — the span lets the editor
+  // underline the offending tag.
+  function compile(source, partials = {}) {
+    const result = JSON.parse(call({ compile: source, partials }));
     return result && result.error ? { error: result.error } : { program: result };
   }
 

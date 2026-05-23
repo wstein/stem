@@ -18,6 +18,8 @@ const expected = {
   List: "<ul><li>1. a</li><li>2. b</li><li>3. c</li></ul>",
   // Each + if + pipeline rendering a card grid (shown via the Rendered view).
   "HTML cards": "<div\n  style=\"\n    display: grid;\n    grid-template-columns: repeat(2, 1fr);\n    gap: 10px;\n    font-family: system-ui;\">\n\n  \n  <div\n    style=\"border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#faf5ff\">\n\n    <div style=\"font-weight: 600\">\n      1. ADA LOVELACE\n    </div>\n    <div style=\"color: #6b7280; font-size: 13px\">\n      Compiler\n      · <span style=\"color: #7c3aed\">★ lead</span>\n    </div>\n  </div>\n  \n  <div\n    style=\"border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#eee\">\n\n    <div style=\"font-weight: 600\">\n      2. GRACE HOPPER\n    </div>\n    <div style=\"color: #6b7280; font-size: 13px\">\n      Runtime\n      \n    </div>\n  </div>\n  \n  <div\n    style=\"border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#eee\">\n\n    <div style=\"font-weight: 600\">\n      3. ALAN TURING\n    </div>\n    <div style=\"color: #6b7280; font-size: 13px\">\n      Parser\n      \n    </div>\n  </div>\n  \n  <div\n    style=\"border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#faf5ff\">\n\n    <div style=\"font-weight: 600\">\n      4. BARBARA LISKOV\n    </div>\n    <div style=\"color: #6b7280; font-size: 13px\">\n      Type systems\n      · <span style=\"color: #7c3aed\">★ lead</span>\n    </div>\n  </div>\n  \n</div>",
+  // Entry template that pulls in two partials via {{> name}}.
+  Partials: "<h1>Team</h1>\n<ul>\n  <li>Ada — Compiler</li>\n  <li>Grace — Runtime</li>\n  \n</ul>",
 };
 
 const { render, compile } = await createRenderer(await readFile(WASM));
@@ -35,7 +37,7 @@ for (const ex of examples) {
   }
 
   // 2. Backend-free path: compile the template in-browser, then render it.
-  const compiled = compile(ex.template);
+  const compiled = compile(ex.template, ex.partials || {});
   if (compiled.error) {
     failures++;
     console.error(`  FAIL ${ex.label} (compile): ${compiled.error.message}`);
