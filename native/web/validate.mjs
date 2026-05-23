@@ -17,21 +17,7 @@ const expected = {
   Pipeline: "NINA",
   List: "<ul><li>1. a</li><li>2. b</li><li>3. c</li></ul>",
   // Each + if + pipeline rendering a card grid (shown via the Rendered view).
-  "HTML cards":
-    '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;font-family:system-ui">' +
-    '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#faf5ff">' +
-    '<div style="font-weight:600">1. ADA LOVELACE</div>' +
-    '<div style="color:#6b7280;font-size:13px">Compiler · <span style="color:#7c3aed">★ lead</span></div></div>' +
-    '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#fff">' +
-    '<div style="font-weight:600">2. GRACE HOPPER</div>' +
-    '<div style="color:#6b7280;font-size:13px">Runtime</div></div>' +
-    '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#fff">' +
-    '<div style="font-weight:600">3. ALAN TURING</div>' +
-    '<div style="color:#6b7280;font-size:13px">Parser</div></div>' +
-    '<div style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#faf5ff">' +
-    '<div style="font-weight:600">4. BARBARA LISKOV</div>' +
-    '<div style="color:#6b7280;font-size:13px">Type systems · <span style="color:#7c3aed">★ lead</span></div></div>' +
-    "</div>",
+  "HTML cards": "<div\n  style=\"\n    display: grid;\n    grid-template-columns: repeat(2, 1fr);\n    gap: 10px;\n    font-family: system-ui;\">\n\n  \n  <div\n    style=\"border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#faf5ff\">\n\n    <div style=\"font-weight: 600\">\n      1. ADA LOVELACE\n    </div>\n    <div style=\"color: #6b7280; font-size: 13px\">\n      Compiler\n      · <span style=\"color: #7c3aed\">★ lead</span>\n    </div>\n  </div>\n  \n  <div\n    style=\"border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#eee\">\n\n    <div style=\"font-weight: 600\">\n      2. GRACE HOPPER\n    </div>\n    <div style=\"color: #6b7280; font-size: 13px\">\n      Runtime\n      \n    </div>\n  </div>\n  \n  <div\n    style=\"border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#eee\">\n\n    <div style=\"font-weight: 600\">\n      3. ALAN TURING\n    </div>\n    <div style=\"color: #6b7280; font-size: 13px\">\n      Parser\n      \n    </div>\n  </div>\n  \n  <div\n    style=\"border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:#faf5ff\">\n\n    <div style=\"font-weight: 600\">\n      4. BARBARA LISKOV\n    </div>\n    <div style=\"color: #6b7280; font-size: 13px\">\n      Type systems\n      · <span style=\"color: #7c3aed\">★ lead</span>\n    </div>\n  </div>\n  \n</div>",
 };
 
 const { render, compile } = await createRenderer(await readFile(WASM));
