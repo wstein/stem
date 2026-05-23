@@ -51,7 +51,7 @@ defmodule Stem.Transformers do
       Map.get(transformers, helper_key) ||
         Map.get(registry(), helper_key) ||
         Map.get(default_transformers(), helper_key) ||
-        raise Stem.SyntaxError, "unknown transformer '#{helper_key}'"
+        raise Stem.SyntaxError, unknown_transformer_message(helper_key)
 
     helper.(args, %{assigns: assigns, this: this, binding: binding_env})
   end
@@ -65,6 +65,39 @@ defmodule Stem.Transformers do
   # loaded, since callers merge groups on top of it.
   defp default_transformers do
     Stem.Transformers.Minimum.all()
+  end
+
+  # Opt-in capability groups, consulted only to build a helpful error message
+  # when a template references a transformer that has not been loaded.
+  @capability_modules [
+    Stem.Transformers.Strings,
+    Stem.Transformers.Collections,
+    Stem.Transformers.Predicates
+  ]
+
+  defp unknown_transformer_message(key) do
+    case Enum.filter(@capability_modules, fn mod -> key in mod.names() end) do
+      [] ->
+        "unknown transformer '#{key}'. Register it with Stem.Transformers.register/2 " <>
+          "or pass it in the transformers: map."
+
+      mods ->
+        group_phrase = mods |> Enum.map(&inspect/1) |> Enum.join(" or ")
+        primary = inspect(hd(mods))
+
+        standard_hint =
+          if Stem.Transformers.Strings in mods,
+            do: " (Stem.Transformers.Standard bundles Minimum + Strings.)",
+            else: ""
+
+        "unknown transformer '#{key}' — provided by the #{group_phrase} capability group, " <>
+          "which is not loaded. Enable it via the transformers: option " <>
+          "(transformers: #{primary}.all()), the --transformers CLI flag, or the " <>
+          "\"transformers\" key in .stem.config.json." <>
+          standard_hint <>
+          " Prefer loading a capability group over allow_elixir_expressions: true — " <>
+          "mix stem.audit fails CI if that reaches production config."
+    end
   end
 
   defp normalize_name(name) when is_atom(name), do: Atom.to_string(name)

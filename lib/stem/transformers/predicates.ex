@@ -33,6 +33,10 @@ defmodule Stem.Transformers.Predicates do
     }
   end
 
+  @doc "List the transformer names this group provides."
+  @spec names() :: [String.t()]
+  def names, do: Map.keys(all())
+
   # Helpers
 
   defp contains([collection, needle], _ctx) do

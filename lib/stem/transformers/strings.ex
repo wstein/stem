@@ -42,6 +42,10 @@ defmodule Stem.Transformers.Strings do
     }
   end
 
+  @doc "List the transformer names this group provides."
+  @spec names() :: [String.t()]
+  def names, do: Map.keys(all())
+
   # Helpers
 
   defp trim([value], _ctx) do

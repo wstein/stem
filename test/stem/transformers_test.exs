@@ -245,9 +245,9 @@ defmodule Stem.TransformersTest do
 
       # Strings/Collections/Predicates transformers are gated off by default.
       for name <- [:upcase, :trim, :map, :filter, :sort_by, :contains, :empty?] do
-        assert_raise Stem.SyntaxError, "unknown transformer '#{name}'", fn ->
-          Transformers.invoke(name, ["x"], [])
-        end
+        assert_raise Stem.SyntaxError,
+                     ~r/#{Regex.escape("unknown transformer '#{name}'")}/,
+                     fn -> Transformers.invoke(name, ["x"], []) end
       end
 
       # Loading a group via the binding makes its transformers available, while
@@ -673,6 +673,45 @@ defmodule Stem.TransformersTest do
       for key <- ~w(map filter sort sort_by group_by compact uniq flatten) do
         refute Map.has_key?(standard, key), "Standard must not expose Collections helper #{key}"
       end
+    end
+  end
+
+  describe "capability-group names/0" do
+    test "each group lists its transformers without loading it (no audit event)" do
+      assert "map" in Stem.Transformers.Collections.names()
+      assert "trim" in Stem.Transformers.Strings.names()
+      assert "contains" in Stem.Transformers.Predicates.names()
+    end
+
+    test "names/0 stays in sync with all/0 keys" do
+      assert Enum.sort(Stem.Transformers.Strings.names()) ==
+               Enum.sort(Map.keys(Stem.Transformers.Strings.all()))
+
+      assert Enum.sort(Stem.Transformers.Collections.names()) ==
+               Enum.sort(Map.keys(Stem.Transformers.Collections.all()))
+
+      assert Enum.sort(Stem.Transformers.Predicates.names()) ==
+               Enum.sort(Map.keys(Stem.Transformers.Predicates.all()))
+    end
+  end
+
+  describe "unknown transformer guidance" do
+    test "names the capability group and how to enable it" do
+      assert_raise Stem.SyntaxError,
+                   ~r/unknown transformer 'map'.*Stem\.Transformers\.Collections.*--transformers.*mix stem\.audit/s,
+                   fn -> Transformers.invoke(:map, [[1, 2]], []) end
+    end
+
+    test "mentions the Standard bundle for string transformers" do
+      assert_raise Stem.SyntaxError,
+                   ~r/unknown transformer 'trim'.*Stem\.Transformers\.Strings.*Stem\.Transformers\.Standard/s,
+                   fn -> Transformers.invoke(:trim, ["x"], []) end
+    end
+
+    test "suggests registering a transformer that belongs to no group" do
+      assert_raise Stem.SyntaxError,
+                   ~r/unknown transformer 'bogus'.*[Rr]egister/s,
+                   fn -> Transformers.invoke(:bogus, [], []) end
     end
   end
 end

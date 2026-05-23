@@ -33,7 +33,14 @@ defmodule Stem.Transformers.Collections do
   @spec all() :: %{String.t() => transformer()}
   def all do
     emit_capability_loaded_event()
+    transformers()
+  end
 
+  @doc "List the transformer names this group provides, without loading it (no audit event)."
+  @spec names() :: [String.t()]
+  def names, do: Map.keys(transformers())
+
+  defp transformers do
     %{
       "map" => &map/2,
       "filter" => &filter/2,
