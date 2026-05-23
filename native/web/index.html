@@ -4,34 +4,60 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Stem Native — in-browser WASM rendering</title>
+    <title>Stem Playground — compile & render in the browser</title>
     <style>
-      body { font: 15px/1.5 system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; }
+      body { font: 15px/1.5 system-ui, sans-serif; max-width: 52rem; margin: 2rem auto; padding: 0 1rem; color: #18181b; }
       h1 { font-size: 1.4rem; }
       label { display: block; font-weight: 600; margin: 1rem 0 0.25rem; }
-      textarea { width: 100%; font-family: ui-monospace, monospace; font-size: 13px; }
-      pre { background: #f4f4f5; padding: 0.75rem; border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
-      .row { display: flex; gap: 0.5rem; align-items: center; }
       .muted { color: #6b7280; font-size: 0.85rem; }
+      .row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; }
+      select, button { font: inherit; padding: 0.2rem 0.5rem; border: 1px solid #d4d4d8; border-radius: 6px; background: #fff; }
+      button { cursor: pointer; }
+
+      /* Highlighted-textarea overlay: a transparent textarea on top of a
+         syntax-coloured backdrop that mirrors it character-for-character. */
+      .editor { position: relative; border: 1px solid #d4d4d8; border-radius: 6px; background: #fff; }
+      .editor > pre, .editor > textarea {
+        margin: 0; border: 0; padding: 0.6rem; width: 100%; box-sizing: border-box;
+        font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+        white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word;
+      }
+      .editor > pre { position: absolute; inset: 0; pointer-events: none; overflow: hidden; color: #18181b; }
+      .editor > textarea { position: relative; display: block; background: transparent; color: transparent; caret-color: #18181b; resize: vertical; min-height: 7rem; outline: none; }
+
+      .tok-tag { color: #7c3aed; }
+      .tok-cmt { color: #9ca3af; font-style: italic; }
+      .tok-err { text-decoration: underline wavy #dc2626; text-decoration-skip-ink: none; }
+
+      textarea#data { width: 100%; box-sizing: border-box; font: 13px/1.5 ui-monospace, monospace; padding: 0.6rem; border: 1px solid #d4d4d8; border-radius: 6px; resize: vertical; }
+      pre#output { background: #f4f4f5; padding: 0.75rem; border-radius: 6px; white-space: pre-wrap; word-break: break-word; min-height: 2rem; }
+      #error { color: #b91c1c; font-size: 0.85rem; min-height: 1.2rem; margin: 0.35rem 0 0; white-space: pre-wrap; }
+      #error:empty::before { content: "no errors"; color: #16a34a; }
     </style>
   </head>
   <body>
-    <h1>Stem Native — rendering in the browser via WebAssembly</h1>
+    <h1>Stem Playground</h1>
     <p class="muted">
-      The template is compiled to portable bytecode on the BEAM; this page renders it
-      entirely in a <code>wasm32-unknown-unknown</code> module — no server, no Elixir.
+      The template is compiled to portable bytecode and rendered <strong>entirely in your
+      browser</strong> by a <code>wasm32-unknown-unknown</code> module — no server, no Elixir.
+      Edit the template or the data and the output updates live.
     </p>
 
     <div class="row">
       <label for="example" style="margin: 0;">Example</label>
       <select id="example"></select>
+      <button id="share" title="Copy a link that restores this template and data">Copy link</button>
     </div>
 
-    <label for="template">Template (compiled offline to the bytecode below)</label>
-    <textarea id="template" rows="2" readonly></textarea>
+    <label for="template">Template (compiled in-browser)</label>
+    <div class="editor">
+      <pre id="backdrop" aria-hidden="true"></pre>
+      <textarea id="template" spellcheck="false" rows="6"></textarea>
+    </div>
+    <p id="error"></p>
 
-    <label for="data">Data (edit me — JSON)</label>
-    <textarea id="data" rows="4"></textarea>
+    <label for="data">Data (JSON)</label>
+    <textarea id="data" rows="5"></textarea>
 
     <div class="row">
       <label for="escape" style="margin: 0;">Escape</label>
@@ -51,7 +77,6 @@
       import { createRenderer } from "./stem.mjs";
 
       const WASM = "../stem_native/target/wasm32-unknown-unknown/release/stem_native.wasm";
-
       const $ = (id) => document.getElementById(id);
       const renderer = await createRenderer(await (await fetch(WASM)).arrayBuffer());
       const examples = await (await fetch("./examples.json")).json();
@@ -63,27 +88,60 @@
         $("example").append(opt);
       });
 
-      let current = examples[0];
+      // ── Helpers ────────────────────────────────────────────────────────────
+      const escapeHTML = (s) =>
+        s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 
-      function load(ex) {
-        current = ex;
-        $("template").value = ex.template;
-        $("data").value = JSON.stringify(ex.data, null, 2);
-        run();
-      }
-
-      function run() {
-        try {
-          const data = JSON.parse($("data").value);
-          const program = applyEscape(current.program, $("escape").value);
-          $("output").textContent = renderer.render(program, data);
-        } catch (err) {
-          $("output").textContent = "error: " + err.message;
+      // Rust spans are UTF-8 byte offsets; map to a JS string index.
+      function byteToChar(str, target) {
+        if (target <= 0) return 0;
+        const enc = new TextEncoder();
+        let bytes = 0;
+        for (let i = 0; i < str.length; i++) {
+          if (bytes >= target) return i;
+          bytes += enc.encode(str[i]).length;
         }
+        return str.length;
       }
 
-      // Override every emit's escape mode so the playground can show how one
-      // program renders under each escaping; "" keeps the mode baked in offline.
+      // Classify each character as plain text, a tag, or a comment, then paint
+      // the backdrop, underlining the error range (in char indices) if any.
+      function paint(src, errRange) {
+        const cls = new Array(src.length).fill("");
+        let i = 0;
+        while (i < src.length) {
+          if (src.startsWith("{{", i)) {
+            let close = "}}", kind = "tok-tag";
+            if (src.startsWith("{{!--", i)) { close = "--}}"; kind = "tok-cmt"; }
+            else if (src.startsWith("{{!", i)) { close = "}}"; kind = "tok-cmt"; }
+            else if (src.startsWith("{{{", i)) { close = "}}}"; kind = "tok-tag"; }
+            const at = src.indexOf(close, i + 2);
+            const end = at === -1 ? src.length : at + close.length;
+            for (let k = i; k < end; k++) cls[k] = kind;
+            i = end;
+          } else {
+            i++;
+          }
+        }
+        const keyOf = (k) =>
+          cls[k] + (errRange && k >= errRange[0] && k < errRange[1] ? " tok-err" : "");
+
+        let html = "";
+        let k = 0;
+        while (k < src.length) {
+          const key = keyOf(k);
+          let j = k + 1;
+          while (j < src.length && keyOf(j) === key) j++;
+          const text = escapeHTML(src.slice(k, j));
+          html += key ? `<span class="${key}">${text}</span>` : text;
+          k = j;
+        }
+        // Keep the backdrop's last line height when the text ends with a newline.
+        $("backdrop").innerHTML = html + (src.endsWith("\n") ? "\n " : "");
+      }
+
+      // Override every emit's escape mode so one program can be previewed under
+      // each escaping; "" keeps the mode baked in at compile time.
       function applyEscape(program, mode) {
         if (!mode) return program;
         const rewrite = (instrs) =>
@@ -98,11 +156,90 @@
         return { ...program, instructions: rewrite(program.instructions) };
       }
 
+      // ── Run: compile the template, then render against the data ─────────────
+      function run() {
+        const template = $("template").value;
+        const compiled = renderer.compile(template);
+
+        if (compiled.error) {
+          const { message, start, end } = compiled.error;
+          paint(template, [byteToChar(template, start), byteToChar(template, end)]);
+          $("error").textContent = message;
+          $("output").textContent = "";
+          updateHash();
+          return;
+        }
+
+        paint(template, null);
+        let data;
+        try {
+          data = JSON.parse($("data").value || "null");
+        } catch (err) {
+          $("error").textContent = "invalid JSON data: " + err.message;
+          $("output").textContent = "";
+          updateHash();
+          return;
+        }
+
+        try {
+          const program = applyEscape(compiled.program, $("escape").value);
+          $("output").textContent = renderer.render(program, data);
+          $("error").textContent = "";
+        } catch (err) {
+          $("error").textContent = "render error: " + err.message;
+          $("output").textContent = "";
+        }
+        updateHash();
+      }
+
+      // ── Shareable state in the URL hash ─────────────────────────────────────
+      // Encoded client-side for now; a future "save" could POST this same
+      // payload to a server and put a short id in the hash instead.
+      function state() {
+        return { t: $("template").value, d: $("data").value, e: $("escape").value };
+      }
+      function updateHash() {
+        const encoded = btoa(unescape(encodeURIComponent(JSON.stringify(state()))));
+        history.replaceState(null, "", "#" + encoded);
+      }
+      function restoreHash() {
+        if (!location.hash.length) return false;
+        try {
+          const s = JSON.parse(decodeURIComponent(escape(atob(location.hash.slice(1)))));
+          $("template").value = s.t ?? "";
+          $("data").value = s.d ?? "";
+          $("escape").value = s.e ?? "";
+          return true;
+        } catch {
+          return false;
+        }
+      }
+
+      function load(ex) {
+        $("template").value = ex.template;
+        $("data").value = JSON.stringify(ex.data, null, 2);
+        $("escape").value = "";
+        run();
+      }
+
       $("example").addEventListener("change", (e) => load(examples[Number(e.target.value)]));
+      $("template").addEventListener("input", run);
       $("data").addEventListener("input", run);
       $("preview").addEventListener("load", resizePreview);
       $("escape").addEventListener("change", run);
-      load(examples[0]);
+      $("template").addEventListener("scroll", () => {
+        $("backdrop").scrollTop = $("template").scrollTop;
+        $("backdrop").scrollLeft = $("template").scrollLeft;
+      });
+      $("share").addEventListener("click", async () => {
+        updateHash();
+        await navigator.clipboard?.writeText(location.href);
+        $("share").textContent = "Copied!";
+        setTimeout(() => ($("share").textContent = "Copy link"), 1200);
+      });
+
+      if (restoreHash()) run();
+      else load(examples[0]);
     </script>
   </body>
 </html>
