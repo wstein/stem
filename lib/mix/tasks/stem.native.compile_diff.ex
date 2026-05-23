@@ -81,10 +81,13 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "{{!-- c --}}x",
     "a {{x ~}}   b",
     "{{#each items}}{{this}}{{~/each}}",
+    # Regions and yields
+    "{{#region head}}H{{/region}}before{{yield head}}after",
+    "{{yield undefined}}",
+    "{{#region row}}{{this.name}}{{/region}}{{#each rows}}{{yield row}};{{/each}}",
     # Not yet ported — should be reported as pending, not mismatched.
-    # (Both still compile on the BEAM, so they exercise the pending bucket.)
-    "{{'single'}}",
-    "{{yield undefined}}"
+    # (Still compiles on the BEAM, so it exercises the pending bucket.)
+    "{{'single'}}"
   ]
 
   @impl true

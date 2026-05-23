@@ -15,18 +15,20 @@
 //   * `{{ expr }}` (HTML-escaped) and `{{{ expr }}}` (unescaped);
 //   * block helpers `{{#if}}` / `{{#unless}}` / `{{#each}}` / `{{#with}}` with
 //     `{{else}}` and `as |..|` block params;
+//   * `{{#region}}` definitions with `{{yield}}` inlining (recursion-guarded);
 //   * expressions: identifiers, dotted paths, `this`/`this.x`,
 //     `@index`/`@index1`/`@key`, and parent (`../name`) references, with the
 //     same local/`this`/assign scope resolution the BEAM uses;
 //   * transformer calls and `|>` pipelines, with positional and `key=value` /
 //     `key: value` keyword args and parenthesised sub-expressions;
 //   * literals: integers, `true`/`false`, `null`/`nil`, and simple
-//     double-quoted strings.
+//     double-quoted strings;
+//   * `{{! .. }}` / `{{!-- .. --}}` comments and `{{~ .. ~}}` trim markers.
 //
 // Not yet ported (raise a spanned `CompileError`, so the playground shows "not
 // yet supported" rather than miscompiling): single-quoted charlists and
-// escaped/interpolated strings, partials, regions/yields, comments, and
-// whitespace-control markers.
+// escaped/interpolated strings, and partials (which need a host-provided
+// partial-source map — a later editor feature).
 
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -46,7 +48,7 @@ pub struct CompileError {
 pub fn compile_to_wire(source: &str) -> Result<Value, CompileError> {
     let tokens = tokenize(source)?;
     let nodes = assemble(tokens)?;
-    let instructions = lower_nodes(&nodes, &Scope::root())?;
+    let instructions = lower_nodes(&nodes, &Scope::root(), &Regions::new(), &[])?;
     Ok(json!({ "version": VERSION, "instructions": instructions }))
 }
 
@@ -60,6 +62,7 @@ enum Block {
     Unless,
     Each,
     With,
+    Region,
 }
 
 impl Block {
@@ -69,6 +72,7 @@ impl Block {
             "unless" => Some(Block::Unless),
             "each" => Some(Block::Each),
             "with" => Some(Block::With),
+            "region" => Some(Block::Region),
             _ => None,
         }
     }
@@ -79,6 +83,7 @@ impl Block {
             Block::Unless => "unless",
             Block::Each => "each",
             Block::With => "with",
+            Block::Region => "region",
         }
     }
 }
@@ -98,6 +103,10 @@ enum Token {
     Else(Span),
     Close {
         kind: Block,
+        span: Span,
+    },
+    Yield {
+        name: String,
         span: Span,
     },
 }
@@ -228,10 +237,11 @@ fn classify(inner2: &str, triple: bool, span: Span) -> Result<Option<Token>, Com
         return Ok(Some(Token::Else(span)));
     }
     if first_word(inner2) == "yield" {
-        return Err(unsupported(
-            "`{{yield}}` is not yet supported by the native compiler",
+        let (_, name) = split_first_word(inner2);
+        return Ok(Some(Token::Yield {
+            name: name.trim().to_string(),
             span,
-        ));
+        }));
     }
 
     match inner2.chars().next().unwrap() {
@@ -306,6 +316,16 @@ enum Node {
         otherwise: Vec<Node>,
         span: Span,
     },
+    // A named region definition; extracted during lowering (produces no output)
+    // and inlined at matching `Yield` sites.
+    Region {
+        name: String,
+        body: Vec<Node>,
+    },
+    Yield {
+        name: String,
+        span: Span,
+    },
 }
 
 fn assemble(tokens: Vec<Token>) -> Result<Vec<Node>, CompileError> {
@@ -342,6 +362,7 @@ fn collect(it: &mut std::vec::IntoIter<Token>) -> Result<(Vec<Node>, Stop), Comp
             Some(Token::Open { kind, args, span }) => {
                 nodes.push(parse_block(it, kind, &args, span)?);
             }
+            Some(Token::Yield { name, span }) => nodes.push(Node::Yield { name, span }),
         }
     }
 }
@@ -352,6 +373,10 @@ fn parse_block(
     args: &str,
     span: Span,
 ) -> Result<Node, CompileError> {
+    if kind == Block::Region {
+        return parse_region(it, args, span);
+    }
+
     let (subject, params) = parse_block_head(kind, args, span)?;
     let (body, stop) = collect(it)?;
 
@@ -403,7 +428,35 @@ fn parse_block(
             otherwise,
             span,
         },
+        Block::Region => unreachable!("region handled above"),
     })
+}
+
+// `{{#region name}}..{{/region}}` defines a named, inlinable fragment. It takes
+// a bare name (no expression, no params) and cannot have an `{{else}}`.
+fn parse_region(
+    it: &mut std::vec::IntoIter<Token>,
+    args: &str,
+    span: Span,
+) -> Result<Node, CompileError> {
+    let name = args.trim();
+    if name.is_empty() || name.split_whitespace().count() != 1 {
+        return Err(unsupported("`{{#region}}` requires a single name", span));
+    }
+
+    let (body, stop) = collect(it)?;
+    match stop {
+        Stop::Close(Block::Region, _) => Ok(Node::Region {
+            name: name.to_string(),
+            body,
+        }),
+        Stop::Else(esp) => Err(unsupported(
+            "`{{else}}` is not valid inside `{{#region}}`",
+            esp,
+        )),
+        Stop::Close(other, csp) => Err(mismatched(Block::Region, other, csp)),
+        Stop::Eof => Err(unclosed(Block::Region, span)),
+    }
 }
 
 fn parse_block_head(
@@ -418,6 +471,7 @@ fn parse_block_head(
             validate_params(kind, &params, span)?;
             Ok((parse_expr(&expr_src, span)?, params))
         }
+        Block::Region => unreachable!("region handled in parse_block"),
     }
 }
 
@@ -972,26 +1026,56 @@ impl Scope {
     }
 }
 
-fn lower_nodes(nodes: &[Node], scope: &Scope) -> Result<Vec<Value>, CompileError> {
-    nodes.iter().map(|node| lower_node(node, scope)).collect()
+// Region definitions visible while lowering a node list, keyed by name. Values
+// borrow region bodies from the node tree.
+type Regions<'a> = std::collections::HashMap<String, &'a [Node]>;
+
+fn lower_nodes<'a>(
+    nodes: &'a [Node],
+    scope: &Scope,
+    regions: &Regions<'a>,
+    stack: &[String],
+) -> Result<Vec<Value>, CompileError> {
+    // Collect every region defined in this list first (a yield may reference one
+    // defined later), merged over the regions inherited from enclosing lists.
+    let mut merged = regions.clone();
+    for node in nodes {
+        if let Node::Region { name, body } = node {
+            merged.insert(name.clone(), body.as_slice());
+        }
+    }
+
+    let mut out = Vec::new();
+    for node in nodes {
+        out.extend(lower_node(node, scope, &merged, stack)?);
+    }
+    Ok(out)
 }
 
-fn lower_node(node: &Node, scope: &Scope) -> Result<Value, CompileError> {
+fn lower_node<'a>(
+    node: &'a Node,
+    scope: &Scope,
+    regions: &Regions<'a>,
+    stack: &[String],
+) -> Result<Vec<Value>, CompileError> {
+    let single = |value| Ok(vec![value]);
     match node {
-        Node::Text(text) => Ok(json!({ "t": "text", "text": text })),
-        Node::Emit { expr, escape, span } => {
-            Ok(json!({ "t": "emit", "value": lower_value(expr, scope, *span)?, "escape": escape }))
-        }
+        // Region definitions are inlined at yield sites, never emitted in place.
+        Node::Region { .. } => Ok(Vec::new()),
+        Node::Text(text) => single(json!({ "t": "text", "text": text })),
+        Node::Emit { expr, escape, span } => single(
+            json!({ "t": "emit", "value": lower_value(expr, scope, *span)?, "escape": escape }),
+        ),
         Node::If {
             cond,
             then,
             otherwise,
             span,
-        } => Ok(json!({
+        } => single(json!({
             "t": "if",
             "cond": lower_value(cond, scope, *span)?,
-            "then": lower_nodes(then, scope)?,
-            "else": lower_nodes(otherwise, scope)?,
+            "then": lower_nodes(then, scope, regions, stack)?,
+            "else": lower_nodes(otherwise, scope, regions, stack)?,
         })),
         Node::Each {
             subject,
@@ -999,12 +1083,12 @@ fn lower_node(node: &Node, scope: &Scope) -> Result<Value, CompileError> {
             body,
             otherwise,
             span,
-        } => Ok(json!({
+        } => single(json!({
             "t": "each",
             "subject": lower_value(subject, scope, *span)?,
             "params": params,
-            "body": lower_nodes(body, &scope.each_body(params))?,
-            "else": lower_nodes(otherwise, &scope.each_else())?,
+            "body": lower_nodes(body, &scope.each_body(params), regions, stack)?,
+            "else": lower_nodes(otherwise, &scope.each_else(), regions, stack)?,
         })),
         Node::With {
             subject,
@@ -1012,13 +1096,31 @@ fn lower_node(node: &Node, scope: &Scope) -> Result<Value, CompileError> {
             body,
             otherwise,
             span,
-        } => Ok(json!({
+        } => single(json!({
             "t": "with",
             "subject": lower_value(subject, scope, *span)?,
             "params": params,
-            "body": lower_nodes(body, &scope.with_body(params))?,
-            "else": lower_nodes(otherwise, scope)?,
+            "body": lower_nodes(body, &scope.with_body(params), regions, stack)?,
+            "else": lower_nodes(otherwise, scope, regions, stack)?,
         })),
+        // A yield inlines the named region's instructions, with a recursion
+        // guard. An undefined region yields nothing, matching the BEAM.
+        Node::Yield { name, span } => {
+            if stack.iter().any(|active| active == name) {
+                return Err(unsupported(
+                    format!("recursive region yield detected for `{name}`"),
+                    *span,
+                ));
+            }
+            match regions.get(name.as_str()) {
+                Some(body) => {
+                    let mut nested = stack.to_vec();
+                    nested.push(name.clone());
+                    lower_nodes(body, scope, regions, &nested)
+                }
+                None => Ok(Vec::new()),
+            }
+        }
     }
 }
 
@@ -1321,6 +1423,25 @@ mod tests {
     }
 
     #[test]
+    fn regions_are_inlined_at_yield_sites() {
+        assert_wire(
+            "{{#region head}}H{{/region}}before{{yield head}}after",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"before"},{"t":"text","text":"H"},{"t":"text","text":"after"}]}"#,
+        );
+        // An undefined region yields nothing, like the BEAM.
+        assert_wire(
+            "{{yield missing}}x",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"x"}]}"#,
+        );
+    }
+
+    #[test]
+    fn recursive_yield_is_rejected() {
+        let err = compile_to_wire("{{#region a}}{{yield a}}{{/region}}{{yield a}}").unwrap_err();
+        assert!(err.message.contains("recursive"), "{}", err.message);
+    }
+
+    #[test]
     fn comments_and_trim_markers() {
         assert_wire(
             "a {{~ x ~}} b",
@@ -1342,7 +1463,7 @@ mod tests {
 
     #[test]
     fn unported_constructs_report_a_span() {
-        for src in ["{{'single'}}", "{{> nav}}", "{{yield x}}", "{{a + b}}"] {
+        for src in ["{{'single'}}", "{{> nav}}", "{{a + b}}"] {
             let err = compile_to_wire(src).unwrap_err();
             assert!(
                 err.message.contains("not yet supported"),
