@@ -92,32 +92,46 @@ restricts inputs accordingly.
 
 The BEAM backend lets an assign be a zero-arity function — a **computed getter**
 that is invoked lazily when rendered (see the project README). A closure can't
-cross the wire as JSON, so the native engine offers the same capability with a
-different mechanism: a field whose data value is the sentinel
-`{"$getter": "<name>"}` is *computed* by a getter authored in the host language
-(here, Rust) and registered with the engine. The getter is invoked with the
-field's **parent object** as its "self", mirroring ST4 getter semantics:
+cross the wire as JSON, so the native engine offers the same capability through
+a **host hook**: a field whose data value is the sentinel `{"$getter": "<name>"}`
+is computed by a `GetterResolver` — `fn(name, parent) -> Value` — that the
+embedder supplies. The resolver receives the getter name and the field's
+**parent object** as its "self", mirroring ST4 getter semantics.
 
-```sh
-echo '{"program":{"version":"stem-bc/v1","instructions":[
+The engine ships **no** getters: getter logic is the embedder's business, never
+the library's or the wire's. The marker is only data, and it is **inert** under
+the default resolver (`no_getters`), which is what `handle` and the C ABI — and
+therefore the browser — use. So a `$getter` field renders as null unless a Rust
+embedder opts in via `handle_with_getters`:
+
+```rust
+use serde_json::Value;
+use stem_native::handle_with_getters;
+
+fn getters(name: &str, self_obj: &Value) -> Value {
+    let field = |k: &str| self_obj.get(k).and_then(Value::as_str).unwrap_or("");
+    match name {
+        "full_name" => Value::from(format!("{} {}", field("first"), field("last"))),
+        _ => Value::Null, // unknown getter -> null
+    }
+}
+
+let request = r#"{"program":{"version":"stem-bc/v1","instructions":[
   {"t":"emit","escape":"html","value":{
     "t":"get","base":{"t":"assign","name":"user"},"segments":["full_name"]}}]},
-  "data":{"user":{"first":"Ada","last":"Lovelace","full_name":{"$getter":"full_name"}}}}' \
-| node run.mjs stem_native/target/wasm32-wasip1/release/stem_native.wasm
-# => Ada Lovelace
+  "data":{"user":{"first":"Ada","last":"Lovelace","full_name":{"$getter":"full_name"}}}}"#;
+
+assert_eq!(handle_with_getters(request, getters), "Ada Lovelace");
 ```
 
-Here the host getter `full_name` reads `first`/`last` off the `user` object that
-contains it. Resolution happens at every assign and dotted-path step, so a getter
-works at the top level (`{{full_name}}`, self = the root) and at a nested leaf
-(`{{user.full_name}}`, self = `user`). The result is escaped like any value, and
-an unknown getter resolves to null.
+Resolution happens at every assign and dotted-path step, so a getter works at the
+top level (`{{full_name}}`, self = the root) and at a nested leaf
+(`{{user.full_name}}`, self = `user`). The result is escaped like any value.
 
-Because the getter body lives in the host, not the data, this has no
-cross-backend byte-parity and is deliberately **out of the conformance corpus**;
-`src/lib.rs` covers it with native-only unit tests. The PoC ships a small
-illustrative registry (`full_name`, `initials`) in `run_getter`; a real embedder
-registers its own.
+Because the getter logic lives in the host, this has no cross-backend byte-parity
+and is deliberately **out of the conformance corpus**; `src/lib.rs` covers the
+hook with native-only unit tests (which supply a `full_name`/`initials` resolver)
+and asserts the default path leaves the marker inert.
 
 ## Browser / edge (no WASI)
 

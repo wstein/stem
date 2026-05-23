@@ -27,8 +27,8 @@ A zero-arity function assign is auto-invoked during resolution and its result re
 
 ## Native variant (per-host getters)
 
-- A closure can't cross the wire, so the native engine uses data, not code: a field valued `{"$getter": "<name>"}` is computed by a getter **authored in the host language** and registered with the engine, invoked with the field's **parent object** as its "self". `{{user.full_name}}` over `{"user": {"first": ..., "last": ..., "full_name": {"$getter": "full_name"}}}` runs `full_name` against the `user` object.
-- In `native/stem_native/src/lib.rs`: `resolve_getter/2` detects the single-key `$getter` sentinel at every assign and dotted-path step (`eval(Op::Assign)`, `get_field`); `run_getter/2` dispatches the host registry. Works top-level (self = root) and at a nested leaf (self = the containing object); result escaped like any value; unknown getter → null. No cross-backend byte-parity (the body lives in the host), so it is out of the corpus — covered by native-only unit tests and the browser demo's `Getter` example.
+- A closure can't cross the wire, so the native engine offers a **host hook**: a field valued `{"$getter": "<name>"}` marks it computed, and the engine delegates to an embedder-supplied `GetterResolver` (`fn(name, parent) -> Value`), invoked with the field's **parent object** as "self".
+- The engine ships **no** getters — getter logic is the embedder's, never the library's or the wire's. In `native/stem_native/src/lib.rs`, `resolve_getter` detects the single-key `$getter` marker at each assign/dotted-path step and calls the resolver; the default `no_getters` (used by `handle` and the C ABI, hence the browser) computes nothing, so the marker is **inert** unless a Rust embedder opts in via `handle_with_getters`. Result escaped like any value; unknown getter → null. No cross-backend parity (logic lives in the host) → out of the corpus; covered by native-only tests that inject a resolver and assert the default path stays inert.
 
 
 ## Links
@@ -37,4 +37,4 @@ A zero-arity function assign is auto-invoked during resolution and its result re
 - [[Handlebars Expression Resolution]] - How `{{name}}`/`{{a.b}}` resolve, where getters hook in.
 - [[HTML Escaping Behavior]] - Getter results are escaped like any value.
 - [[Cross-Backend Conformance Spec]] - Why BEAM-closure getters are out of the wire/native path.
-- [[Native Backend Strategy]] - The wire/engine the per-host getter mechanism extends.
+- [[Native Backend Strategy]] - The wire/engine the per-host getter hook extends.
