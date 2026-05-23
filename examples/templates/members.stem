@@ -1,0 +1,29 @@
+<div
+  style="
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+    font-family: system-ui;">
+
+  {{#each members as |member _ i1|}}
+  <div
+    style="border:1px solid #e5e7eb;border-radius:10px;padding:10px 12px;background:
+
+    {{~#if member.lead~}}
+      #faf5ff
+    {{~else~}}
+      #eee
+    {{~/if~}}">
+
+    <div style="font-weight: 600">
+      {{i1}}. {{member.name |> upcase}}
+    </div>
+    <div style="color: #6b7280; font-size: 13px">
+      {{member.role}}
+      {{#if member.lead~}}
+      · <span style="color: #7c3aed">★ lead</span>
+      {{~/if}}
+    </div>
+  </div>
+  {{/each}}
+</div>

@@ -1,0 +1,24 @@
+{
+  "members": [
+    {
+      "name": "ada lovelace",
+      "role": "Compiler",
+      "lead": true
+    },
+    {
+      "name": "grace hopper",
+      "role": "Runtime",
+      "lead": false
+    },
+    {
+      "name": "alan turing",
+      "role": "Parser",
+      "lead": false
+    },
+    {
+      "name": "barbara liskov",
+      "role": "Type systems",
+      "lead": true
+    }
+  ]
+}
