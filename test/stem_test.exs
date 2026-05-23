@@ -177,6 +177,11 @@ defmodule StemTest do
                "T by A"
     end
 
+    test "dot renders the current context like this" do
+      assert eval("Hello {{#with name}}{{.}}{{/with}}!", assigns: [name: "Nina"]) == "Hello Nina!"
+      assert eval("{{#each xs}}{{.}};{{/each}}", assigns: [xs: ["a", "b"]]) == "a;b;"
+    end
+
     test "nested blocks" do
       template = "{{#each rows}}{{#if this}}[{{this}}]{{/if}}{{/each}}"
       assert eval(template, assigns: [rows: [1, false, 2]]) == "[1][2]"

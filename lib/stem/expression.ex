@@ -536,7 +536,7 @@ defmodule Stem.Expression do
       trimmed == "@key" ->
         {:ok, {:special, :key}}
 
-      trimmed == "this" ->
+      trimmed in ["this", "."] ->
         {:ok, {:special, :this}}
 
       String.starts_with?(trimmed, "../") and valid_parent_identifier?(trimmed) ->
@@ -648,7 +648,7 @@ defmodule Stem.Expression do
       trimmed == "@key" ->
         {:ok, {:special, :key}}
 
-      trimmed == "this" ->
+      trimmed in ["this", "."] ->
         {:ok, {:special, :this}}
 
       String.starts_with?(trimmed, "../") and valid_parent_identifier?(trimmed) ->

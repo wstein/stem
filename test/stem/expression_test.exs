@@ -52,6 +52,12 @@ defmodule Stem.ExpressionTest do
     assert t("name", true) == "current.name"
   end
 
+  test "dot is an alias for this (the current context)" do
+    assert {:ok, {:special, :this}} = p(".")
+    assert t(".") == "this"
+    assert t(".", true) == "current"
+  end
+
   test "parent traversal strips segments to a top-level assign" do
     assert t("../prefix") == "@prefix"
     assert t("../../prefix") == "@prefix"
