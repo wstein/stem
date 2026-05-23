@@ -20,6 +20,8 @@ Aligning the context makes the scaffolding and the embedded expressions share th
 When generating new bindings a template body can reference, create them with a `nil` context and mark them `generated: true` to avoid unused-variable warnings.
 Rewrite `@assign` references to `Stem.Runtime.fetch_assign!/3` using the same `nil`-context `assigns` variable that the generated function receives.
 
+Block parameters do **not** bind a variable named after the author's chosen name. Each param binds a fresh gensym (`stem_blk_<n>`), and the parser maps the author's name to that gensym in the lowering scope. This lets a param be any string — uppercase, dashes, leading digits — without ever needing to be a valid Elixir variable, and keeps `_` collision-free as a repeatable wildcard. Likewise, a literal assign key that is not a valid identifier lowers to `@(:"key")` (an `@` applied to a quoted atom), which the assign rewrite still recognizes. See [[Literal Variable Keys and Anonymous Params]].
+
 ## Links
 
 - [[Native AST Compilation Pipeline]] - The compiler stage that applies this rule.

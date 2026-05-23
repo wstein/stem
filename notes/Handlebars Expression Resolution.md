@@ -7,7 +7,7 @@ tags: [compiler, semantics]
 
 ## What
 
-A bare identifier resolves to an assign at the top level and to the current item inside `{{#each}}`. Stem supports nested subexpressions `(helper arg)` and Elixir-style helper pipelines (`lhs |> helper(a, b)`). Anything else is treated as an Elixir expression with its identifiers rewritten to assigns.
+A bare identifier resolves to an assign at the top level and to the current item inside `{{#each}}`. Keys that are not valid identifiers — dashes, spaces, dots, leading digits, or reserved words — are written as **bracketed literal segments**: `{{[first-name]}}`, `{{user.[first-name]}}`, `{{[a.b]}}`. Bare names may also use any leading letter case (`{{Item1}}`). Stem supports nested subexpressions `(helper arg)` and Elixir-style helper pipelines (`lhs |> helper(a, b)`). Anything else is treated as an Elixir expression with its identifiers rewritten to assigns.
 
 ## Why
 
@@ -21,3 +21,4 @@ Read `Stem.Expression.translate/2` as the authority for how a tag becomes Elixir
 
 - [[Native AST Compilation Pipeline]] - Where translation sits in the pipeline.
 - [[Template Variable Hygiene]] - Why the emitted variables resolve at runtime.
+- [[Literal Variable Keys and Anonymous Params]] - Bracket literal keys and how they lower.

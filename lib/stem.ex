@@ -117,9 +117,16 @@ defmodule Stem do
       block parameters. For `{{#each}}` the second parameter is the iteration
       key (the map key for maps, the index for lists). `{{#each}}` also accepts
       `as |item i0 i1|`, binding the item, zero-based index, and one-based index.
+      Parameter names may be any case (`as |Item|`); `_` is an anonymous
+      placeholder that skips a slot and may repeat (`as |_ _ i1|`).
+    * `{{[first-name]}}` / `{{user.[first-name]}}` bracketed literal keys for
+      keys that are not valid identifiers (dashes, spaces, dots, leading digits).
     * `{{~ ... ~}}` whitespace control around any tag.
 
-  Bare identifiers resolve to assigns: `{{name}}` reads the `:name` assign.
+  Bare identifiers resolve to assigns: `{{name}}` reads the `:name` assign, and
+  may use any case (`{{Item1}}`). A key that is not a valid identifier is wrapped
+  in brackets — `{{[first-name]}}`, `{{[a.b]}}` — which only affects parsing, so
+  a data key named `_` is still read normally with `{{_}}`.
   Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the
   zero-based index, `{{@index1}}` the one-based index (mirroring
   StringTemplate's `i0`/`i`), and `{{@key}}` the key when iterating a map.
