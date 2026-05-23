@@ -107,7 +107,12 @@ defmodule Stem.LexerTest do
   end
 
   test "partial token captures trimmed name" do
-    assert [{:partial, "greet", %{line: 1, column: 1}}, {:eof, _}] = tokens("{{>  greet }}")
+    assert [{:partial, "greet", "", %{line: 1, column: 1}}, {:eof, _}] = tokens("{{>  greet }}")
+  end
+
+  test "partial token captures name and raw arguments" do
+    assert [{:partial, "card", ~s(user role="admin"), _}, {:eof, _}] =
+             tokens(~s({{> card user role="admin"}}))
   end
 
   test "tracks line and column across newlines" do

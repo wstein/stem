@@ -123,6 +123,43 @@ defmodule Stem.ParserTest do
     assert nodes == [{:text, "["}, {:text, "x"}, {:text, "]"}]
   end
 
+  test "partial with a context argument produces a scope node" do
+    nodes = ast("{{> card user}}", partials: %{card: "{{name}}"})
+
+    assert [
+             {:partial_scope, {:identifier, "user"}, [],
+              [{:expr, {:identifier, "name"}, :default, _}], _}
+           ] = nodes
+  end
+
+  test "partial with hash arguments produces a scope node" do
+    nodes = ast(~s({{> card label="Hi"}}), partials: %{card: "{{label}}"})
+
+    assert [{:partial_scope, nil, [label: {:literal, ~s("Hi")}], _body, _}] = nodes
+  end
+
+  test "partial with context and hash arguments produces a scope node" do
+    nodes = ast(~s({{> card user role="admin"}}), partials: %{card: "{{name}}"})
+
+    assert [
+             {:partial_scope, {:identifier, "user"}, [role: {:literal, ~s("admin")}], _body, _}
+           ] = nodes
+  end
+
+  test "partial without arguments expands inline without a scope node" do
+    assert ast("{{> g}}", partials: %{g: "x"}) == [{:text, "x"}]
+  end
+
+  test "partials reject more than one context argument" do
+    assert {:error, "partials accept at most one context argument before key=value pairs", _} =
+             Parser.parse("{{> card a b}}", partials: %{card: "x"})
+  end
+
+  test "partials reject malformed arguments" do
+    assert {:error, "partial arguments must be assigns, paths, literals, or key=value pairs", _} =
+             Parser.parse("{{> card 1+2}}", partials: %{card: "x"})
+  end
+
   describe "errors" do
     test "unclosed block reports the opening position" do
       assert Parser.parse("a\n{{#if show}}yes") ==

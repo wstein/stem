@@ -355,6 +355,70 @@ defmodule StemTest do
              ) ==
                "<article><h1>Stem</h1><main>Hello</main><small>Docs</small></article>"
     end
+
+    test "context argument sets the partial scope" do
+      assert eval(
+               "{{> card user}}",
+               [assigns: [user: %{name: "Nina"}]],
+               partials: %{card: "Name: {{name}}"}
+             ) == "Name: Nina"
+    end
+
+    test "hash arguments are available by name inside the partial" do
+      assert eval(
+               ~s({{> badge label="VIP"}}),
+               [assigns: []],
+               partials: %{badge: "[{{label}}]"}
+             ) == "[VIP]"
+    end
+
+    test "hash values resolve against the caller scope" do
+      assert eval(
+               ~s({{> badge label=title}}),
+               [assigns: [title: "Hello"]],
+               partials: %{badge: "[{{label}}]"}
+             ) == "[Hello]"
+    end
+
+    test "hash arguments override matching context keys" do
+      assert eval(
+               ~s({{> card user name="Override"}}),
+               [assigns: [user: %{name: "Nina"}]],
+               partials: %{card: "{{name}}"}
+             ) == "Override"
+    end
+
+    test "context argument works inside each" do
+      assert eval(
+               "{{#each users}}{{> card this}}{{/each}}",
+               [assigns: [users: [%{name: "A"}, %{name: "B"}]]],
+               partials: %{card: "[{{name}}]"}
+             ) == "[A][B]"
+    end
+
+    test "hash arguments combine with an inherited caller scope" do
+      assert eval(
+               ~s({{> line label="Total"}}),
+               [assigns: [amount: 42]],
+               partials: %{line: "{{label}}: {{amount}}"}
+             ) == "Total: 42"
+    end
+
+    test "scalar context argument yields an empty scope" do
+      assert eval(
+               "{{> card greeting}}",
+               [assigns: [greeting: "hi"]],
+               partials: %{card: "[{{name}}]"}
+             ) == "[]"
+    end
+
+    test "plain list context argument yields an empty scope" do
+      assert eval(
+               "{{> card items}}",
+               [assigns: [items: [1, 2, 3]]],
+               partials: %{card: "[{{name}}]"}
+             ) == "[]"
+    end
   end
 
   describe "precompiled functions" do
