@@ -4,6 +4,10 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232563eb'/%3E%3Ctext x='50%25' y='57%25' font-size='34' text-anchor='middle' fill='white' font-family='sans-serif'%3ES%3C/text%3E%3C/svg%3E"
+    />
     <title>Stem Playground - compile and render in the browser</title>
     <style>
       :root {
@@ -120,33 +124,93 @@
 
       #tabs {
         display: flex;
-        align-items: center;
+        align-items: flex-end;
         flex-wrap: wrap;
-        gap: 0.28rem;
-        margin-bottom: 0.48rem;
+        gap: 0.32rem;
+        margin: 0 -0.6rem 0.48rem;
+        padding: 0.55rem 0.6rem 0;
+        border-bottom: 1px solid var(--line);
+        background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
       }
 
       #tabs .tab {
         display: inline-flex;
         align-items: center;
-        gap: 0.25rem;
+        gap: 0.18rem;
+        height: 2.15rem;
+        border: 1px solid #c8d0dc;
+        border-bottom: none;
+        border-radius: 10px 10px 0 0;
+        background: #e9edf4;
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+        transition: background 120ms ease, border-color 120ms ease;
       }
 
-      #tabs .tab > button[aria-current="true"] {
+      #tabs .tab.is-active {
+        background: #fff;
         border-color: var(--accent);
-        color: var(--accent);
-        font-weight: 650;
+        position: relative;
       }
 
-      #tabs .tab-x {
+      #tabs .tab.is-active::after {
+        content: "";
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: -1px;
+        height: 1px;
+        background: #fff;
+      }
+
+      #tabs .tab-label {
+        border: 0;
+        background: transparent;
         border-radius: 8px;
-        color: #8a93a0;
-        line-height: 1;
+        color: #1f2937;
+        height: 100%;
+        padding: 0.35rem 0.78rem;
+        font-size: 0.7rem;
+        letter-spacing: 0.01em;
+        text-transform: lowercase;
       }
 
-      #addPartial {
-        border-style: dashed;
+      #tabs .tab.is-active .tab-label {
+        color: var(--accent);
+        font-weight: 700;
+      }
+
+      #tabs .tab-close {
+        border: 0;
+        background: transparent;
+        color: #7b8796;
+        border-radius: 6px;
+        width: 1.45rem;
+        height: 1.45rem;
+        padding: 0;
+        margin-right: 0.28rem;
+        line-height: 1;
+        font-size: 0.95rem;
+      }
+
+      #tabs .tab-close:hover {
+        color: #ef4444;
+        background: rgba(239, 68, 68, 0.12);
+        border-color: transparent;
+      }
+
+      #tabs .tab-add {
+        border: 1px dashed #b8c1cf;
+        border-bottom: none;
+        border-radius: 10px 10px 0 0;
+        background: #f8fafc;
         color: #566173;
+        height: 2.15rem;
+        padding: 0.32rem 0.78rem;
+        margin-left: 0.2rem;
+      }
+
+      #tabs .tab-add:hover {
+        background: #eef2f7;
       }
 
       #partialNameRow {
@@ -385,13 +449,13 @@
         decodeState,
         encodeState
       } from "./playground_utils.mjs";
-      import { EditorState } from "https://esm.sh/@codemirror/state@6.5.2";
-      import { EditorView, keymap, lineNumbers, highlightActiveLineGutter } from "https://esm.sh/@codemirror/view@6.38.8";
-      import { defaultKeymap, history, historyKeymap, indentWithTab } from "https://esm.sh/@codemirror/commands@6.9.1";
-      import { defaultHighlightStyle, bracketMatching, syntaxHighlighting, highlightActiveLine } from "https://esm.sh/@codemirror/language@6.11.3";
-      import { lintGutter, linter, setDiagnosticsEffect } from "https://esm.sh/@codemirror/lint@6.8.5";
-      import { json } from "https://esm.sh/@codemirror/lang-json@6.0.2";
-      import { html } from "https://esm.sh/@codemirror/lang-html@6.4.11";
+      import { EditorState } from "https://esm.sh/@codemirror/state@6.5.2/es2022/state.mjs";
+      import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from "https://esm.sh/@codemirror/view@6.38.8/X-ZEBjb2RlbWlycm9yL3N0YXRlQDYuNS4y/es2022/view.mjs";
+      import { defaultKeymap, history as cmHistory, historyKeymap, indentWithTab } from "https://esm.sh/@codemirror/commands@6.10.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
+      import { defaultHighlightStyle, bracketMatching, syntaxHighlighting } from "https://esm.sh/@codemirror/language@6.11.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
+      import { lintGutter, linter, setDiagnosticsEffect } from "https://esm.sh/@codemirror/lint@6.8.5?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
+      import { json } from "https://esm.sh/@codemirror/lang-json@6.0.2?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
+      import { html } from "https://esm.sh/@codemirror/lang-html@6.4.11?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
 
       const WASM = "../stem_native/target/wasm32-unknown-unknown/release/stem_native.wasm";
       const $ = (id) => document.getElementById(id);
@@ -414,7 +478,7 @@
         highlightActiveLine(),
         bracketMatching(),
         syntaxHighlighting(defaultHighlightStyle),
-        history(),
+        cmHistory(),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab])
       ];
 
@@ -461,11 +525,13 @@
         bar.innerHTML = "";
 
         tabs.forEach((tab, i) => {
-          const wrap = document.createElement("span");
+          const wrap = document.createElement("div");
           wrap.className = "tab";
+          if (i === active) wrap.classList.add("is-active");
 
           const btn = document.createElement("button");
           btn.type = "button";
+          btn.className = "tab-label";
           btn.textContent = i === 0 ? "main" : tab.name || "(unnamed)";
           btn.title = i === 0 ? "entry template (rendered)" : `partial · {{> ${tab.name}}}`;
           if (i === active) btn.setAttribute("aria-current", "true");
@@ -475,8 +541,8 @@
           if (i !== 0) {
             const x = document.createElement("button");
             x.type = "button";
-            x.className = "tab-x";
-            x.textContent = "x";
+            x.className = "tab-close";
+            x.textContent = "×";
             x.title = "remove partial";
             x.addEventListener("click", (event) => {
               event.stopPropagation();
@@ -490,7 +556,7 @@
 
         const add = document.createElement("button");
         add.type = "button";
-        add.id = "addPartial";
+        add.className = "tab-add";
         add.textContent = "+ partial";
         add.addEventListener("click", addPartial);
         bar.append(add);
