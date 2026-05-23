@@ -62,10 +62,23 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "<ul>{{#each items}}<li>{{@index1}}. {{this}}</li>{{/each}}</ul>",
     "{{#each items}}{{../title}}: {{this}}{{/each}}",
     "{{#each rows}}{{#if this.active}}[{{this.name}}]{{/if}}{{/each}}",
-    # Not yet ported — should be reported as pending, not mismatched.
+    # Transformers and pipelines
     "{{name |> upcase}}",
+    "{{name |> upcase |> trim}}",
+    "{{text |> truncate(20)}}",
+    "{{items |> join(\", \")}}",
+    "{{upcase name}}",
     "{{default user.name \"anon\"}}",
-    "{{42}}"
+    "{{truncate text 20}}",
+    "{{default (upcase name) \"X\"}}",
+    "{{link url text=label}}",
+    "{{x |> wrap(tag: \"b\")}}",
+    "{{#each items}}{{this.name |> upcase}}{{/each}}",
+    "{{42}} {{-3}} {{true}} {{null}}",
+    # Not yet ported — should be reported as pending, not mismatched.
+    # (Both still compile on the BEAM, so they exercise the pending bucket.)
+    "{{'single'}}",
+    "{{~ x ~}}"
   ]
 
   @impl true

@@ -392,28 +392,63 @@ enum Expr {
     Key,
     This,
     Parent(String),
+    Lit(Value),
+    Transformer { name: String, args: Vec<Arg> },
+    Pipeline { lhs: Box<Expr>, stages: Vec<Stage> },
+}
+
+// A transformer/pipeline-stage argument: positional or `key=value`.
+enum Arg {
+    Positional(Expr),
+    Keyword(String, Expr),
+}
+
+struct Stage {
+    name: String,
+    args: Vec<Arg>,
 }
 
 fn parse_expr(raw: &str, span: Span) -> Result<Expr, CompileError> {
     let t = raw.trim();
+    let segments = split_pipes(&scan_top_level(t));
+    if segments.len() > 1 {
+        let lhs = parse_expr(&segments[0], span)?;
+        let stages = segments[1..]
+            .iter()
+            .map(|stage| parse_stage(stage, span))
+            .collect::<Result<Vec<_>, _>>()?;
+        return Ok(Expr::Pipeline {
+            lhs: Box::new(lhs),
+            stages,
+        });
+    }
+    parse_structured(t, span)
+}
+
+// A single (non-pipeline) expression. Mirrors `Stem.Expression.structured_expression/1`:
+// literal, special, parent, path, identifier, then a `name args..` transformer.
+fn parse_structured(t: &str, span: Span) -> Result<Expr, CompileError> {
+    if let Some(literal) = literal_kind(t) {
+        return literal.into_expr(t, span);
+    }
     match t {
         "@index" => Ok(Expr::Index0),
         "@index1" => Ok(Expr::Index1),
         "@key" => Ok(Expr::Key),
         "this" => Ok(Expr::This),
-        _ if t.starts_with("../") => {
-            let name = t.trim_start_matches("../");
-            if is_identifier(name) {
-                Ok(Expr::Parent(name.to_string()))
-            } else {
-                Err(not_supported(t, span))
-            }
-        }
+        _ if t.starts_with("../") => parse_parent(t, span),
         _ if is_path(t) => Ok(parse_path(t)),
         _ if is_identifier(t) => Ok(Expr::Identifier(t.to_string())),
-        // Literals, transformers, pipelines, and arbitrary expressions: valid on
-        // the BEAM but not yet ported here.
-        _ => Err(not_supported(t, span)),
+        _ => parse_transformer(t, span),
+    }
+}
+
+fn parse_parent(t: &str, span: Span) -> Result<Expr, CompileError> {
+    let name = t.trim_start_matches("../");
+    if is_identifier(name) {
+        Ok(Expr::Parent(name.to_string()))
+    } else {
+        Err(not_supported(t, span))
     }
 }
 
@@ -422,6 +457,389 @@ fn parse_path(t: &str) -> Expr {
         Expr::PathThis(rest.split('.').map(String::from).collect())
     } else {
         Expr::PathImplicit(t.split('.').map(String::from).collect())
+    }
+}
+
+// `name arg arg..` with at least one argument and a helper-name head.
+fn parse_transformer(t: &str, span: Span) -> Result<Expr, CompileError> {
+    let parts = split_whitespace(&scan_top_level(t));
+    match parts.split_first() {
+        Some((name, args)) if !args.is_empty() && is_identifier(name) => {
+            let args = args
+                .iter()
+                .map(|arg| parse_transformer_arg(arg, span))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Expr::Transformer {
+                name: name.clone(),
+                args,
+            })
+        }
+        _ => Err(not_supported(t, span)),
+    }
+}
+
+// Transformer arguments take `key=value` keywords; their values are structured
+// expressions or parenthesised sub-calls (no bare transformer), matching
+// `Stem.Expression.helper_argument_expression/1`.
+fn parse_transformer_arg(arg: &str, span: Span) -> Result<Arg, CompileError> {
+    if let Some((key, value)) = split_once(&scan_top_level(arg), Sep::Eq) {
+        let key = key.trim();
+        if !key.is_empty() {
+            if !is_identifier(key) {
+                return Err(not_supported(arg, span));
+            }
+            return Ok(Arg::Keyword(
+                key.to_string(),
+                parse_helper_value(value.trim(), span)?,
+            ));
+        }
+    }
+    Ok(Arg::Positional(parse_helper_value(arg.trim(), span)?))
+}
+
+fn parse_helper_value(t: &str, span: Span) -> Result<Expr, CompileError> {
+    if is_wrapped_paren(t) {
+        return parse_subexpression(t, span);
+    }
+    if let Some(literal) = literal_kind(t) {
+        return literal.into_expr(t, span);
+    }
+    match t {
+        "@index" => Ok(Expr::Index0),
+        "@index1" => Ok(Expr::Index1),
+        "@key" => Ok(Expr::Key),
+        "this" => Ok(Expr::This),
+        _ if t.starts_with("../") => parse_parent(t, span),
+        _ if is_path(t) => Ok(parse_path(t)),
+        _ if is_identifier(t) => Ok(Expr::Identifier(t.to_string())),
+        _ => Err(not_supported(t, span)),
+    }
+}
+
+// `(..)` sub-expressions must wrap a transformer or pipeline, like the BEAM.
+fn parse_subexpression(t: &str, span: Span) -> Result<Expr, CompileError> {
+    let inner = t.trim_start_matches('(').trim_end_matches(')');
+    match parse_expr(inner.trim(), span)? {
+        expr @ (Expr::Transformer { .. } | Expr::Pipeline { .. }) => Ok(expr),
+        _ => Err(not_supported(t, span)),
+    }
+}
+
+// A pipeline stage: a bare helper name, or `name(arg, arg..)`.
+fn parse_stage(stage: &str, span: Span) -> Result<Stage, CompileError> {
+    let t = stage.trim();
+    if is_identifier(t) {
+        return Ok(Stage {
+            name: t.to_string(),
+            args: Vec::new(),
+        });
+    }
+    if let Some((name, args_src)) = stage_call_parts(t) {
+        let mut args = Vec::new();
+        for arg in split_commas(&scan_top_level(args_src)) {
+            let arg = arg.trim();
+            if !arg.is_empty() {
+                args.push(parse_pipeline_arg(arg, span)?);
+            }
+        }
+        return Ok(Stage { name, args });
+    }
+    Err(not_supported(t, span))
+}
+
+fn stage_call_parts(t: &str) -> Option<(String, &str)> {
+    let open = t.find('(')?;
+    let name = &t[..open];
+    let rest = &t[open..];
+    if is_identifier(name) && is_wrapped_paren(rest) {
+        Some((name.to_string(), &rest[1..rest.len() - 1]))
+    } else {
+        None
+    }
+}
+
+// Pipeline call arguments accept `key=value` or `key: value` keywords; their
+// values are strict expressions (transformers/pipelines allowed).
+fn parse_pipeline_arg(arg: &str, span: Span) -> Result<Arg, CompileError> {
+    let tokens = scan_top_level(arg);
+    if let Some((key, value)) =
+        split_once(&tokens, Sep::Eq).or_else(|| split_once(&tokens, Sep::Colon))
+    {
+        let key = key.trim();
+        if !key.is_empty() {
+            if !is_identifier(key) {
+                return Err(not_supported(arg, span));
+            }
+            return Ok(Arg::Keyword(
+                key.to_string(),
+                parse_expr(value.trim(), span)?,
+            ));
+        }
+    }
+    Ok(Arg::Positional(parse_expr(arg.trim(), span)?))
+}
+
+// ── Top-level tokenizer (mirrors Stem.Expression's splitter) ─────────────────
+//
+// Splits an expression at the top level only: parenthesised groups and quoted
+// strings are absorbed into `Text` so the `|>`, whitespace, `,`, `=`, and `:`
+// separators inside them never split an argument.
+
+enum Tok {
+    Pipe,
+    Comma,
+    Eq,
+    Colon,
+    Ws(char),
+    Text(String),
+}
+
+impl Tok {
+    fn value(&self) -> String {
+        match self {
+            Tok::Pipe => "|>".to_string(),
+            Tok::Comma => ",".to_string(),
+            Tok::Eq => "=".to_string(),
+            Tok::Colon => ":".to_string(),
+            Tok::Ws(c) => c.to_string(),
+            Tok::Text(s) => s.clone(),
+        }
+    }
+}
+
+#[derive(Clone, Copy)]
+enum Sep {
+    Eq,
+    Colon,
+}
+
+fn scan_top_level(s: &str) -> Vec<Tok> {
+    let chars: Vec<char> = s.chars().collect();
+    let mut out = Vec::new();
+    let mut text = String::new();
+    let mut k = 0;
+
+    while k < chars.len() {
+        let c = chars[k];
+        match c {
+            '"' | '\'' => consume_quoted(&chars, &mut k, &mut text),
+            '(' => consume_parens(&chars, &mut k, &mut text),
+            '|' if chars.get(k + 1) == Some(&'>') => {
+                flush(&mut text, &mut out);
+                out.push(Tok::Pipe);
+                k += 2;
+            }
+            ',' => push_sep(Tok::Comma, &mut text, &mut out, &mut k),
+            '=' => push_sep(Tok::Eq, &mut text, &mut out, &mut k),
+            ':' => push_sep(Tok::Colon, &mut text, &mut out, &mut k),
+            ' ' | '\t' | '\n' | '\r' => push_sep(Tok::Ws(c), &mut text, &mut out, &mut k),
+            _ => {
+                text.push(c);
+                k += 1;
+            }
+        }
+    }
+    flush(&mut text, &mut out);
+    out
+}
+
+fn flush(text: &mut String, out: &mut Vec<Tok>) {
+    if !text.is_empty() {
+        out.push(Tok::Text(std::mem::take(text)));
+    }
+}
+
+fn push_sep(sep: Tok, text: &mut String, out: &mut Vec<Tok>, k: &mut usize) {
+    flush(text, out);
+    out.push(sep);
+    *k += 1;
+}
+
+fn consume_quoted(chars: &[char], k: &mut usize, text: &mut String) {
+    let quote = chars[*k];
+    text.push(quote);
+    *k += 1;
+    while *k < chars.len() {
+        let d = chars[*k];
+        text.push(d);
+        *k += 1;
+        if d == '\\' {
+            if *k < chars.len() {
+                text.push(chars[*k]);
+                *k += 1;
+            }
+        } else if d == quote {
+            break;
+        }
+    }
+}
+
+fn consume_parens(chars: &[char], k: &mut usize, text: &mut String) {
+    text.push('(');
+    *k += 1;
+    let mut depth = 1;
+    while *k < chars.len() && depth > 0 {
+        let d = chars[*k];
+        match d {
+            '(' => {
+                depth += 1;
+                text.push(d);
+                *k += 1;
+            }
+            ')' => {
+                depth -= 1;
+                text.push(d);
+                *k += 1;
+            }
+            '"' | '\'' => consume_quoted(chars, k, text),
+            _ => {
+                text.push(d);
+                *k += 1;
+            }
+        }
+    }
+}
+
+fn split_pipes(tokens: &[Tok]) -> Vec<String> {
+    split_by(tokens, |t| matches!(t, Tok::Pipe))
+}
+
+fn split_commas(tokens: &[Tok]) -> Vec<String> {
+    split_by(tokens, |t| matches!(t, Tok::Comma))
+}
+
+fn split_by(tokens: &[Tok], is_sep: impl Fn(&Tok) -> bool) -> Vec<String> {
+    let mut groups = Vec::new();
+    let mut current = String::new();
+    for token in tokens {
+        if is_sep(token) {
+            groups.push(std::mem::take(&mut current));
+        } else {
+            current.push_str(&token.value());
+        }
+    }
+    groups.push(current);
+    groups
+}
+
+// Whitespace split that collapses runs and drops empties, like the BEAM.
+fn split_whitespace(tokens: &[Tok]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut current = String::new();
+    for token in tokens {
+        if matches!(token, Tok::Ws(_)) {
+            if !current.is_empty() {
+                out.push(std::mem::take(&mut current));
+            }
+        } else {
+            current.push_str(&token.value());
+        }
+    }
+    if !current.is_empty() {
+        out.push(current);
+    }
+    out
+}
+
+fn split_once(tokens: &[Tok], sep: Sep) -> Option<(String, String)> {
+    let idx = tokens
+        .iter()
+        .position(|t| matches!((t, sep), (Tok::Eq, Sep::Eq) | (Tok::Colon, Sep::Colon)))?;
+    let left = tokens[..idx].iter().map(Tok::value).collect();
+    let right = tokens[idx + 1..].iter().map(Tok::value).collect();
+    Some((left, right))
+}
+
+// A whole-string balanced `(..)` group (quotes ignored — sub-calls with quoted
+// parens are rare and fall back to a "not supported" error).
+fn is_wrapped_paren(t: &str) -> bool {
+    let chars: Vec<char> = t.chars().collect();
+    if chars.first() != Some(&'(') || chars.last() != Some(&')') {
+        return false;
+    }
+    let mut depth = 0i32;
+    for (i, &c) in chars.iter().enumerate() {
+        match c {
+            '(' => depth += 1,
+            ')' => {
+                depth -= 1;
+                if depth < 0 || (depth == 0 && i != chars.len() - 1) {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+    }
+    depth == 0
+}
+
+// ── Literals ─────────────────────────────────────────────────────────────────
+
+enum Literal {
+    Value(Value),
+    // Looks like a literal the BEAM accepts, but not yet ported (single-quoted
+    // charlists, strings with escapes): reported as "not yet supported".
+    Pending,
+}
+
+impl Literal {
+    fn into_expr(self, source: &str, span: Span) -> Result<Expr, CompileError> {
+        match self {
+            Literal::Value(value) => Ok(Expr::Lit(value)),
+            Literal::Pending => Err(not_supported(source, span)),
+        }
+    }
+}
+
+fn literal_kind(t: &str) -> Option<Literal> {
+    match t {
+        "true" => Some(Literal::Value(Value::Bool(true))),
+        "false" => Some(Literal::Value(Value::Bool(false))),
+        "nil" | "null" => Some(Literal::Value(Value::Null)),
+        _ if t.starts_with('"') => Some(double_quoted_literal(t)),
+        _ if t.starts_with('\'') => Some(Literal::Pending),
+        _ if is_number(t) => Some(number_literal(t)),
+        _ => None,
+    }
+}
+
+fn double_quoted_literal(t: &str) -> Literal {
+    if t.len() >= 2 && t.ends_with('"') {
+        let content = &t[1..t.len() - 1];
+        if content.contains('\\') || content.contains('"') {
+            Literal::Pending
+        } else {
+            Literal::Value(Value::String(content.to_string()))
+        }
+    } else {
+        Literal::Pending
+    }
+}
+
+fn number_literal(t: &str) -> Literal {
+    if t.contains('.') {
+        t.parse::<f64>()
+            .ok()
+            .and_then(serde_json::Number::from_f64)
+            .map(|n| Literal::Value(Value::Number(n)))
+            .unwrap_or(Literal::Pending)
+    } else {
+        match t.parse::<i64>() {
+            Ok(i) => Literal::Value(Value::Number(i.into())),
+            Err(_) => Literal::Pending,
+        }
+    }
+}
+
+// `^-?\d+(\.\d+)?$`
+fn is_number(t: &str) -> bool {
+    let body = t.strip_prefix('-').unwrap_or(t);
+    let mut parts = body.splitn(2, '.');
+    let int = parts.next().unwrap_or("");
+    let int_ok = !int.is_empty() && int.bytes().all(|b| b.is_ascii_digit());
+    match parts.next() {
+        None => int_ok,
+        Some(frac) => int_ok && !frac.is_empty() && frac.bytes().all(|b| b.is_ascii_digit()),
     }
 }
 
@@ -566,7 +984,38 @@ fn lower_value(expr: &Expr, scope: &Scope, span: Span) -> Result<Value, CompileE
             span,
         )),
         Expr::Parent(name) => Ok(assign(name)),
+        Expr::Lit(value) => Ok(json!({ "t": "lit", "value": value })),
+        Expr::Transformer { name, args } => lower_call(name, None, args, scope, span),
+        Expr::Pipeline { lhs, stages } => {
+            let mut acc = lower_value(lhs, scope, span)?;
+            for stage in stages {
+                acc = lower_call(&stage.name, Some(acc), &stage.args, scope, span)?;
+            }
+            Ok(acc)
+        }
     }
+}
+
+// Lower a transformer/pipeline-stage call to a `call` op. `leading` is the
+// piped-in accumulator (the stage's implicit first positional argument).
+fn lower_call(
+    name: &str,
+    leading: Option<Value>,
+    args: &[Arg],
+    scope: &Scope,
+    span: Span,
+) -> Result<Value, CompileError> {
+    let mut positional: Vec<Value> = leading.into_iter().collect();
+    let mut kwargs = serde_json::Map::new();
+    for arg in args {
+        match arg {
+            Arg::Positional(expr) => positional.push(lower_value(expr, scope, span)?),
+            Arg::Keyword(key, expr) => {
+                kwargs.insert(key.clone(), lower_value(expr, scope, span)?);
+            }
+        }
+    }
+    Ok(json!({ "t": "call", "name": name, "args": positional, "kwargs": kwargs }))
 }
 
 fn assign(name: &str) -> Value {
@@ -748,13 +1197,57 @@ mod tests {
     }
 
     #[test]
+    fn pipelines_lower_to_nested_calls() {
+        assert_wire(
+            "{{name |> upcase}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"args":[{"name":"name","t":"assign"}],"kwargs":{},"name":"upcase","t":"call"}}]}"#,
+        );
+        assert_wire(
+            "{{name |> upcase |> trim}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"args":[{"args":[{"name":"name","t":"assign"}],"kwargs":{},"name":"upcase","t":"call"}],"kwargs":{},"name":"trim","t":"call"}}]}"#,
+        );
+        assert_wire(
+            "{{text |> truncate(20)}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"args":[{"name":"text","t":"assign"},{"t":"lit","value":20}],"kwargs":{},"name":"truncate","t":"call"}}]}"#,
+        );
+    }
+
+    #[test]
+    fn transformers_with_positional_and_keyword_args() {
+        assert_wire(
+            r#"{{default user.name "anon"}}"#,
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"args":[{"base":{"name":"user","t":"assign"},"segments":["name"],"t":"get"},{"t":"lit","value":"anon"}],"kwargs":{},"name":"default","t":"call"}}]}"#,
+        );
+        assert_wire(
+            "{{link url text=label}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"args":[{"name":"url","t":"assign"}],"kwargs":{"text":{"name":"label","t":"assign"}},"name":"link","t":"call"}}]}"#,
+        );
+    }
+
+    #[test]
+    fn parenthesised_subexpression_argument() {
+        assert_wire(
+            r#"{{default (upcase name) "X"}}"#,
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"args":[{"args":[{"name":"name","t":"assign"}],"kwargs":{},"name":"upcase","t":"call"},{"t":"lit","value":"X"}],"kwargs":{},"name":"default","t":"call"}}]}"#,
+        );
+    }
+
+    #[test]
+    fn integer_and_string_literals() {
+        assert_wire(
+            "{{truncate text 20}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"args":[{"name":"text","t":"assign"},{"t":"lit","value":20}],"kwargs":{},"name":"truncate","t":"call"}}]}"#,
+        );
+    }
+
+    #[test]
     fn unported_constructs_report_a_span() {
         for src in [
-            "{{name |> upcase}}",
-            "{{default x y}}",
+            "{{'single'}}",
             "{{> nav}}",
             "{{!c}}",
-            r#"{{"lit"}}"#,
+            "{{~ x ~}}",
+            "{{a + b}}",
         ] {
             let err = compile_to_wire(src).unwrap_err();
             assert!(
