@@ -407,16 +407,6 @@
           </header>
           <div class="panel-body">
             <div class="editor-shell" id="dataEditor"></div>
-            <div class="row" style="margin-top: 0.55rem;">
-              <label for="escape">Escape</label>
-              <select id="escape">
-                <option value="">(as compiled)</option>
-                <option value="html">html</option>
-                <option value="xml">xml</option>
-                <option value="json">json</option>
-                <option value="none">none</option>
-              </select>
-            </div>
           </div>
         </article>
 
@@ -427,6 +417,14 @@
               <p class="panel-sub">Rendered preview runs in a locked-down iframe.</p>
             </div>
             <div class="row">
+              <label for="escape">Escape</label>
+              <select id="escape">
+                <option value="">(as compiled)</option>
+                <option value="html">html</option>
+                <option value="xml">xml</option>
+                <option value="json">json</option>
+                <option value="none">none</option>
+              </select>
               <label><input type="radio" name="view" value="rendered" checked /> Rendered</label>
               <label><input type="radio" name="view" value="source" /> Source</label>
             </div>
