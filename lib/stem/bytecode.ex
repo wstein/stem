@@ -97,6 +97,7 @@ defmodule Stem.Bytecode do
   @type value_op ::
           {:lit, term()}
           | {:assign, atom()}
+          | {:assigns}
           | {:local, atom()}
           | {:this}
           | {:index}
@@ -111,6 +112,7 @@ defmodule Stem.Bytecode do
           | {:if, value_op(), [instruction()], [instruction()]}
           | {:each, value_op(), [atom()], [instruction()], [instruction()]}
           | {:with, value_op(), [atom()], [instruction()], [instruction()]}
+          | {:scope, value_op(), [{atom(), value_op()}], [instruction()]}
 
   @doc "The bytecode format version this module emits."
   @spec version() :: binary()
@@ -191,8 +193,18 @@ defmodule Stem.Bytecode do
     }
   end
 
+  defp wire_instruction({:scope, base, hash, body}) do
+    %{
+      "t" => "scope",
+      "base" => wire_value(base),
+      "hash" => Map.new(hash, fn {key, value} -> {Atom.to_string(key), wire_value(value)} end),
+      "body" => Enum.map(body, &wire_instruction/1)
+    }
+  end
+
   defp wire_value({:lit, value}), do: %{"t" => "lit", "value" => value}
   defp wire_value({:assign, name}), do: %{"t" => "assign", "name" => Atom.to_string(name)}
+  defp wire_value({:assigns}), do: %{"t" => "assigns"}
   defp wire_value({:local, name}), do: %{"t" => "local", "name" => Atom.to_string(name)}
   defp wire_value({:this}), do: %{"t" => "this"}
   defp wire_value({:index}), do: %{"t" => "index"}
@@ -292,6 +304,31 @@ defmodule Stem.Bytecode do
        compile_nodes(body, body_scope, regions, stack, escape_default),
        compile_nodes(else_body, scope, regions, stack, escape_default)}
     ]
+  end
+
+  # A partial invoked with arguments renders in a fresh, non-each scope: the
+  # context argument (or the caller's current data context when absent) becomes
+  # the assign scope and hash arguments merge on top. The body lowers under a
+  # root scope so bare names resolve against the `:scope` instruction's rebound
+  # assigns at render time, mirroring the compiled backend's closure rebinding.
+  defp compile_node(
+         {:partial_scope, context_ast, hash_kw, body, _meta},
+         scope,
+         regions,
+         stack,
+         escape_default
+       ) do
+    base =
+      cond do
+        context_ast != nil -> compile_value(context_ast, scope)
+        scope.in_each -> {:this}
+        true -> {:assigns}
+      end
+
+    hash = Enum.map(hash_kw, fn {key, value} -> {key, compile_value(value, scope)} end)
+    body_scope = %{in_each: false, has_this: false, locals: MapSet.new()}
+
+    [{:scope, base, hash, compile_nodes(body, body_scope, regions, stack, escape_default)}]
   end
 
   # Region nodes never reach compile_node: extract_regions/1 removes them from
@@ -455,6 +492,11 @@ defmodule Stem.Bytecode do
     value_calls(value_op) ++ branch_calls(body) ++ branch_calls(else_branch)
   end
 
+  defp instruction_calls({:scope, base, hash, body}) do
+    value_calls(base) ++
+      Enum.flat_map(hash, fn {_key, value} -> value_calls(value) end) ++ branch_calls(body)
+  end
+
   defp instruction_calls({:text, _text}), do: []
 
   defp branch_calls(instructions), do: Enum.flat_map(instructions, &instruction_calls/1)
@@ -514,6 +556,11 @@ defmodule Stem.Bytecode do
     [head] ++ disasm_branch("DO", body, depth) ++ disasm_branch("ELSE", else_branch, depth)
   end
 
+  defp disasm_instruction({:scope, base, hash, body}, depth) do
+    head = indent(depth) <> "SCOPE #{disasm_value(base)}" <> hash_suffix(hash)
+    [head] ++ disasm_branch("DO", body, depth)
+  end
+
   defp disasm_branch(_label, [], _depth), do: []
 
   defp disasm_branch(label, instructions, depth) do
@@ -524,10 +571,18 @@ defmodule Stem.Bytecode do
   defp params_suffix([]), do: ""
   defp params_suffix(params), do: " AS |#{Enum.join(params, " ")}|"
 
+  defp hash_suffix([]), do: ""
+
+  defp hash_suffix(hash) do
+    " {" <>
+      Enum.map_join(hash, ", ", fn {key, value} -> "#{key}=#{disasm_value(value)}" end) <> "}"
+  end
+
   defp indent(depth), do: String.duplicate("  ", depth)
 
   defp disasm_value({:lit, value}), do: "LIT #{inspect(value)}"
   defp disasm_value({:assign, name}), do: "ASSIGN #{name}"
+  defp disasm_value({:assigns}), do: "ASSIGNS"
   defp disasm_value({:local, name}), do: "LOCAL #{name}"
   defp disasm_value({:this}), do: "THIS"
   defp disasm_value({:index}), do: "INDEX0"

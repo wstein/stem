@@ -100,6 +100,12 @@ defmodule Stem.Bytecode.VM do
     end
   end
 
+  defp exec({:scope, base_op, hash, body}, context) do
+    base = eval(base_op, context)
+    hash_map = Map.new(hash, fn {key, value_op} -> {key, eval(value_op, context)} end)
+    render_instructions(body, scope_context(context, Stem.Runtime.partial_scope(base, hash_map)))
+  end
+
   # Block parameters mirror the compiled backend's bindings:
   #   |item|              -> item
   #   |item key|          -> item, key (the map key, or the index for lists)
@@ -136,11 +142,19 @@ defmodule Stem.Bytecode.VM do
     %{context | this: subject, locals: locals}
   end
 
+  # A partial scope rebinds the assigns to the merged scope map and resets the
+  # block-scoped state, mirroring the compiled backend's fresh non-each scope.
+  defp scope_context(context, assigns) do
+    %{context | assigns: assigns, this: nil, index: nil, key: nil, in_each: false, locals: %{}}
+  end
+
   defp eval({:lit, value}, _context), do: value
 
   defp eval({:assign, name}, context) do
     Stem.Runtime.fetch_assign!(context.assigns, name, context.warn)
   end
+
+  defp eval({:assigns}, context), do: context.assigns
 
   defp eval({:local, name}, context), do: Map.fetch!(context.locals, name)
   defp eval({:this}, context), do: context.this
