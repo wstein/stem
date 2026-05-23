@@ -67,6 +67,7 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "{{user.[first-name]}}",
     "{{[a.b]}}",
     "{{#each people as |p _ I1|}}{{I1}}:{{p.[first-name]}} {{/each}}",
+    "{{#each rows as |_ _ i1|}}{{i1}} {{/each}}",
     "{{#each rows}}{{this.[full name]}}{{/each}}",
     "{{#with user as |u|}}{{u.[full name]}}{{/with}}",
     # Transformers and pipelines

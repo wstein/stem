@@ -511,9 +511,21 @@ fn validate_params(kind: Block, params: &[String], span: Span) -> Result<(), Com
             "block parameters must be simple identifiers",
             span,
         )),
-        _ if has_duplicates(params) => Err(unsupported("block parameters must be unique", span)),
+        _ if has_duplicates(&named_params(params)) => {
+            Err(unsupported("block parameters must be unique", span))
+        }
         _ => Ok(()),
     }
+}
+
+// `_` is the anonymous/wildcard param: it may repeat to skip a positional slot,
+// so it is excluded from the uniqueness check.
+fn named_params(params: &[String]) -> Vec<String> {
+    params
+        .iter()
+        .filter(|p| p.as_str() != "_")
+        .cloned()
+        .collect()
 }
 
 // ── Expression parsing ───────────────────────────────────────────────────────
@@ -1407,6 +1419,33 @@ mod tests {
         assert_wire(
             "{{#each items as |item idx|}}{{idx}}:{{item}} {{/each}}",
             r#"{"version":"stem-bc/v1","instructions":[{"body":[{"escape":"html","t":"emit","value":{"name":"idx","t":"local"}},{"t":"text","text":":"},{"escape":"html","t":"emit","value":{"name":"item","t":"local"}},{"t":"text","text":" "}],"else":[],"params":["item","idx"],"subject":{"name":"items","t":"assign"},"t":"each"}]}"#,
+        );
+    }
+
+    #[test]
+    fn underscore_is_anonymous_and_repeatable() {
+        assert_wire(
+            "{{#each rows as |_ _ i1|}}{{i1}} {{/each}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"body":[{"escape":"html","t":"emit","value":{"name":"i1","t":"local"}},{"t":"text","text":" "}],"else":[],"params":["_","_","i1"],"subject":{"name":"rows","t":"assign"},"t":"each"}]}"#,
+        );
+    }
+
+    #[test]
+    fn duplicate_named_params_are_rejected() {
+        assert!(compile_to_wire("{{#each xs as |a a b|}}{{a}}{{/each}}").is_err());
+    }
+
+    // `_` is a wildcard only in block-param position; as an expression it stays a
+    // normal key, so a data key named `_` remains readable.
+    #[test]
+    fn underscore_remains_a_readable_data_key() {
+        assert_wire(
+            "{{_}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"name":"_","t":"assign"}}]}"#,
+        );
+        assert_wire(
+            "{{#each rows}}{{_}}{{/each}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"body":[{"escape":"html","t":"emit","value":{"base":{"t":"this"},"segments":["_"],"t":"get"}}],"else":[],"params":[],"subject":{"name":"rows","t":"assign"},"t":"each"}]}"#,
         );
     }
 
