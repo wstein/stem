@@ -16,6 +16,9 @@ const expected = {
   Greeting: "Hello &lt;Nina&gt;!",
   Pipeline: "NINA",
   List: "<ul><li>1. a</li><li>2. b</li><li>3. c</li></ul>",
+  // Native-only: the {"$getter": "full_name"} sentinel is computed by a
+  // host-authored getter, with the user object as its "self".
+  Getter: "Ada Lovelace",
 };
 
 const { render } = await createRenderer(await readFile(WASM));
