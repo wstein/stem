@@ -133,8 +133,8 @@ defmodule Stem do
   may use any case (`{{Item1}}`). A key that is not a valid identifier is wrapped
   in brackets — `{{[first-name]}}`, `{{[a.b]}}` — which only affects parsing, so
   a data key named `_` is still read normally with `{{_}}`.
-  Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the
-  zero-based index, `{{@index1}}` the one-based index (mirroring
+  Inside `{{#each}}`, `{{this}}` (or its shorthand `{{.}}`) is the current item,
+  `{{@index}}` the zero-based index, `{{@index1}}` the one-based index (mirroring
   StringTemplate's `i0`/`i`), and `{{@key}}` the key when iterating a map.
   `{{../name}}` reaches the parent (top-level assign) scope.
 

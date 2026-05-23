@@ -121,7 +121,7 @@ Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 
 Bare identifiers resolve to assigns, so `{{name}}` reads the `:name` assign.
 Keys that are not valid identifiers — dashes, spaces, dots, leading digits — use bracketed literal segments: `{{[first-name]}}`, `{{user.[first-name]}}`, `{{[a.b]}}`. Bare names may use any case (`{{Item1}}`). Brackets only affect parsing; a data key named `_` is still read normally with `{{_}}` or `{{[_]}}`.
-Inside `{{#each}}`, `{{this}}` is the current item, `{{@index}}` the zero-based index, `{{@index1}}` the one-based index (mirroring StringTemplate's `i0`/`i`), and `{{@key}}` the key when iterating a map.
+Inside `{{#each}}`, `{{this}}` (or its shorthand `{{.}}`) is the current item, `{{@index}}` the zero-based index, `{{@index1}}` the one-based index (mirroring StringTemplate's `i0`/`i`), and `{{@key}}` the key when iterating a map.
 `{{../name}}` reaches the parent (top-level assign) scope.
 A zero-arity function assign is a **computed getter** (ST4-style): `assigns = %{full_name: fn -> user.first <> " " <> user.last end}` makes `{{full_name}}` (or a leaf `{{user.full_name}}`) render the computed value. The template can't pass arguments, so it stays declarative; the result is escaped like any value. Getters are an Elixir-assigns convenience (JSON/CLI data can't carry functions) and should be pure.
 The literals `true`, `false`, and `null` are recognized; `nil` is accepted as an alias for `null` (and canonicalized to `null` by the formatter) for JSON/YAML familiarity.
