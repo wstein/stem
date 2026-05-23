@@ -14,6 +14,12 @@ defmodule Stem.GettersTest do
     Stem.Unsafe.eval_string(template, assigns: assigns, transformers: transformers)
   end
 
+  defp vm_render(template, assigns, transformers \\ %{}) do
+    {:ok, ast} = Stem.Parser.parse_with_spans(template)
+    program = Stem.Bytecode.compile(ast)
+    Stem.Bytecode.VM.render(program, assigns: assigns, transformers: transformers)
+  end
+
   describe "top-level computed getters (compiled backend)" do
     test "a zero-arity function assign is invoked and rendered" do
       assert render("{{full_name}}", %{full_name: fn -> "Ada Lovelace" end}) == "Ada Lovelace"
@@ -52,16 +58,29 @@ defmodule Stem.GettersTest do
     end
   end
 
+  describe "top-level computed getters (bytecode VM)" do
+    test "the VM invokes a zero-arity getter assign" do
+      assert vm_render("{{full_name}}", %{full_name: fn -> "Ada" end}) == "Ada"
+    end
+
+    test "the VM evaluates a getter for block truthiness and iteration" do
+      assert vm_render("{{#if on}}Y{{/if}}", %{on: fn -> true end}) == "Y"
+      assert vm_render("{{#each xs}}{{this}}{{/each}}", %{xs: fn -> [1, 2] end}) == "12"
+    end
+  end
+
   describe "getters at a dotted-path leaf / consumption points" do
     test "a leaf getter on a nested map is invoked when rendered" do
       assigns = %{user: %{full_name: fn -> "Ada Lovelace" end}}
       assert render("{{user.full_name}}", assigns) == "Ada Lovelace"
+      assert vm_render("{{user.full_name}}", assigns) == "Ada Lovelace"
     end
 
     test "a leaf getter feeds a transformer pipeline" do
       assigns = %{user: %{name: fn -> "ada" end}}
       strings = Stem.Transformers.Strings.all()
       assert render("{{user.name |> upcase}}", assigns, strings) == "ADA"
+      assert vm_render("{{user.name |> upcase}}", assigns, strings) == "ADA"
     end
 
     test "a leaf getter is evaluated for block truthiness" do
