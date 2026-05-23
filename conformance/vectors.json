@@ -14,6 +14,8 @@
   {"data":{},"escape":"html","expected":"x==y","name":"null literal fallback","template":"x={{default missing null}}=y","transformers":["minimum"]},
   {"data":{"x":"quote \" here"},"escape":"json","expected":"quote \\\" here","name":"json escape mode","template":"{{x}}","transformers":[]},
   {"data":{"n":42},"escape":"html","expected":"n=42","name":"numeric assign","template":"n={{n}}","transformers":[]},
+  {"data":{"count":0},"escape":"html","expected":"none","name":"integer zero is falsey","template":"{{#if count}}some{{else}}none{{/if}}","transformers":[]},
+  {"data":{"ratio":0.0},"escape":"html","expected":"some","name":"float zero is truthy","template":"{{#if ratio}}some{{else}}none{{/if}}","transformers":[]},
   {"data":{"active":true},"escape":"html","expected":"on","name":"if/else true","template":"{{#if active}}on{{else}}off{{/if}}","transformers":[]},
   {"data":{"active":false},"escape":"html","expected":"off","name":"if/else false","template":"{{#if active}}on{{else}}off{{/if}}","transformers":[]},
   {"data":{"active":false},"escape":"html","expected":"hidden","name":"unless","template":"{{#unless active}}hidden{{/unless}}","transformers":[]},

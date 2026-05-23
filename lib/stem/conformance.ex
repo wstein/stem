@@ -103,6 +103,18 @@ defmodule Stem.Conformance do
     },
     %{name: "numeric assign", template: "n={{n}}", data: %{n: 42}, transformers: []},
     %{
+      name: "integer zero is falsey",
+      template: "{{#if count}}some{{else}}none{{/if}}",
+      data: %{count: 0},
+      transformers: []
+    },
+    %{
+      name: "float zero is truthy",
+      template: "{{#if ratio}}some{{else}}none{{/if}}",
+      data: %{ratio: 0.0},
+      transformers: []
+    },
+    %{
       name: "if/else true",
       template: "{{#if active}}on{{else}}off{{/if}}",
       data: %{active: true},

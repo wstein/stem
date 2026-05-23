@@ -88,11 +88,17 @@ enum Op {
         base: Box<Op>,
         segments: Vec<String>,
     },
-    // Keyword args (the wire format's "kwargs") are only used by host
-    // transformers, which the native PoC does not run, so they are ignored.
     Call {
         name: String,
         args: Vec<Op>,
+        // The BEAM lowers keyword args to Elixir `{key, value}` tuples appended
+        // to the flat arg list — a shape no native transformer consumes and a
+        // JSON value cannot represent. They are captured here (not silently
+        // dropped) so the pre-check can refuse a program that carries any,
+        // rather than render with the keywords missing. Optional on the wire so
+        // older programs without the field still deserialize.
+        #[serde(default)]
+        kwargs: HashMap<String, Op>,
     },
 }
 
@@ -239,6 +245,15 @@ fn parse_partials(value: Option<&Value>) -> compile::Partials {
 }
 
 fn render_input(input: &Input, resolve: GetterResolver) -> String {
+    // Refuse — never panic — on any feature this core cannot render with
+    // byte-parity: escape modes beyond none/html/xml/json, transformers outside
+    // the parity stdlib, and keyword arguments. Returning a structured error
+    // here turns an input-triggered abort (a DoS in the browser/WASM build) into
+    // a recoverable message.
+    if let Some(feature) = unsupported_feature(&input.program.instructions) {
+        return format!("stem_native error: unsupported {feature} in this native PoC");
+    }
+
     let ctx = Ctx {
         root: input.data.clone(),
         this: Value::Null,
@@ -250,6 +265,104 @@ fn render_input(input: &Input, resolve: GetterResolver) -> String {
     };
 
     render(&input.program.instructions, &ctx)
+}
+
+// Escape modes the native renderer implements with byte-parity to the BEAM.
+const SUPPORTED_ESCAPES: &[&str] = &["none", "html", "xml", "json"];
+
+// Transformers the native `call` dispatcher implements with byte-parity. Kept
+// in sync with the match arms in `call`; a name outside this set is refused
+// rather than panicked on.
+const SUPPORTED_TRANSFORMERS: &[&str] = &[
+    "upcase",
+    "downcase",
+    "trim",
+    "capitalize",
+    "replace",
+    "truncate",
+    "starts_with",
+    "ends_with",
+    "reverse",
+    "take",
+    "drop",
+    "slice",
+    "first",
+    "default",
+    "join",
+    "lookup",
+    "escape_html",
+    "escape_json",
+    "map",
+    "filter",
+    "sort",
+    "sort_by",
+    "group_by",
+    "compact",
+    "uniq",
+    "flatten",
+    "contains",
+    "empty?",
+    "present?",
+];
+
+// Walks a program for the first construct the native core cannot render with
+// byte-parity, returning a human description (no source span: the render input
+// carries the compiled program, not the original template).
+fn unsupported_feature(instrs: &[Instr]) -> Option<String> {
+    instrs.iter().find_map(instr_unsupported)
+}
+
+fn instr_unsupported(instr: &Instr) -> Option<String> {
+    match instr {
+        Instr::Text { .. } => None,
+        Instr::Emit { value, escape } => {
+            if !SUPPORTED_ESCAPES.contains(&escape.as_str()) {
+                Some(format!("escape mode '{escape}'"))
+            } else {
+                op_unsupported(value)
+            }
+        }
+        Instr::If {
+            cond,
+            then,
+            otherwise,
+        } => op_unsupported(cond)
+            .or_else(|| unsupported_feature(then))
+            .or_else(|| unsupported_feature(otherwise)),
+        Instr::Each {
+            subject,
+            body,
+            otherwise,
+            ..
+        }
+        | Instr::With {
+            subject,
+            body,
+            otherwise,
+            ..
+        } => op_unsupported(subject)
+            .or_else(|| unsupported_feature(body))
+            .or_else(|| unsupported_feature(otherwise)),
+        Instr::Scope { base, hash, body } => op_unsupported(base)
+            .or_else(|| hash.values().find_map(op_unsupported))
+            .or_else(|| unsupported_feature(body)),
+    }
+}
+
+fn op_unsupported(op: &Op) -> Option<String> {
+    match op {
+        Op::Call { name, args, kwargs } => {
+            if !SUPPORTED_TRANSFORMERS.contains(&name.as_str()) {
+                Some(format!("transformer '{name}'"))
+            } else if !kwargs.is_empty() {
+                Some(format!("keyword arguments to transformer '{name}'"))
+            } else {
+                args.iter().find_map(op_unsupported)
+            }
+        }
+        Op::Get { base, .. } => op_unsupported(base),
+        _ => None,
+    }
 }
 
 fn render(instructions: &[Instr], ctx: &Ctx) -> String {
@@ -427,7 +540,9 @@ fn eval(op: &Op, ctx: &Ctx) -> Value {
             }
             value
         }
-        Op::Call { name, args } => {
+        // Keyword args are refused up front by `unsupported_feature`, so a Call
+        // reaching the VM only has positional args.
+        Op::Call { name, args, .. } => {
             let positional: Vec<Value> = args.iter().map(|a| eval(a, ctx)).collect();
             call(name, &positional)
         }
@@ -491,7 +606,10 @@ fn truthy(value: &Value) -> bool {
         Value::String(s) => !s.is_empty(),
         Value::Array(a) => !a.is_empty(),
         Value::Object(o) => !o.is_empty(),
-        Value::Number(n) => n.as_f64().map(|f| f != 0.0).unwrap_or(true),
+        // Only the integer 0 is falsey; the float 0.0 is truthy, matching
+        // `Stem.Runtime.is_truthy/1` whose falsey set contains the integer 0 but
+        // not 0.0.
+        Value::Number(n) => !(n.as_i64() == Some(0) || n.as_u64() == Some(0)),
     }
 }
 
@@ -534,12 +652,6 @@ fn each_entries(value: &Value) -> Vec<(Value, Value)> {
 fn escape_with(s: &str, mode: &str) -> String {
     match mode {
         "none" => s.to_string(),
-        "html" => s
-            .replace('&', "&amp;")
-            .replace('<', "&lt;")
-            .replace('>', "&gt;")
-            .replace('"', "&quot;")
-            .replace('\'', "&#39;"),
         "xml" => s
             .replace('&', "&amp;")
             .replace('<', "&lt;")
@@ -551,15 +663,25 @@ fn escape_with(s: &str, mode: &str) -> String {
             .replace('\n', "\\n")
             .replace('\r', "\\r")
             .replace('\t', "\\t"),
-        other => panic!("stem_native: unsupported escape mode '{other}'"),
+        // "html" and — defensively — any mode the render-time pre-check did not
+        // already reject fall back to HTML escaping, the secure default, so a
+        // missed mode can never emit raw markup.
+        _ => s
+            .replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+            .replace('\'', "&#39;"),
     }
 }
 
 // ── Transformer stdlib (mirror Stem.Transformers) ───────────────────────────
 //
 // Implements the built-in transformers that can match the BEAM byte-for-byte.
-// Deliberately excluded (no byte-parity is possible, so they panic loudly and
-// are kept out of the differential fuzzer):
+// The set is mirrored in `SUPPORTED_TRANSFORMERS`; `unsupported_feature` refuses
+// any program referencing a name outside it, so dispatch here never has to
+// panic. Deliberately excluded (no byte-parity is possible, so they are kept out
+// of the differential fuzzer):
 //   * json / inspect — Elixir-specific serialization formatting and map key
 //     ordering;
 //   * i18n `t` — delegates to a host-provided translator (a host closure), so
@@ -629,9 +751,10 @@ fn call(name: &str, args: &[Value]) -> Value {
         "empty?" => Value::from(!present(&args[0])),
         "present?" => Value::from(present(&args[0])),
 
-        other => {
-            panic!("stem_native: transformer '{other}' is not byte-parity capable in this PoC")
-        }
+        // Unreachable: `unsupported_feature` rejects any name outside
+        // `SUPPORTED_TRANSFORMERS` before rendering begins. Returns null rather
+        // than panicking so an out-of-sync allowlist can never abort the engine.
+        _ => Value::Null,
     }
 }
 
@@ -1094,5 +1217,93 @@ mod scope_tests {
             json!({ "greeting": "hi" }),
         );
         assert_eq!(out, "[]");
+    }
+}
+
+#[cfg(test)]
+mod guard_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn render(program: Value, data: Value) -> String {
+        let request = json!({ "program": { "instructions": program }, "data": data });
+        handle(&request.to_string())
+    }
+
+    #[test]
+    fn unsupported_escape_mode_is_a_structured_error_not_a_panic() {
+        let out = render(
+            json!([{ "t": "emit", "value": { "t": "assign", "name": "x" }, "escape": "url" }]),
+            json!({ "x": "a" }),
+        );
+        assert!(out.contains("stem_native error"), "got: {out}");
+        assert!(out.contains("escape mode 'url'"), "got: {out}");
+    }
+
+    #[test]
+    fn unsupported_transformer_is_a_structured_error_not_a_panic() {
+        let out = render(
+            json!([{
+                "t": "emit",
+                "value": { "t": "call", "name": "json", "args": [{ "t": "assign", "name": "x" }], "kwargs": {} },
+                "escape": "html"
+            }]),
+            json!({ "x": "a" }),
+        );
+        assert!(out.contains("transformer 'json'"), "got: {out}");
+    }
+
+    #[test]
+    fn keyword_arguments_are_refused_not_dropped() {
+        let out = render(
+            json!([{
+                "t": "emit",
+                "value": {
+                    "t": "call", "name": "truncate",
+                    "args": [{ "t": "assign", "name": "x" }, { "t": "lit", "value": 5 }],
+                    "kwargs": { "omission": { "t": "lit", "value": "…" } }
+                },
+                "escape": "html"
+            }]),
+            json!({ "x": "abcdefgh" }),
+        );
+        assert!(
+            out.contains("keyword arguments to transformer 'truncate'"),
+            "got: {out}"
+        );
+    }
+
+    #[test]
+    fn missing_kwargs_field_still_deserializes() {
+        // Programs predating the kwargs field omit it; serde defaults it empty.
+        let out = render(
+            json!([{
+                "t": "emit",
+                "value": { "t": "call", "name": "upcase", "args": [{ "t": "assign", "name": "x" }] },
+                "escape": "html"
+            }]),
+            json!({ "x": "hi" }),
+        );
+        assert_eq!(out, "HI");
+    }
+
+    fn render_if(data: Value) -> String {
+        render(
+            json!([{
+                "t": "if",
+                "cond": { "t": "assign", "name": "x" },
+                "then": [{ "t": "text", "text": "Y" }],
+                "else": [{ "t": "text", "text": "N" }]
+            }]),
+            data,
+        )
+    }
+
+    #[test]
+    fn float_zero_is_truthy_but_integer_zero_is_falsey() {
+        assert_eq!(render_if(json!({ "x": 0.0 })), "Y");
+        assert_eq!(render_if(json!({ "x": 0 })), "N");
+        assert_eq!(render_if(json!({ "x": 0.5 })), "Y");
+        assert_eq!(render_if(json!({ "x": 3 })), "Y");
     }
 }
