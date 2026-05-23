@@ -80,7 +80,10 @@ defmodule Stem do
 
     * `:warn_on_falsy_coercion` - when `true`, Stem warns at render time when
       values like `0`, `""`, `[]`, or `%{}` are coerced to false under
-      Handlebars truthiness. Defaults to `false`.
+      Handlebars truthiness. When not given, it falls back to
+      `Application.get_env(:stem, :warn_on_falsy_coercion, false)`, so projects
+      can enable it for development and test with
+      `config :stem, warn_on_falsy_coercion: true`.
 
     * `:contract` - a keyword list like `[required: [:title], optional:
       [:subtitle]]` used to validate required assigns before rendering.

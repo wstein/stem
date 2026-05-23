@@ -94,6 +94,23 @@ defmodule Stem.RuntimeTest do
     assert stderr =~ "t:3: condition coerces \"\" to falsy under Stem truthiness"
   end
 
+  test "the compiler defaults warn_on_falsy_coercion from application env" do
+    Application.put_env(:stem, :warn_on_falsy_coercion, true)
+    on_exit(fn -> Application.delete_env(:stem, :warn_on_falsy_coercion) end)
+
+    stderr =
+      capture_io(:stderr, fn ->
+        # Unique template text avoids the compiled-module cache returning a
+        # module built before the application env was set.
+        assert Stem.TestTemplate.eval_string(
+                 "s2-app-env{{#if v}}t{{else}}f{{/if}}",
+                 assigns: [v: 0]
+               ) == "s2-app-envf"
+      end)
+
+    assert stderr =~ "coerces 0 to falsy under Stem truthiness"
+  end
+
   test "warn_on_falsy_coercion leaves truthy values untouched" do
     assert Stem.Runtime.warn_on_falsy_coercion("value", warn_on_falsy_coercion: true) == "value"
   end

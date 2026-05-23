@@ -22,7 +22,12 @@ defmodule Stem.Compiler do
       file: opts[:file] || "nofile",
       warn: Keyword.get(opts, :warn_on_missing_assigns, false),
       diagnostics: Keyword.get(opts, :warn_on_diagnostics, false),
-      warn_falsy: Keyword.get(opts, :warn_on_falsy_coercion, false),
+      warn_falsy:
+        Keyword.get(
+          opts,
+          :warn_on_falsy_coercion,
+          Application.get_env(:stem, :warn_on_falsy_coercion, false)
+        ),
       escape: Keyword.get(opts, :escape, :html),
       in_each: false,
       locals: %{},
