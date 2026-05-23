@@ -154,4 +154,22 @@ defmodule Stem.Bytecode.VMTest do
                "<x>Hi Y</x>"
     end
   end
+
+  describe "render/2 literal variable keys" do
+    test "resolves a bracketed literal assign key" do
+      assert render("{{[first-name]}}", assigns: %{:"first-name" => "Ada"}) == "Ada"
+    end
+
+    test "resolves a bracketed literal path segment" do
+      assert render("{{user.[first-name]}}", assigns: %{user: %{:"first-name" => "Grace"}}) ==
+               "Grace"
+    end
+
+    test "resolves an uppercase block param and literal item field" do
+      assert render(
+               "{{#each people as |p _ I1|}}{{I1}}:{{p.[first-name]}} {{/each}}",
+               assigns: %{people: [%{:"first-name" => "Ada"}, %{:"first-name" => "Grace"}]}
+             ) == "1:Ada 2:Grace "
+    end
+  end
 end
