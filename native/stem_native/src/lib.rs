@@ -627,6 +627,11 @@ fn to_string(value: &Value) -> String {
     match value {
         Value::Null => String::new(),
         Value::Bool(b) => b.to_string(),
+        // Integers match the BEAM. Floats are a KNOWN DIVERGENCE (gap G2): the
+        // BEAM uses Erlang `:erlang.float_to_binary(f, [:short])` (e.g. `1.0e8`),
+        // while serde_json's notation/exponent rules differ. Floats are kept out
+        // of the conformance corpus until this is ported — see the "Known
+        // divergences" section of the Cross-Backend Conformance Spec note.
         Value::Number(n) => n.to_string(),
         Value::String(s) => s.clone(),
         // Lists/maps are never emitted directly by the corpus; render as JSON.
