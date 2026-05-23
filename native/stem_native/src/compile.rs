@@ -17,11 +17,16 @@
 //     `{{else}}` and `as |..|` block params;
 //   * expressions: identifiers, dotted paths, `this`/`this.x`,
 //     `@index`/`@index1`/`@key`, and parent (`../name`) references, with the
-//     same local/`this`/assign scope resolution the BEAM uses.
+//     same local/`this`/assign scope resolution the BEAM uses;
+//   * transformer calls and `|>` pipelines, with positional and `key=value` /
+//     `key: value` keyword args and parenthesised sub-expressions;
+//   * literals: integers, `true`/`false`, `null`/`nil`, and simple
+//     double-quoted strings.
 //
 // Not yet ported (raise a spanned `CompileError`, so the playground shows "not
-// yet supported" rather than miscompiling): transformers and pipelines,
-// literals, partials, regions/yields, comments, and whitespace-control markers.
+// yet supported" rather than miscompiling): single-quoted charlists and
+// escaped/interpolated strings, partials, regions/yields, comments, and
+// whitespace-control markers.
 
 use serde_json::{json, Value};
 use std::collections::HashSet;
