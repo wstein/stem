@@ -308,7 +308,10 @@ fn clone_ctx(ctx: &Ctx) -> Ctx {
 fn eval(op: &Op, ctx: &Ctx) -> Value {
     match op {
         Op::Lit { value } => value.clone(),
-        Op::Assign { name } => ctx.root.get(name).cloned().unwrap_or(Value::Null),
+        Op::Assign { name } => {
+            let fetched = ctx.root.get(name).cloned().unwrap_or(Value::Null);
+            resolve_getter(fetched, &ctx.root)
+        }
         Op::Local { name } => ctx.locals.get(name).cloned().unwrap_or(Value::Null),
         Op::This => ctx.this.clone(),
         Op::Index => Value::from(ctx.index),
@@ -330,7 +333,61 @@ fn eval(op: &Op, ctx: &Ctx) -> Value {
 
 fn get_field(value: &Value, segment: &str) -> Value {
     match value {
-        Value::Object(map) => map.get(segment).cloned().unwrap_or(Value::Null),
+        Value::Object(map) => {
+            let fetched = map.get(segment).cloned().unwrap_or(Value::Null);
+            resolve_getter(fetched, value)
+        }
+        _ => Value::Null,
+    }
+}
+
+// ── Per-host computed getters ────────────────────────────────────────────────
+//
+// A field whose wire value is the sentinel `{"$getter": "name"}` is *computed*:
+// the engine invokes the host getter `name`, passing the field's parent object
+// as the ST4 "self". The getter is authored in the target language (here, Rust)
+// and registered with the native engine, so it is the native analogue of the
+// BEAM backend's zero-arity assign getters — but no closure crosses the wire.
+//
+// Because the getter body lives in the host, not the data, this mechanism has no
+// cross-backend byte-parity and deliberately stays out of the conformance corpus;
+// it is covered by the native-only tests below.
+
+const GETTER_SENTINEL: &str = "$getter";
+
+// Resolve a freshly fetched field value: if it is a getter sentinel, run the
+// named host getter against `parent` (its "self"); otherwise return it unchanged.
+fn resolve_getter(value: Value, parent: &Value) -> Value {
+    if let Value::Object(map) = &value {
+        if map.len() == 1 {
+            if let Some(Value::String(name)) = map.get(GETTER_SENTINEL) {
+                return run_getter(name, parent);
+            }
+        }
+    }
+    value
+}
+
+// The built-in host-getter registry. A real embedder registers its own getters;
+// the PoC ships a small, illustrative set so the wire/render path is testable.
+// An unknown getter resolves to null, mirroring a missing assign.
+fn run_getter(name: &str, self_obj: &Value) -> Value {
+    match name {
+        "full_name" => {
+            let first = to_string(&get_field(self_obj, "first"));
+            let last = to_string(&get_field(self_obj, "last"));
+            Value::from(format!("{first} {last}").trim().to_string())
+        }
+        "initials" => {
+            let initial = |field: &str| {
+                to_string(&get_field(self_obj, field))
+                    .chars()
+                    .next()
+                    .map(|c| c.to_uppercase().to_string())
+                    .unwrap_or_default()
+            };
+            Value::from(format!("{}{}", initial("first"), initial("last")))
+        }
         _ => Value::Null,
     }
 }
@@ -720,5 +777,102 @@ fn value_cmp(a: &Value, b: &Value) -> std::cmp::Ordering {
         (Value::String(x), Value::String(y)) => x.cmp(y),
         (Value::Bool(x), Value::Bool(y)) => x.cmp(y),
         _ => rank(a).cmp(&rank(b)),
+    }
+}
+
+#[cfg(test)]
+mod getter_tests {
+    use super::*;
+    use serde_json::json;
+
+    fn render(program: Value, data: Value) -> String {
+        let request = json!({ "program": { "instructions": program }, "data": data });
+        handle(&request.to_string())
+    }
+
+    fn emit_assign(name: &str) -> Value {
+        json!([{ "t": "emit", "value": { "t": "assign", "name": name }, "escape": "html" }])
+    }
+
+    #[test]
+    fn top_level_getter_is_invoked_with_root_as_self() {
+        let out = render(
+            emit_assign("full_name"),
+            json!({ "first": "Ada", "last": "Lovelace", "full_name": { "$getter": "full_name" } }),
+        );
+        assert_eq!(out, "Ada Lovelace");
+    }
+
+    #[test]
+    fn leaf_getter_receives_its_parent_object_as_self() {
+        let program = json!([{
+            "t": "emit",
+            "value": { "t": "get", "base": { "t": "assign", "name": "user" }, "segments": ["full_name"] },
+            "escape": "html"
+        }]);
+        let out = render(
+            program,
+            json!({ "user": { "first": "Grace", "last": "Hopper", "full_name": { "$getter": "full_name" } } }),
+        );
+        assert_eq!(out, "Grace Hopper");
+    }
+
+    #[test]
+    fn getter_result_is_html_escaped_like_any_value() {
+        let out = render(
+            emit_assign("full_name"),
+            json!({ "first": "<b>", "last": "x", "full_name": { "$getter": "full_name" } }),
+        );
+        assert_eq!(out, "&lt;b&gt; x");
+    }
+
+    #[test]
+    fn registry_dispatches_distinct_getters() {
+        let out = render(
+            emit_assign("initials"),
+            json!({ "first": "ada", "last": "lovelace", "initials": { "$getter": "initials" } }),
+        );
+        assert_eq!(out, "AL");
+    }
+
+    #[test]
+    fn unknown_getter_resolves_to_empty() {
+        let out = render(
+            emit_assign("mystery"),
+            json!({ "mystery": { "$getter": "no_such" } }),
+        );
+        assert_eq!(out, "");
+    }
+
+    #[test]
+    fn getter_drives_block_truthiness() {
+        let program = json!([{
+            "t": "if",
+            "cond": { "t": "assign", "name": "full_name" },
+            "then": [{ "t": "text", "text": "Y" }],
+            "else": []
+        }]);
+        let on = render(
+            program.clone(),
+            json!({ "first": "A", "last": "B", "full_name": { "$getter": "full_name" } }),
+        );
+        assert_eq!(on, "Y");
+
+        let off = render(
+            program,
+            json!({ "first": "", "last": "", "full_name": { "$getter": "full_name" } }),
+        );
+        assert_eq!(off, "");
+    }
+
+    #[test]
+    fn plain_object_field_is_not_treated_as_a_getter() {
+        let program = json!([{
+            "t": "emit",
+            "value": { "t": "get", "base": { "t": "assign", "name": "user" }, "segments": ["name"] },
+            "escape": "html"
+        }]);
+        let out = render(program, json!({ "user": { "name": "plain" } }));
+        assert_eq!(out, "plain");
     }
 }
