@@ -31,7 +31,12 @@ the host, escaping done natively.
 - `run.mjs` — a Node WASI runner that loads the wasm module and forwards stdio.
 - `web/` — the browser demo: `stem.mjs` (glue), `index.html` (live page),
   `examples.json` (templates precompiled on the BEAM), `validate.mjs` (a
-  browserless check of the no-WASI module + glue).
+  browserless check of the no-WASI module + glue). The page is a multi-tab
+  editor: the first tab is the rendered entry template and the rest are
+  partials, pulled in with `{{> name}}` and compiled fully in the browser.
+  `compile(source, partials)` sends `{ "compile": source, "partials": {name:
+  source} }`; the engine expands partials inline with the same recursion guard
+  as `Stem.Parser`.
 
 ## Build
 
