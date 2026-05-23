@@ -58,7 +58,7 @@ The task compiles each conformance vector to bytecode, feeds it to the engine,
 and asserts the output matches `Stem.compile_string/2`. Expected result:
 
 ```text
-Conformance: 27/27 vectors match the BEAM reference byte-for-byte.
+Conformance: 28/28 vectors match the BEAM reference byte-for-byte.
 ```
 
 ## Differential fuzz (BEAM = oracle)
@@ -88,6 +88,37 @@ they panic loudly and are excluded from the fuzzer):
 Cased transforms (`upcase`/`downcase`/`capitalize`) match for ASCII; the fuzzer
 restricts inputs accordingly.
 
+## Per-host computed getters
+
+The BEAM backend lets an assign be a zero-arity function — a **computed getter**
+that is invoked lazily when rendered (see the project README). A closure can't
+cross the wire as JSON, so the native engine offers the same capability with a
+different mechanism: a field whose data value is the sentinel
+`{"$getter": "<name>"}` is *computed* by a getter authored in the host language
+(here, Rust) and registered with the engine. The getter is invoked with the
+field's **parent object** as its "self", mirroring ST4 getter semantics:
+
+```sh
+echo '{"program":{"version":"stem-bc/v1","instructions":[
+  {"t":"emit","escape":"html","value":{
+    "t":"get","base":{"t":"assign","name":"user"},"segments":["full_name"]}}]},
+  "data":{"user":{"first":"Ada","last":"Lovelace","full_name":{"$getter":"full_name"}}}}' \
+| node run.mjs stem_native/target/wasm32-wasip1/release/stem_native.wasm
+# => Ada Lovelace
+```
+
+Here the host getter `full_name` reads `first`/`last` off the `user` object that
+contains it. Resolution happens at every assign and dotted-path step, so a getter
+works at the top level (`{{full_name}}`, self = the root) and at a nested leaf
+(`{{user.full_name}}`, self = `user`). The result is escaped like any value, and
+an unknown getter resolves to null.
+
+Because the getter body lives in the host, not the data, this has no
+cross-backend byte-parity and is deliberately **out of the conformance corpus**;
+`src/lib.rs` covers it with native-only unit tests. The PoC ships a small
+illustrative registry (`full_name`, `initials`) in `run_getter`; a real embedder
+registers its own.
+
 ## Browser / edge (no WASI)
 
 The same engine compiles to `wasm32-unknown-unknown` and renders in a browser
@@ -100,7 +131,7 @@ cargo build --release --target wasm32-unknown-unknown --lib
 
 # browserless check of the module + glue (Node uses the same WebAssembly API):
 node native/web/validate.mjs
-# => browser glue: 3/3 examples render correctly
+# => browser glue: 4/4 examples render correctly
 
 # live demo (must be served over HTTP so fetch() can load the .wasm):
 python3 -m http.server   # then open http://localhost:8000/native/web/

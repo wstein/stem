@@ -4,6 +4,7 @@ aliases: []
 tags: ['design', 'runtime', 'rationale', 'security']
 ---
 
+
 A zero-arity function assign is auto-invoked during resolution and its result rendered — an ST4-style computed getter that stays declarative because the template can't pass it arguments.
 
 ## What
@@ -21,14 +22,19 @@ A zero-arity function assign is auto-invoked during resolution and its result re
 ## How
 
 - Back a presentation property with a pure 0-arity function in Elixir assigns; reference it by name (`{{full_name}}` or `{{user.full_name}}`).
-- Getters are an **Elixir-assigns convenience**: JSON/YAML can't carry functions, so CLI/`Stem.Unsafe.eval_*` data files and the native (Rust/WASM) path never see them — they are excluded from the conformance corpus ([[Cross-Backend Conformance Spec]]).
+- Getters are an **Elixir-assigns convenience**: JSON/YAML can't carry functions. The native (Rust/WASM) path has its own equivalent (see *Native variant*); BEAM-closure getters stay out of the conformance corpus ([[Cross-Backend Conformance Spec]]).
 - Keep getters pure (Stem can't enforce it) and at the value position: a getter that *returns* an object you then dot into mid-path (or a `this` bound to a function you traverse into) is not auto-invoked mid-traversal — return the final value instead.
+
+## Native variant (per-host getters)
+
+- A closure can't cross the wire, so the native engine uses data, not code: a field valued `{"$getter": "<name>"}` is computed by a getter **authored in the host language** and registered with the engine, invoked with the field's **parent object** as its "self". `{{user.full_name}}` over `{"user": {"first": ..., "last": ..., "full_name": {"$getter": "full_name"}}}` runs `full_name` against the `user` object.
+- In `native/stem_native/src/lib.rs`: `resolve_getter/2` detects the single-key `$getter` sentinel at every assign and dotted-path step (`eval(Op::Assign)`, `get_field`); `run_getter/2` dispatches the host registry. Works top-level (self = root) and at a nested leaf (self = the containing object); result escaped like any value; unknown getter → null. No cross-backend byte-parity (the body lives in the host), so it is out of the corpus — covered by native-only unit tests and the browser demo's `Getter` example.
+
 
 ## Links
 
 - [[Strict Model-View Separation and State Isolation]] - The boundary getters must not cross.
 - [[Handlebars Expression Resolution]] - How `{{name}}`/`{{a.b}}` resolve, where getters hook in.
 - [[HTML Escaping Behavior]] - Getter results are escaped like any value.
-- [[Cross-Backend Conformance Spec]] - Why getters are BEAM-only and out of the wire/native path.
-## Links
-
+- [[Cross-Backend Conformance Spec]] - Why BEAM-closure getters are out of the wire/native path.
+- [[Native Backend Strategy]] - The wire/engine the per-host getter mechanism extends.
