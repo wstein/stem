@@ -63,7 +63,9 @@
     <label>Templates (compiled in-browser)</label>
     <p class="muted" style="margin: 0 0 0.25rem;">
       The first tab is the rendered entry; the rest are partials, pulled in with
-      <code>{{&gt; name}}</code>.
+      <code>{{&gt; name}}</code>. Pass a context with
+      <code>{{&gt; name ctx}}</code> or hash arguments with
+      <code>{{&gt; name key="value"}}</code>.
     </p>
     <div class="row" id="tabs"></div>
     <div class="row" id="partialNameRow" hidden>
