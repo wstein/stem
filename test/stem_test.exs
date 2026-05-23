@@ -159,6 +159,13 @@ defmodule StemTest do
       assert eval("{{#each m}}{{@key}}={{this}}{{/each}}", assigns: [m: %{a: 1}]) == "a=1"
     end
 
+    test "this.field paths resolve the current item inside each" do
+      assigns = [people: [%{name: "Ada", role: "lead"}, %{name: "Grace", role: "dev"}]]
+
+      assert eval("{{#each people}}{{this.name}}:{{this.role}};{{/each}}", assigns: assigns) ==
+               "Ada:lead;Grace:dev;"
+    end
+
     test "each else renders for empty collections" do
       assert eval("{{#each xs}}{{this}}{{else}}empty{{/each}}", assigns: [xs: []]) == "empty"
     end

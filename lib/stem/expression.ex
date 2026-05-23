@@ -179,8 +179,10 @@ defmodule Stem.Expression do
 
   def to_source({:parent, name}, _context), do: "@#{name}"
 
-  def to_source({:path, :this, segments}, _context),
-    do: "this" <> Enum.map_join(segments, &dot_access/1)
+  def to_source({:path, :this, segments}, context) do
+    root = if context.in_each, do: "current", else: "this"
+    root <> Enum.map_join(segments, &dot_access/1)
+  end
 
   def to_source({:path, :implicit, [root | rest]}, context) do
     rest_source = Enum.map_join(rest, &dot_access/1)
