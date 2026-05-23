@@ -28,7 +28,10 @@
 //     double-quoted strings;
 //   * `{{! .. }}` / `{{!-- .. --}}` comments and `{{~ .. ~}}` trim markers.
 //   * `{{> name}}` partials, expanded inline from a caller-supplied
-//     name->source map with the same recursion guard as `Stem.Parser`.
+//     name->source map with the same recursion guard as `Stem.Parser`;
+//     partial arguments `{{> name ctx key=value}}` lower to a `scope`
+//     instruction that rebinds the assigns to the context (or inherited data
+//     context) merged with the hash, mirroring `Stem.Bytecode`.
 //
 // Not yet ported (raise a spanned `CompileError`, so the playground shows "not
 // yet supported" rather than miscompiling): single-quoted charlists and
@@ -131,6 +134,7 @@ enum Token {
     },
     Partial {
         name: String,
+        args: String,
         span: Span,
     },
 }
@@ -289,10 +293,14 @@ fn classify(inner2: &str, triple: bool, span: Span) -> Result<Option<Token>, Com
                 .ok_or_else(|| unsupported(format!("unknown closing tag `{{/{word}}}`"), span))?;
             Ok(Some(Token::Close { kind, span }))
         }
-        '>' => Ok(Some(Token::Partial {
-            name: inner2[1..].trim().to_string(),
-            span,
-        })),
+        '>' => {
+            let rest = inner2[1..].trim();
+            let (name, args) = match rest.split_once(char::is_whitespace) {
+                Some((name, args)) => (name.to_string(), args.trim().to_string()),
+                None => (rest.to_string(), String::new()),
+            };
+            Ok(Some(Token::Partial { name, args, span }))
+        }
         '&' => Err(unsupported(
             "`{{&}}` tags are not yet supported by the native compiler",
             span,
@@ -354,6 +362,15 @@ enum Node {
         name: String,
         span: Span,
     },
+    // A partial invoked with arguments. The body is the expanded partial; the
+    // context/hash establish a fresh scope at render time. Partials without
+    // arguments expand inline and never produce this node.
+    PartialScope {
+        context: Option<Expr>,
+        hash: Vec<(String, Expr)>,
+        body: Vec<Node>,
+        span: Span,
+    },
 }
 
 fn assemble(tokens: Vec<Token>, asm: &mut Asm) -> Result<Vec<Node>, CompileError> {
@@ -394,15 +411,21 @@ fn collect(
                 nodes.push(parse_block(it, kind, &args, span, asm)?);
             }
             Some(Token::Yield { name, span }) => nodes.push(Node::Yield { name, span }),
-            Some(Token::Partial { name, span }) => expand_partial(&name, span, asm, &mut nodes)?,
+            Some(Token::Partial { name, args, span }) => {
+                expand_partial(&name, &args, span, asm, &mut nodes)?
+            }
         }
     }
 }
 
-// Expand `{{> name}}` inline by parsing the partial's source and splicing its
-// nodes, mirroring `Stem.Parser.expand_partial/4` including the recursion guard.
+// Expand `{{> name args}}` inline by parsing the partial's source and splicing
+// its nodes, mirroring `Stem.Parser.expand_partial/5` including the recursion
+// guard. Without arguments the nodes splice directly (inheriting the caller's
+// scope); with arguments they are wrapped in a `PartialScope` node so the
+// context/hash establish a fresh scope at render time.
 fn expand_partial(
     name: &str,
+    args: &str,
     span: Span,
     asm: &mut Asm,
     out: &mut Vec<Node>,
@@ -419,15 +442,54 @@ fn expand_partial(
     }
     match asm.partials.get(name).cloned() {
         Some(source) => {
+            let (context, hash) = parse_partial_args(args, span)?;
             let tokens = tokenize(&source)?;
             asm.stack.push(name.to_string());
             let nodes = assemble(tokens, asm)?;
             asm.stack.pop();
-            out.extend(nodes);
+
+            if context.is_none() && hash.is_empty() {
+                out.extend(nodes);
+            } else {
+                out.push(Node::PartialScope {
+                    context,
+                    hash,
+                    body: nodes,
+                    span,
+                });
+            }
             Ok(())
         }
         None => Err(unsupported(format!("unknown partial '{name}'"), span)),
     }
+}
+
+// Parse a partial's argument string into an optional context expression and the
+// ordered `key=value` hash pairs, mirroring `Stem.Expression.parse_partial_args/1`.
+// The first positional token is the context; a second positional is an error.
+fn parse_partial_args(args: &str, span: Span) -> Result<PartialArgs, CompileError> {
+    let trimmed = args.trim();
+    if trimmed.is_empty() {
+        return Ok((None, Vec::new()));
+    }
+
+    let mut context: Option<Expr> = None;
+    let mut hash: Vec<(String, Expr)> = Vec::new();
+
+    for token in split_whitespace(&scan_top_level(trimmed)) {
+        match parse_transformer_arg(&token, span)? {
+            Arg::Keyword(key, value) => hash.push((key, value)),
+            Arg::Positional(expr) if context.is_none() => context = Some(expr),
+            Arg::Positional(_) => {
+                return Err(unsupported(
+                    "partials accept at most one context argument before key=value pairs",
+                    span,
+                ))
+            }
+        }
+    }
+
+    Ok((context, hash))
 }
 
 fn parse_block(
@@ -613,6 +675,10 @@ enum Arg {
     Positional(Expr),
     Keyword(String, Expr),
 }
+
+// A partial's parsed arguments: an optional context expression and the ordered
+// `key=value` hash pairs.
+type PartialArgs = (Option<Expr>, Vec<(String, Expr)>);
 
 struct Stage {
     name: String,
@@ -1269,6 +1335,34 @@ fn lower_node<'a>(
                 None => Ok(Vec::new()),
             }
         }
+        // A partial scope rebinds the assigns to the context (or, when absent,
+        // the caller's current data context) merged with the hash, and lowers
+        // its body under a fresh root scope — mirroring `Stem.Bytecode`'s
+        // `:scope` instruction.
+        Node::PartialScope {
+            context,
+            hash,
+            body,
+            span,
+        } => {
+            let base = match context {
+                Some(expr) => lower_value(expr, scope, *span)?,
+                None if scope.in_each => this(),
+                None => assigns(),
+            };
+
+            let mut hash_map = serde_json::Map::new();
+            for (key, value) in hash {
+                hash_map.insert(key.clone(), lower_value(value, scope, *span)?);
+            }
+
+            single(json!({
+                "t": "scope",
+                "base": base,
+                "hash": hash_map,
+                "body": lower_nodes(body, &Scope::root(), regions, stack)?,
+            }))
+        }
     }
 }
 
@@ -1350,6 +1444,10 @@ fn lower_call(
 
 fn assign(name: &str) -> Value {
     json!({ "t": "assign", "name": name })
+}
+
+fn assigns() -> Value {
+    json!({ "t": "assigns" })
 }
 
 fn local(name: &str) -> Value {
@@ -1539,6 +1637,63 @@ mod tests {
         )
         .unwrap();
         assert_eq!(got, want);
+    }
+
+    #[test]
+    fn partial_context_argument_lowers_to_scope() {
+        let mut partials = Partials::new();
+        partials.insert("card".into(), "{{name}}".into());
+        let got = compile_to_wire("{{> card user}}", &partials).expect("compiles");
+        let want: Value = serde_json::from_str(
+            r#"{"instructions":[{"base":{"name":"user","t":"assign"},"body":[{"escape":"html","t":"emit","value":{"name":"name","t":"assign"}}],"hash":{},"t":"scope"}],"version":"stem-bc/v1"}"#,
+        )
+        .unwrap();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn partial_hash_argument_inherits_assigns() {
+        let mut partials = Partials::new();
+        partials.insert("badge".into(), "{{label}}".into());
+        let got = compile_to_wire(r#"{{> badge label="VIP"}}"#, &partials).expect("compiles");
+        let want: Value = serde_json::from_str(
+            r#"{"instructions":[{"base":{"t":"assigns"},"body":[{"escape":"html","t":"emit","value":{"name":"label","t":"assign"}}],"hash":{"label":{"t":"lit","value":"VIP"}},"t":"scope"}],"version":"stem-bc/v1"}"#,
+        )
+        .unwrap();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn partial_context_inside_each_uses_this() {
+        let mut partials = Partials::new();
+        partials.insert("card".into(), "{{name}}".into());
+        let got = compile_to_wire("{{#each users}}{{> card this}}{{/each}}", &partials)
+            .expect("compiles");
+        let want: Value = serde_json::from_str(
+            r#"{"instructions":[{"body":[{"base":{"t":"this"},"body":[{"escape":"html","t":"emit","value":{"name":"name","t":"assign"}}],"hash":{},"t":"scope"}],"else":[],"params":[],"subject":{"name":"users","t":"assign"},"t":"each"}],"version":"stem-bc/v1"}"#,
+        )
+        .unwrap();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn partial_context_and_hash_combine() {
+        let mut partials = Partials::new();
+        partials.insert("card".into(), "{{name}}".into());
+        let got = compile_to_wire(r#"{{> card user role="admin"}}"#, &partials).expect("compiles");
+        let want: Value = serde_json::from_str(
+            r#"{"instructions":[{"base":{"name":"user","t":"assign"},"body":[{"escape":"html","t":"emit","value":{"name":"name","t":"assign"}}],"hash":{"role":{"t":"lit","value":"admin"}},"t":"scope"}],"version":"stem-bc/v1"}"#,
+        )
+        .unwrap();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn partial_rejects_two_context_arguments() {
+        let mut partials = Partials::new();
+        partials.insert("card".into(), "x".into());
+        let err = compile_to_wire("{{> card a b}}", &partials).unwrap_err();
+        assert!(err.message.contains("at most one context argument"));
     }
 
     #[test]

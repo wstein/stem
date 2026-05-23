@@ -60,6 +60,11 @@ enum Instr {
         #[serde(rename = "else")]
         otherwise: Vec<Instr>,
     },
+    Scope {
+        base: Op,
+        hash: HashMap<String, Op>,
+        body: Vec<Instr>,
+    },
 }
 
 #[derive(Deserialize)]
@@ -74,6 +79,7 @@ enum Op {
     Local {
         name: String,
     },
+    Assigns,
     This,
     Index,
     Index1,
@@ -309,6 +315,33 @@ fn exec(instr: &Instr, ctx: &Ctx, out: &mut String) {
                 out.push_str(&render(otherwise, ctx));
             }
         }
+
+        Instr::Scope { base, hash, body } => {
+            out.push_str(&render(body, &scope_context(ctx, base, hash)));
+        }
+    }
+}
+
+// Build a partial's render context: the base (context arg, or the caller's
+// current data context) coerced to an object, merged with the evaluated hash,
+// with the block-scoped state reset. Mirrors `Stem.Bytecode.VM`'s `:scope`.
+fn scope_context(ctx: &Ctx, base: &Op, hash: &HashMap<String, Op>) -> Ctx {
+    let mut scope = match eval(base, ctx) {
+        Value::Object(map) => map,
+        _ => serde_json::Map::new(),
+    };
+    for (key, value_op) in hash {
+        scope.insert(key.clone(), eval(value_op, ctx));
+    }
+
+    Ctx {
+        root: Value::Object(scope),
+        this: Value::Null,
+        index: 0,
+        key: Value::Null,
+        in_each: false,
+        locals: HashMap::new(),
+        resolve: ctx.resolve,
     }
 }
 
@@ -382,6 +415,7 @@ fn eval(op: &Op, ctx: &Ctx) -> Value {
             resolve_getter(fetched, &ctx.root, ctx.resolve)
         }
         Op::Local { name } => ctx.locals.get(name).cloned().unwrap_or(Value::Null),
+        Op::Assigns => ctx.root.clone(),
         Op::This => ctx.this.clone(),
         Op::Index => Value::from(ctx.index),
         Op::Index1 => Value::from(ctx.index + 1),
@@ -982,5 +1016,83 @@ mod getter_tests {
             demo_getters,
         );
         assert_eq!(out, "plain");
+    }
+}
+
+#[cfg(test)]
+mod scope_tests {
+    use super::*;
+    use serde_json::json;
+
+    // Compile a template (with partials) to wire, then render it against data —
+    // the full native pipeline the playground uses.
+    fn render_template(source: &str, partials: &[(&str, &str)], data: Value) -> String {
+        let mut map = compile::Partials::new();
+        for (name, src) in partials {
+            map.insert((*name).into(), (*src).into());
+        }
+        let program = compile::compile_to_wire(source, &map).expect("compiles");
+        let request = json!({ "program": program, "data": data });
+        handle(&request.to_string())
+    }
+
+    #[test]
+    fn context_argument_sets_the_partial_scope() {
+        let out = render_template(
+            "{{> card user}}",
+            &[("card", "Name: {{name}}")],
+            json!({ "user": { "name": "Nina" } }),
+        );
+        assert_eq!(out, "Name: Nina");
+    }
+
+    #[test]
+    fn hash_arguments_are_available_by_name() {
+        let out = render_template(
+            r#"{{> badge label="VIP"}}"#,
+            &[("badge", "[{{label}}]")],
+            json!({}),
+        );
+        assert_eq!(out, "[VIP]");
+    }
+
+    #[test]
+    fn hash_arguments_override_context_keys() {
+        let out = render_template(
+            r#"{{> card user name="Override"}}"#,
+            &[("card", "{{name}}")],
+            json!({ "user": { "name": "Nina" } }),
+        );
+        assert_eq!(out, "Override");
+    }
+
+    #[test]
+    fn context_argument_works_inside_each() {
+        let out = render_template(
+            "{{#each users}}{{> card this}}{{/each}}",
+            &[("card", "[{{name}}]")],
+            json!({ "users": [{ "name": "A" }, { "name": "B" }] }),
+        );
+        assert_eq!(out, "[A][B]");
+    }
+
+    #[test]
+    fn hash_combines_with_inherited_caller_scope() {
+        let out = render_template(
+            r#"{{> line label="Total"}}"#,
+            &[("line", "{{label}}: {{amount}}")],
+            json!({ "amount": 42 }),
+        );
+        assert_eq!(out, "Total: 42");
+    }
+
+    #[test]
+    fn scalar_context_argument_yields_an_empty_scope() {
+        let out = render_template(
+            "{{> card greeting}}",
+            &[("card", "[{{name}}]")],
+            json!({ "greeting": "hi" }),
+        );
+        assert_eq!(out, "[]");
     }
 }
