@@ -646,7 +646,7 @@ fn parse_structured(t: &str, span: Span) -> Result<Expr, CompileError> {
         "@index" => Ok(Expr::Index0),
         "@index1" => Ok(Expr::Index1),
         "@key" => Ok(Expr::Key),
-        "this" => Ok(Expr::This),
+        "this" | "." => Ok(Expr::This),
         _ if t.starts_with("../") => parse_parent(t, span),
         _ => match parse_reference(t) {
             Some(expr) => Ok(expr),
@@ -789,7 +789,7 @@ fn parse_helper_value(t: &str, span: Span) -> Result<Expr, CompileError> {
         "@index" => Ok(Expr::Index0),
         "@index1" => Ok(Expr::Index1),
         "@key" => Ok(Expr::Key),
-        "this" => Ok(Expr::This),
+        "this" | "." => Ok(Expr::This),
         _ if t.starts_with("../") => parse_parent(t, span),
         _ => match parse_reference(t) {
             Some(expr) => Ok(expr),
@@ -1513,6 +1513,14 @@ mod tests {
         assert_wire(
             "{{#each rows}}{{_}}{{/each}}",
             r#"{"version":"stem-bc/v1","instructions":[{"body":[{"escape":"html","t":"emit","value":{"base":{"t":"this"},"segments":["_"],"t":"get"}}],"else":[],"params":[],"subject":{"name":"rows","t":"assign"},"t":"each"}]}"#,
+        );
+    }
+
+    #[test]
+    fn dot_is_an_alias_for_this() {
+        assert_wire(
+            "Hello {{#with name}}{{.}}{{/with}}!",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"Hello "},{"body":[{"escape":"html","t":"emit","value":{"t":"this"}}],"else":[],"params":[],"subject":{"name":"name","t":"assign"},"t":"with"},{"t":"text","text":"!"}]}"#,
         );
     }
 

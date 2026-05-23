@@ -58,6 +58,8 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "{{#each rows as |row i0 i1|}}{{i0}}/{{i1}} {{/each}}",
     "{{#each rows}}{{@index1}}. {{this.name}}{{/each}}",
     "{{#with user}}{{this.name}}{{/with}}",
+    "Hello {{#with name}}{{.}}{{/with}}!",
+    "{{#each items}}{{.}};{{/each}}",
     "{{#with user as |u|}}{{u.name}} <{{u.email}}>{{/with}}",
     "<ul>{{#each items}}<li>{{@index1}}. {{this}}</li>{{/each}}</ul>",
     "{{#each items}}{{../title}}: {{this}}{{/each}}",
