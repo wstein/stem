@@ -672,11 +672,15 @@ defmodule Stem.Parser do
     do: {:error, "{{#each}} accepts at most three block parameters"}
 
   defp validate_identifier_list(params) do
+    # `_` is the anonymous/wildcard param: it may appear repeatedly to skip a
+    # positional slot, so it is exempt from the uniqueness check.
+    named = Enum.reject(params, &(&1 == "_"))
+
     cond do
       Enum.any?(params, &(not String.match?(&1, ~r/^[A-Za-z_][A-Za-z0-9_]*$/))) ->
         {:error, "block parameters must be simple identifiers"}
 
-      length(params) != length(Enum.uniq(params)) ->
+      length(named) != length(Enum.uniq(named)) ->
         {:error, "block parameters must be unique"}
 
       true ->

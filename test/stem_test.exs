@@ -223,6 +223,29 @@ defmodule StemTest do
       end
     end
 
+    test "underscore is an anonymous param and may repeat to skip slots" do
+      assert eval("{{#each xs as |_ _ i1|}}{{i1}} {{/each}}", assigns: [xs: ["a", "b", "c"]]) ==
+               "1 2 3 "
+    end
+
+    test "each still rejects duplicate named block parameters" do
+      assert_raise Stem.SyntaxError, ~r/block parameters must be unique/, fn ->
+        eval("{{#each xs as |a a b|}}{{a}}{{/each}}", assigns: [xs: [1]])
+      end
+    end
+
+    test "the anonymous param does not hide a data key named _" do
+      # `_` is a wildcard only in block-param position; it remains a readable
+      # data key everywhere else.
+      assert eval("{{_}}", assigns: [a: 133, b: 12, _: 99]) == "99"
+      assert eval("{{[_]}}", assigns: [_: 99]) == "99"
+
+      assert eval("{{#each rows}}{{_}} {{/each}}",
+               assigns: [rows: [%{a: 1, _: 99}, %{a: 2, _: 88}]]
+             ) ==
+               "99 88 "
+    end
+
     test "each over a map binds the value and key via block params" do
       assert eval("{{#each m as |val key|}}{{key}} => {{val}};{{/each}}", assigns: [m: %{a: 1}]) ==
                "a => 1;"
