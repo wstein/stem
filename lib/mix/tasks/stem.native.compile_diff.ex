@@ -98,27 +98,42 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "{{'single'}}"
   ]
 
+  # `{entry, %{name => source}}` cases exercising `{{> partial}}` expansion.
+  @partial_cases [
+    {"{{> greeting}}", %{"greeting" => "Hi {{name}}!"}},
+    {"{{> header}}<ul>{{#each items}}{{> row}}{{/each}}</ul>",
+     %{"header" => "<h1>{{title}}</h1>", "row" => "<li>{{this.name}}</li>"}}
+  ]
+
   @impl true
   def run(argv) do
     Mix.Task.run("compile")
     {opts, _argv, _invalid} = OptionParser.parse(argv, strict: [engine: :string, wasm: :string])
     engine = Engine.resolve(opts)
 
-    beam = Enum.map(@templates, &beam_wire/1)
-    rust = Engine.compile_batch(engine, @templates)
+    # Each case is `{template, partials}`; plain templates carry an empty map.
+    cases = Enum.map(@templates, &{&1, %{}}) ++ @partial_cases
+
+    beam = Enum.map(cases, fn {template, partials} -> beam_wire(template, partials) end)
+    rust = Engine.compile_batch(engine, Enum.map(cases, &compile_request/1))
 
     results =
-      [@templates, beam, rust]
+      [cases, beam, rust]
       |> Enum.zip()
-      |> Enum.map(fn {template, beam_wire, rust_wire} ->
+      |> Enum.map(fn {{template, _partials}, beam_wire, rust_wire} ->
         classify(template, beam_wire, rust_wire)
       end)
 
     report(engine, results)
   end
 
-  defp beam_wire(template) do
-    {:ok, ast} = Stem.Parser.parse_with_spans(template)
+  # A bare source string when there are no partials, else a `{template, partials}`
+  # object — both shapes are accepted by the native `compile_batch` handler.
+  defp compile_request({template, partials}) when map_size(partials) == 0, do: template
+  defp compile_request({template, partials}), do: %{"template" => template, "partials" => partials}
+
+  defp beam_wire(template, partials) do
+    {:ok, ast} = Stem.Parser.parse_with_spans(template, partials: partials)
     ast |> Stem.Bytecode.compile() |> Stem.Bytecode.to_wire()
   end
 

@@ -27,16 +27,28 @@
 //   * literals: integers, `true`/`false`, `null`/`nil`, and simple
 //     double-quoted strings;
 //   * `{{! .. }}` / `{{!-- .. --}}` comments and `{{~ .. ~}}` trim markers.
+//   * `{{> name}}` partials, expanded inline from a caller-supplied
+//     name->source map with the same recursion guard as `Stem.Parser`.
 //
 // Not yet ported (raise a spanned `CompileError`, so the playground shows "not
 // yet supported" rather than miscompiling): single-quoted charlists and
-// escaped/interpolated strings, and partials (which need a host-provided
-// partial-source map — a later editor feature).
+// escaped/interpolated strings, and `{{& .. }}` tags.
 
 use serde_json::{json, Value};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 const VERSION: &str = "stem-bc/v1";
+
+// A partial-source map (name -> template source), mirroring the `:partials`
+// option on `Stem.Parser`. Partials are expanded inline at parse time.
+pub type Partials = HashMap<String, String>;
+
+// Carries the partial map and the recursion guard (the stack of partial names
+// currently being expanded) through recursive assembly.
+struct Asm<'a> {
+    partials: &'a Partials,
+    stack: Vec<String>,
+}
 
 // A parse/compile failure carrying a byte span into the source, so the editor
 // can underline the offending tag (Phase C surfaces this to JS).
@@ -47,10 +59,15 @@ pub struct CompileError {
     pub end: usize,
 }
 
-// Compiles template source to the wire program `{"version", "instructions"}`.
-pub fn compile_to_wire(source: &str) -> Result<Value, CompileError> {
+// Compiles template source to the wire program `{"version", "instructions"}`,
+// expanding any `{{> name}}` partials from the given map.
+pub fn compile_to_wire(source: &str, partials: &Partials) -> Result<Value, CompileError> {
     let tokens = tokenize(source)?;
-    let nodes = assemble(tokens)?;
+    let mut asm = Asm {
+        partials,
+        stack: Vec::new(),
+    };
+    let nodes = assemble(tokens, &mut asm)?;
     let instructions = lower_nodes(&nodes, &Scope::root(), &Regions::new(), &[])?;
     Ok(json!({ "version": VERSION, "instructions": instructions }))
 }
@@ -109,6 +126,10 @@ enum Token {
         span: Span,
     },
     Yield {
+        name: String,
+        span: Span,
+    },
+    Partial {
         name: String,
         span: Span,
     },
@@ -268,8 +289,12 @@ fn classify(inner2: &str, triple: bool, span: Span) -> Result<Option<Token>, Com
                 .ok_or_else(|| unsupported(format!("unknown closing tag `{{/{word}}}`"), span))?;
             Ok(Some(Token::Close { kind, span }))
         }
-        '>' | '&' => Err(unsupported(
-            "partials and `{{&}}` tags are not yet supported by the native compiler",
+        '>' => Ok(Some(Token::Partial {
+            name: inner2[1..].trim().to_string(),
+            span,
+        })),
+        '&' => Err(unsupported(
+            "`{{&}}` tags are not yet supported by the native compiler",
             span,
         )),
         _ => Ok(Some(Token::Expr {
@@ -331,9 +356,9 @@ enum Node {
     },
 }
 
-fn assemble(tokens: Vec<Token>) -> Result<Vec<Node>, CompileError> {
+fn assemble(tokens: Vec<Token>, asm: &mut Asm) -> Result<Vec<Node>, CompileError> {
     let mut it = tokens.into_iter();
-    let (nodes, stop) = collect(&mut it)?;
+    let (nodes, stop) = collect(&mut it, asm)?;
     match stop {
         Stop::Eof => Ok(nodes),
         Stop::Else(span) => Err(unsupported(
@@ -347,7 +372,10 @@ fn assemble(tokens: Vec<Token>) -> Result<Vec<Node>, CompileError> {
     }
 }
 
-fn collect(it: &mut std::vec::IntoIter<Token>) -> Result<(Vec<Node>, Stop), CompileError> {
+fn collect(
+    it: &mut std::vec::IntoIter<Token>,
+    asm: &mut Asm,
+) -> Result<(Vec<Node>, Stop), CompileError> {
     let mut nodes = Vec::new();
     loop {
         match it.next() {
@@ -363,10 +391,42 @@ fn collect(it: &mut std::vec::IntoIter<Token>) -> Result<(Vec<Node>, Stop), Comp
             Some(Token::Else(span)) => return Ok((nodes, Stop::Else(span))),
             Some(Token::Close { kind, span }) => return Ok((nodes, Stop::Close(kind, span))),
             Some(Token::Open { kind, args, span }) => {
-                nodes.push(parse_block(it, kind, &args, span)?);
+                nodes.push(parse_block(it, kind, &args, span, asm)?);
             }
             Some(Token::Yield { name, span }) => nodes.push(Node::Yield { name, span }),
+            Some(Token::Partial { name, span }) => expand_partial(&name, span, asm, &mut nodes)?,
         }
+    }
+}
+
+// Expand `{{> name}}` inline by parsing the partial's source and splicing its
+// nodes, mirroring `Stem.Parser.expand_partial/4` including the recursion guard.
+fn expand_partial(
+    name: &str,
+    span: Span,
+    asm: &mut Asm,
+    out: &mut Vec<Node>,
+) -> Result<(), CompileError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(unsupported("partial name is required in `{{> ...}}`", span));
+    }
+    if asm.stack.iter().any(|n| n == name) {
+        return Err(unsupported(
+            format!("partial recursion detected for '{name}'"),
+            span,
+        ));
+    }
+    match asm.partials.get(name).cloned() {
+        Some(source) => {
+            let tokens = tokenize(&source)?;
+            asm.stack.push(name.to_string());
+            let nodes = assemble(tokens, asm)?;
+            asm.stack.pop();
+            out.extend(nodes);
+            Ok(())
+        }
+        None => Err(unsupported(format!("unknown partial '{name}'"), span)),
     }
 }
 
@@ -375,17 +435,18 @@ fn parse_block(
     kind: Block,
     args: &str,
     span: Span,
+    asm: &mut Asm,
 ) -> Result<Node, CompileError> {
     if kind == Block::Region {
-        return parse_region(it, args, span);
+        return parse_region(it, args, span, asm);
     }
 
     let (subject, params) = parse_block_head(kind, args, span)?;
-    let (body, stop) = collect(it)?;
+    let (body, stop) = collect(it, asm)?;
 
     let (body, otherwise) = match stop {
         Stop::Else(_) => {
-            let (otherwise, after) = collect(it)?;
+            let (otherwise, after) = collect(it, asm)?;
             match after {
                 Stop::Close(k, _) if k == kind => (body, otherwise),
                 Stop::Close(other, csp) => return Err(mismatched(kind, other, csp)),
@@ -441,13 +502,14 @@ fn parse_region(
     it: &mut std::vec::IntoIter<Token>,
     args: &str,
     span: Span,
+    asm: &mut Asm,
 ) -> Result<Node, CompileError> {
     let name = args.trim();
     if name.is_empty() || name.split_whitespace().count() != 1 {
         return Err(unsupported("`{{#region}}` requires a single name", span));
     }
 
-    let (body, stop) = collect(it)?;
+    let (body, stop) = collect(it, asm)?;
     match stop {
         Stop::Close(Block::Region, _) => Ok(Node::Region {
             name: name.to_string(),
@@ -1366,10 +1428,15 @@ fn unclosed(kind: Block, span: Span) -> CompileError {
 mod tests {
     use super::*;
 
+    // Compile with no partials (the common case for these unit tests).
+    fn wire(source: &str) -> Result<Value, CompileError> {
+        compile_to_wire(source, &Partials::new())
+    }
+
     // Compares against authoritative wire from `Stem.Bytecode.to_wire/1`, parsed
     // as Values so field order is irrelevant.
     fn assert_wire(source: &str, expected_json: &str) {
-        let got = compile_to_wire(source).expect("should compile");
+        let got = wire(source).expect("should compile");
         let want: Value = serde_json::from_str(expected_json).expect("valid expected JSON");
         assert_eq!(got, want, "for {source:?}");
     }
@@ -1432,7 +1499,7 @@ mod tests {
 
     #[test]
     fn duplicate_named_params_are_rejected() {
-        assert!(compile_to_wire("{{#each xs as |a a b|}}{{a}}{{/each}}").is_err());
+        assert!(wire("{{#each xs as |a a b|}}{{a}}{{/each}}").is_err());
     }
 
     // `_` is a wildcard only in block-param position; as an expression it stays a
@@ -1447,6 +1514,37 @@ mod tests {
             "{{#each rows}}{{_}}{{/each}}",
             r#"{"version":"stem-bc/v1","instructions":[{"body":[{"escape":"html","t":"emit","value":{"base":{"t":"this"},"segments":["_"],"t":"get"}}],"else":[],"params":[],"subject":{"name":"rows","t":"assign"},"t":"each"}]}"#,
         );
+    }
+
+    #[test]
+    fn partials_expand_inline() {
+        let mut partials = Partials::new();
+        partials.insert("header".into(), "<h1>{{title}}</h1>".into());
+        partials.insert("row".into(), "<li>{{this.name}}</li>".into());
+        let got = compile_to_wire(
+            "{{> header}}<ul>{{#each items}}{{> row}}{{/each}}</ul>",
+            &partials,
+        )
+        .expect("compiles");
+        let want: Value = serde_json::from_str(
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"<h1>"},{"escape":"html","t":"emit","value":{"name":"title","t":"assign"}},{"t":"text","text":"</h1>"},{"t":"text","text":"<ul>"},{"body":[{"t":"text","text":"<li>"},{"escape":"html","t":"emit","value":{"base":{"t":"this"},"segments":["name"],"t":"get"}},{"t":"text","text":"</li>"}],"else":[],"params":[],"subject":{"name":"items","t":"assign"},"t":"each"},{"t":"text","text":"</ul>"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(got, want);
+    }
+
+    #[test]
+    fn unknown_partial_errors() {
+        let err = compile_to_wire("{{> nope}}", &Partials::new()).unwrap_err();
+        assert!(err.message.contains("unknown partial"));
+    }
+
+    #[test]
+    fn partial_recursion_is_detected() {
+        let mut partials = Partials::new();
+        partials.insert("a".into(), "x{{> a}}".into());
+        let err = compile_to_wire("{{> a}}", &partials).unwrap_err();
+        assert!(err.message.contains("recursion"));
     }
 
     #[test]
@@ -1562,7 +1660,7 @@ mod tests {
 
     #[test]
     fn recursive_yield_is_rejected() {
-        let err = compile_to_wire("{{#region a}}{{yield a}}{{/region}}{{yield a}}").unwrap_err();
+        let err = wire("{{#region a}}{{yield a}}{{/region}}{{yield a}}").unwrap_err();
         assert!(err.message.contains("recursive"), "{}", err.message);
     }
 
@@ -1588,8 +1686,8 @@ mod tests {
 
     #[test]
     fn unported_constructs_report_a_span() {
-        for src in ["{{'single'}}", "{{> nav}}", "{{a + b}}"] {
-            let err = compile_to_wire(src).unwrap_err();
+        for src in ["{{'single'}}", "{{& raw}}", "{{a + b}}"] {
+            let err = wire(src).unwrap_err();
             assert!(
                 err.message.contains("not yet supported"),
                 "for {src:?}: {}",
@@ -1601,18 +1699,18 @@ mod tests {
 
     #[test]
     fn structural_errors_report_a_span() {
-        assert!(compile_to_wire("{{#each x}}y")
+        assert!(wire("{{#each x}}y")
             .unwrap_err()
             .message
             .contains("missing closing"));
-        assert!(compile_to_wire("{{#if a}}x{{/each}}")
+        assert!(wire("{{#if a}}x{{/each}}")
             .unwrap_err()
             .message
             .contains("expected"));
-        assert!(compile_to_wire("done{{/if}}")
+        assert!(wire("done{{/if}}")
             .unwrap_err()
             .message
             .contains("unexpected closing"));
-        assert_eq!(compile_to_wire("Hi {{name").unwrap_err().start, 3);
+        assert_eq!(wire("Hi {{name").unwrap_err().start, 3);
     }
 }

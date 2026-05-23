@@ -127,18 +127,24 @@ pub fn handle_with_getters(raw: &str, resolve: GetterResolver) -> String {
     // `{"error": {message, start, end}}` with a source span — the playground's
     // backend-free compile step.
     if let Some(Value::String(source)) = request.get("compile") {
-        return serde_json::to_string(&compile_result(source)).unwrap_or_default();
+        let partials = parse_partials(request.get("partials"));
+        return serde_json::to_string(&compile_result(source, &partials)).unwrap_or_default();
     }
 
-    // `{"compile_batch": ["<src>", ...]}` compiles many templates in one process
-    // and returns a JSON array of wire-program-or-error objects, mirroring the
-    // render `batch` shape — used by the BEAM-vs-Rust differential harness.
-    if let Some(Value::Array(sources)) = request.get("compile_batch") {
-        let outputs: Vec<Value> = sources
+    // `{"compile_batch": [...]}` compiles many templates in one process and
+    // returns a JSON array of wire-program-or-error objects, mirroring the render
+    // `batch` shape — used by the BEAM-vs-Rust differential harness. An entry is
+    // either a bare source string or `{"template": src, "partials": {..}}`.
+    if let Some(Value::Array(entries)) = request.get("compile_batch") {
+        let outputs: Vec<Value> = entries
             .iter()
-            .map(|source| match source {
-                Value::String(src) => compile_result(src),
-                _ => json!({ "error": { "message": "compile_batch entries must be strings", "start": 0, "end": 0 } }),
+            .map(|entry| match entry {
+                Value::String(src) => compile_result(src, &compile::Partials::new()),
+                Value::Object(obj) => match obj.get("template").and_then(Value::as_str) {
+                    Some(src) => compile_result(src, &parse_partials(obj.get("partials"))),
+                    None => json!({ "error": { "message": "compile_batch object needs a string `template`", "start": 0, "end": 0 } }),
+                },
+                _ => json!({ "error": { "message": "compile_batch entries must be strings or objects", "start": 0, "end": 0 } }),
             })
             .collect();
         return serde_json::to_string(&outputs).unwrap_or_default();
@@ -205,12 +211,24 @@ pub unsafe extern "C" fn stem_render(ptr: *const u8, len: usize) -> u64 {
 
 // Compile one template to its wire program, or an `{"error": {message, span}}`
 // object the playground can underline.
-fn compile_result(source: &str) -> Value {
-    match compile::compile_to_wire(source) {
+fn compile_result(source: &str, partials: &compile::Partials) -> Value {
+    match compile::compile_to_wire(source, partials) {
         Ok(program) => program,
         Err(err) => json!({
             "error": { "message": err.message, "start": err.start, "end": err.end }
         }),
+    }
+}
+
+// Read an optional `{"partials": {name: source, ..}}` request field into a
+// name->source map; non-object values and non-string entries are ignored.
+fn parse_partials(value: Option<&Value>) -> compile::Partials {
+    match value {
+        Some(Value::Object(map)) => map
+            .iter()
+            .filter_map(|(name, src)| src.as_str().map(|s| (name.clone(), s.to_string())))
+            .collect(),
+        _ => compile::Partials::new(),
     }
 }
 
