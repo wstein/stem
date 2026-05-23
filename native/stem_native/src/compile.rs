@@ -19,6 +19,9 @@
 //   * expressions: identifiers, dotted paths, `this`/`this.x`,
 //     `@index`/`@index1`/`@key`, and parent (`../name`) references, with the
 //     same local/`this`/assign scope resolution the BEAM uses;
+//   * literal variable keys: bracketed segments (`[first-name]`, `[a.b]`) and
+//     uppercase block params (`as |Item|`), so keys/params that are not valid
+//     identifiers resolve by name, mirroring `Stem.Expression`;
 //   * transformer calls and `|>` pipelines, with positional and `key=value` /
 //     `key: value` keyword args and parenthesised sub-expressions;
 //   * literals: integers, `true`/`false`, `null`/`nil`, and simple
@@ -504,7 +507,7 @@ fn validate_params(kind: Block, params: &[String], span: Span) -> Result<(), Com
             "`{{#each}}` accepts at most three block parameters",
             span,
         )),
-        _ if params.iter().any(|p| !is_identifier(p)) => Err(unsupported(
+        _ if params.iter().any(|p| !is_binding_name(p)) => Err(unsupported(
             "block parameters must be simple identifiers",
             span,
         )),
@@ -571,9 +574,10 @@ fn parse_structured(t: &str, span: Span) -> Result<Expr, CompileError> {
         "@key" => Ok(Expr::Key),
         "this" => Ok(Expr::This),
         _ if t.starts_with("../") => parse_parent(t, span),
-        _ if is_path(t) => Ok(parse_path(t)),
-        _ if is_identifier(t) => Ok(Expr::Identifier(t.to_string())),
-        _ => parse_transformer(t, span),
+        _ => match parse_reference(t) {
+            Some(expr) => Ok(expr),
+            None => parse_transformer(t, span),
+        },
     }
 }
 
@@ -586,11 +590,80 @@ fn parse_parent(t: &str, span: Span) -> Result<Expr, CompileError> {
     }
 }
 
-fn parse_path(t: &str) -> Expr {
-    if let Some(rest) = t.strip_prefix("this.") {
-        Expr::PathThis(rest.split('.').map(String::from).collect())
+// Mirror `Stem.Expression.reference_expression/1`: a dotted chain of segments,
+// each a bare identifier (`name`, `Item1`) or a bracketed literal key
+// (`[first-name]`, `[a.b]`). Bracket segments escape characters a bare
+// identifier cannot carry. Returns `None` for anything that is not a clean
+// dotted reference, so the caller falls back to transformer parsing.
+fn parse_reference(t: &str) -> Option<Expr> {
+    let segments = reference_segments(t)?;
+    let (first_key, first_bracketed) = &segments[0];
+    let first_bare_this = !first_bracketed && first_key == "this";
+    let keys: Vec<String> = segments.iter().map(|(key, _)| key.clone()).collect();
+
+    match keys.len() {
+        // Bare `this` alone is handled by the caller as `Expr::This`.
+        1 if first_bare_this => None,
+        1 => Some(Expr::Identifier(keys.into_iter().next().unwrap())),
+        _ if first_bare_this => Some(Expr::PathThis(keys[1..].to_vec())),
+        _ => Some(Expr::PathImplicit(keys)),
+    }
+}
+
+// Split a reference into `(key, bracketed?)` segments, stripping brackets.
+// Returns `None` unless the whole input is exactly dotted segments — bare runs
+// of `[A-Za-z_][A-Za-z0-9_]*` or bracketed `[..]` keys separated by single dots.
+fn reference_segments(t: &str) -> Option<Vec<(String, bool)>> {
+    let bytes = t.as_bytes();
+    let n = bytes.len();
+    let mut segments: Vec<(String, bool)> = Vec::new();
+    let mut i = 0;
+
+    while i < n {
+        if !segments.is_empty() {
+            if bytes[i] != b'.' {
+                return None;
+            }
+            i += 1;
+            if i >= n {
+                return None;
+            }
+        }
+
+        if bytes[i] == b'[' {
+            i += 1;
+            let start = i;
+            while i < n && bytes[i] != b']' {
+                i += 1;
+            }
+            if i >= n || i == start {
+                return None;
+            }
+            segments.push((t[start..i].to_string(), true));
+            i += 1;
+        } else {
+            let start = i;
+            let first = bytes[i] as char;
+            if !(first.is_ascii_alphabetic() || first == '_') {
+                return None;
+            }
+            i += 1;
+            while i < n {
+                let c = bytes[i] as char;
+                if c.is_ascii_alphanumeric() || c == '_' {
+                    i += 1;
+                } else {
+                    break;
+                }
+            }
+            segments.push((t[start..i].to_string(), false));
+        }
+    }
+
+    if segments.is_empty() {
+        None
     } else {
-        Expr::PathImplicit(t.split('.').map(String::from).collect())
+        Some(segments)
     }
 }
 
@@ -644,9 +717,10 @@ fn parse_helper_value(t: &str, span: Span) -> Result<Expr, CompileError> {
         "@key" => Ok(Expr::Key),
         "this" => Ok(Expr::This),
         _ if t.starts_with("../") => parse_parent(t, span),
-        _ if is_path(t) => Ok(parse_path(t)),
-        _ if is_identifier(t) => Ok(Expr::Identifier(t.to_string())),
-        _ => Err(not_supported(t, span)),
+        _ => match parse_reference(t) {
+            Some(expr) => Ok(expr),
+            None => Err(not_supported(t, span)),
+        },
     }
 }
 
@@ -1225,23 +1299,13 @@ fn is_identifier(s: &str) -> bool {
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-// A dotted path: `^[a-z_]\w*(\.\w+)+$`, or anything beginning `this.`.
-fn is_path(t: &str) -> bool {
-    if t.starts_with("this.") {
-        return true;
-    }
-    let mut segments = t.split('.');
-    let Some(root) = segments.next() else {
-        return false;
-    };
-    if !is_identifier(root) {
-        return false;
-    }
-    let rest: Vec<&str> = segments.collect();
-    !rest.is_empty()
-        && rest
-            .iter()
-            .all(|s| !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'))
+// A block-parameter binding name: `^[A-Za-z_][A-Za-z0-9_]*$`. Unlike
+// `is_identifier`, this allows an uppercase leading letter — block params bind
+// to a fresh gensym on the BEAM, so the author's casing is unconstrained.
+fn is_binding_name(s: &str) -> bool {
+    let mut chars = s.chars();
+    matches!(chars.next(), Some(c) if c.is_ascii_alphabetic() || c == '_')
+        && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
 fn split_first_word(s: &str) -> (&str, &str) {
@@ -1367,6 +1431,28 @@ mod tests {
         assert_wire(
             "{{#each items}}{{../title}}: {{this}}{{/each}}",
             r#"{"version":"stem-bc/v1","instructions":[{"body":[{"escape":"html","t":"emit","value":{"name":"title","t":"assign"}},{"t":"text","text":": "},{"escape":"html","t":"emit","value":{"t":"this"}}],"else":[],"params":[],"subject":{"name":"items","t":"assign"},"t":"each"}]}"#,
+        );
+    }
+
+    #[test]
+    fn literal_variable_keys() {
+        assert_wire(
+            "{{[first-name]}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"name":"first-name","t":"assign"}}]}"#,
+        );
+        assert_wire(
+            "{{user.[first-name]}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"base":{"name":"user","t":"assign"},"segments":["first-name"],"t":"get"}}]}"#,
+        );
+        // A bracket key may contain dots and other non-identifier characters.
+        assert_wire(
+            "{{[a.b]}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"name":"a.b","t":"assign"}}]}"#,
+        );
+        // Uppercase block params and `_` are valid bindings; literal item fields resolve by name.
+        assert_wire(
+            "{{#each people as |p _ I1|}}{{I1}}:{{p.[first-name]}} {{/each}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"body":[{"escape":"html","t":"emit","value":{"name":"I1","t":"local"}},{"t":"text","text":":"},{"escape":"html","t":"emit","value":{"base":{"name":"p","t":"local"},"segments":["first-name"],"t":"get"}},{"t":"text","text":" "}],"else":[],"params":["p","_","I1"],"subject":{"name":"people","t":"assign"},"t":"each"}]}"#,
         );
     }
 

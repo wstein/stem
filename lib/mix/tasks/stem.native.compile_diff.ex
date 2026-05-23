@@ -62,6 +62,13 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "<ul>{{#each items}}<li>{{@index1}}. {{this}}</li>{{/each}}</ul>",
     "{{#each items}}{{../title}}: {{this}}{{/each}}",
     "{{#each rows}}{{#if this.active}}[{{this.name}}]{{/if}}{{/each}}",
+    # Literal variable keys: bracket segments + uppercase block params
+    "{{[first-name]}}",
+    "{{user.[first-name]}}",
+    "{{[a.b]}}",
+    "{{#each people as |p _ I1|}}{{I1}}:{{p.[first-name]}} {{/each}}",
+    "{{#each rows}}{{this.[full name]}}{{/each}}",
+    "{{#with user as |u|}}{{u.[full name]}}{{/with}}",
     # Transformers and pipelines
     "{{name |> upcase}}",
     "{{name |> upcase |> trim}}",
