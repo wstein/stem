@@ -75,10 +75,16 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "{{x |> wrap(tag: \"b\")}}",
     "{{#each items}}{{this.name |> upcase}}{{/each}}",
     "{{42}} {{-3}} {{true}} {{null}}",
+    # Comments and whitespace-control trim markers
+    "a {{~ x ~}} b",
+    "a {{! c }} b",
+    "{{!-- c --}}x",
+    "a {{x ~}}   b",
+    "{{#each items}}{{this}}{{~/each}}",
     # Not yet ported — should be reported as pending, not mismatched.
     # (Both still compile on the BEAM, so they exercise the pending bucket.)
     "{{'single'}}",
-    "{{~ x ~}}"
+    "{{yield undefined}}"
   ]
 
   @impl true

@@ -103,97 +103,172 @@ enum Token {
 }
 
 fn tokenize(src: &str) -> Result<Vec<Token>, CompileError> {
-    let bytes = src.as_bytes();
     let mut tokens = Vec::new();
+    let mut text = String::new();
+    let mut trim_next = false;
     let mut i = 0;
-    let mut text_start = 0;
 
-    while i < bytes.len() {
-        if bytes[i] == b'{' && bytes.get(i + 1) == Some(&b'{') {
-            if i > text_start {
-                tokens.push(Token::Text(src[text_start..i].to_string()));
-            }
+    while i < src.len() {
+        let Some(rel) = src[i..].find("{{") else {
+            text.push_str(&src[i..]);
+            break;
+        };
+        text.push_str(&src[i..i + rel]);
+        let start = i + rel;
 
-            let triple = bytes.get(i + 2) == Some(&b'{');
-            let (open, close) = if triple { ("{{{", "}}}") } else { ("{{", "}}") };
-            let inner_start = i + open.len();
-            let rel = src[inner_start..].find(close).ok_or_else(|| CompileError {
-                message: format!("unterminated `{open}` tag"),
-                start: i,
-                end: src.len(),
-            })?;
-            let inner = &src[inner_start..inner_start + rel];
-            let tag_end = inner_start + rel + close.len();
-
-            tokens.push(classify(inner, triple, (i, tag_end))?);
-            i = tag_end;
-            text_start = i;
-        } else {
-            i += 1;
+        // Comments (`{{! .. }}`, `{{!-- .. --}}`) are dropped without flushing
+        // the text buffer, so surrounding text merges and a pending trim marker
+        // carries across them, exactly like the BEAM tokenizer.
+        if let Some(end) = comment_end(src, start) {
+            i = end;
+            continue;
         }
+
+        let triple = src[start..].starts_with("{{{");
+        let (open, close) = if triple { ("{{{", "}}}") } else { ("{{", "}}") };
+        let inner_start = start + open.len();
+        let rel2 = src[inner_start..].find(close).ok_or_else(|| CompileError {
+            message: format!("unterminated `{open}` tag"),
+            start,
+            end: src.len(),
+        })?;
+        let inner = &src[inner_start..inner_start + rel2];
+        let tag_end = inner_start + rel2 + close.len();
+        let (inner2, trim_left, trim_right) = extract_trim(inner);
+
+        flush_text(&mut tokens, &mut text, &mut trim_next);
+        if trim_left {
+            trim_trailing_text(&mut tokens);
+        }
+        if let Some(token) = classify(&inner2, triple, (start, tag_end))? {
+            tokens.push(token);
+        }
+        trim_next = trim_right;
+        i = tag_end;
     }
 
-    if bytes.len() > text_start {
-        tokens.push(Token::Text(src[text_start..].to_string()));
-    }
+    flush_text(&mut tokens, &mut text, &mut trim_next);
     Ok(tokens)
 }
 
-fn classify(inner: &str, triple: bool, span: Span) -> Result<Token, CompileError> {
-    let trimmed = inner.trim();
-    if trimmed.is_empty() {
-        return Err(unsupported("empty expression", span));
+// The byte offset just past a comment starting at `start`, or `None` if no
+// comment opens there.
+fn comment_end(src: &str, start: usize) -> Option<usize> {
+    if let Some(rest) = src[start..].strip_prefix("{{!--") {
+        rest.find("--}}").map(|rel| start + 5 + rel + 4)
+    } else if let Some(rest) = src[start..].strip_prefix("{{!") {
+        rest.find("}}").map(|rel| start + 3 + rel + 2)
+    } else {
+        None
     }
+}
 
-    // A triple stash is always an expression (it never opens a block); whether
-    // the expression itself is ported is decided later in `parse_expr`.
+// Strip surrounding `~` whitespace-control markers, returning the normalised
+// inner text and whether each side requested a trim.
+fn extract_trim(inner: &str) -> (String, bool, bool) {
+    let trimmed = inner.trim();
+    let trim_left = trimmed.starts_with('~');
+    let trim_right = trimmed.ends_with('~');
+    let mut s = trimmed;
+    if trim_left && !s.is_empty() {
+        s = &s[1..];
+    }
+    if trim_right && !s.is_empty() {
+        s = &s[..s.len() - 1];
+    }
+    (s.trim().to_string(), trim_left, trim_right)
+}
+
+// Flush the pending text buffer as a `Text` token. A pending right-trim strips
+// the buffer's leading whitespace first.
+fn flush_text(tokens: &mut Vec<Token>, text: &mut String, trim_next: &mut bool) {
+    let mut content = std::mem::take(text);
+    if *trim_next {
+        content = content.trim_start().to_string();
+        *trim_next = false;
+    }
+    if !content.is_empty() {
+        tokens.push(Token::Text(content));
+    }
+}
+
+// A left-trim marker strips trailing whitespace from the immediately preceding
+// text token, dropping it if it becomes empty.
+fn trim_trailing_text(tokens: &mut Vec<Token>) {
+    if let Some(Token::Text(text)) = tokens.last_mut() {
+        let trimmed = text.trim_end().to_string();
+        if trimmed.is_empty() {
+            tokens.pop();
+        } else {
+            *text = trimmed;
+        }
+    }
+}
+
+// Classify a tag's normalised inner text into a token, or `None` to skip an
+// empty tag (`{{}}`).
+fn classify(inner2: &str, triple: bool, span: Span) -> Result<Option<Token>, CompileError> {
+    if inner2.is_empty() {
+        return Ok(None);
+    }
+    if inner2.contains('{') || inner2.contains('}') {
+        return Err(unsupported(
+            "nested braces are not supported in Stem expressions",
+            span,
+        ));
+    }
     if triple {
-        return Ok(Token::Expr {
-            raw: inner.to_string(),
+        return Ok(Some(Token::Expr {
+            raw: inner2.to_string(),
             escape: "none",
             span,
-        });
+        }));
     }
-
-    if trimmed.starts_with('~') || trimmed.ends_with('~') {
+    if inner2 == "else" {
+        return Ok(Some(Token::Else(span)));
+    }
+    if first_word(inner2) == "yield" {
         return Err(unsupported(
-            "whitespace-control markers are not yet supported by the native compiler",
+            "`{{yield}}` is not yet supported by the native compiler",
             span,
         ));
     }
 
-    match trimmed.chars().next().unwrap() {
+    match inner2.chars().next().unwrap() {
         '#' => {
-            let (word, args) = split_first_word(trimmed[1..].trim_start());
+            let (word, args) = split_first_word(inner2[1..].trim_start());
             let kind = Block::parse(word).ok_or_else(|| {
                 unsupported(
                     format!("block `{{#{word}}}` is not yet supported by the native compiler"),
                     span,
                 )
             })?;
-            Ok(Token::Open {
+            Ok(Some(Token::Open {
                 kind,
                 args: args.to_string(),
                 span,
-            })
+            }))
         }
         '/' => {
-            let word = trimmed[1..].trim();
+            let word = inner2[1..].trim();
             let kind = Block::parse(word)
                 .ok_or_else(|| unsupported(format!("unknown closing tag `{{/{word}}}`"), span))?;
-            Ok(Token::Close { kind, span })
+            Ok(Some(Token::Close { kind, span }))
         }
-        '>' | '!' | '&' => Err(unsupported(
-            "partials, comments, and `{{&}}` tags are not yet supported by the native compiler",
+        '>' | '&' => Err(unsupported(
+            "partials and `{{&}}` tags are not yet supported by the native compiler",
             span,
         )),
-        _ if trimmed == "else" => Ok(Token::Else(span)),
-        _ => Ok(Token::Expr {
-            raw: inner.to_string(),
+        _ => Ok(Some(Token::Expr {
+            raw: inner2.to_string(),
             escape: "html",
             span,
-        }),
+        })),
     }
+}
+
+fn first_word(s: &str) -> &str {
+    s.split_whitespace().next().unwrap_or("")
 }
 
 // ── Recursive-descent assembly ───────────────────────────────────────────────
@@ -1246,14 +1321,28 @@ mod tests {
     }
 
     #[test]
+    fn comments_and_trim_markers() {
+        assert_wire(
+            "a {{~ x ~}} b",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"a"},{"escape":"html","t":"emit","value":{"name":"x","t":"assign"}},{"t":"text","text":"b"}]}"#,
+        );
+        assert_wire(
+            "a {{! c }} b",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"a  b"}]}"#,
+        );
+        assert_wire(
+            "{{!-- c --}}x",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"x"}]}"#,
+        );
+        assert_wire(
+            "a {{x ~}}   b",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"a "},{"escape":"html","t":"emit","value":{"name":"x","t":"assign"}},{"t":"text","text":"b"}]}"#,
+        );
+    }
+
+    #[test]
     fn unported_constructs_report_a_span() {
-        for src in [
-            "{{'single'}}",
-            "{{> nav}}",
-            "{{!c}}",
-            "{{~ x ~}}",
-            "{{a + b}}",
-        ] {
+        for src in ["{{'single'}}", "{{> nav}}", "{{yield x}}", "{{a + b}}"] {
             let err = compile_to_wire(src).unwrap_err();
             assert!(
                 err.message.contains("not yet supported"),
