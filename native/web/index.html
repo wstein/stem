@@ -237,6 +237,12 @@
         overflow: auto;
       }
 
+      .cm-hb-comment { color: #94a3b8; font-style: italic; }
+      .cm-hb-block { color: #7c3aed; font-weight: 650; }
+      .cm-hb-partial { color: #0f766e; font-weight: 650; }
+      .cm-hb-raw { color: #b45309; }
+      .cm-hb-expr { color: #2563eb; }
+
       .status {
         margin-top: 0.45rem;
         min-height: 1.2rem;
@@ -395,8 +401,8 @@
         <article class="panel">
           <header class="panel-head">
             <div>
-              <h2 class="panel-title">Data (JSON)</h2>
-              <p class="panel-sub">Live data used for render preview.</p>
+              <h2 class="panel-title">Data (YAML)</h2>
+              <p class="panel-sub">Live YAML data used for render preview.</p>
             </div>
           </header>
           <div class="panel-body">
@@ -450,12 +456,22 @@
         encodeState
       } from "./playground_utils.mjs";
       import { EditorState } from "https://esm.sh/@codemirror/state@6.5.2/es2022/state.mjs";
-      import { EditorView, keymap, lineNumbers, highlightActiveLine, highlightActiveLineGutter } from "https://esm.sh/@codemirror/view@6.38.8/X-ZEBjb2RlbWlycm9yL3N0YXRlQDYuNS4y/es2022/view.mjs";
+      import {
+        Decoration,
+        EditorView,
+        MatchDecorator,
+        ViewPlugin,
+        keymap,
+        lineNumbers,
+        highlightActiveLine,
+        highlightActiveLineGutter
+      } from "https://esm.sh/@codemirror/view@6.38.8/X-ZEBjb2RlbWlycm9yL3N0YXRlQDYuNS4y/es2022/view.mjs";
       import { defaultKeymap, history as cmHistory, historyKeymap, indentWithTab } from "https://esm.sh/@codemirror/commands@6.10.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
       import { defaultHighlightStyle, bracketMatching, syntaxHighlighting } from "https://esm.sh/@codemirror/language@6.11.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
       import { lintGutter, linter, setDiagnosticsEffect } from "https://esm.sh/@codemirror/lint@6.8.5?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
-      import { json } from "https://esm.sh/@codemirror/lang-json@6.0.2?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
+      import { yaml } from "https://esm.sh/@codemirror/lang-yaml@6.1.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
       import { html } from "https://esm.sh/@codemirror/lang-html@6.4.11?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
+      import { dump as dumpYaml, load as loadYaml } from "https://esm.sh/js-yaml@4.1.0";
 
       const WASM = "../stem_native/target/wasm32-unknown-unknown/release/stem_native.wasm";
       const $ = (id) => document.getElementById(id);
@@ -481,6 +497,41 @@
         cmHistory(),
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab])
       ];
+
+      const hbExprMark = Decoration.mark({ class: "cm-hb-expr" });
+      const hbCommentMark = Decoration.mark({ class: "cm-hb-comment" });
+      const hbBlockMark = Decoration.mark({ class: "cm-hb-block" });
+      const hbPartialMark = Decoration.mark({ class: "cm-hb-partial" });
+      const hbRawMark = Decoration.mark({ class: "cm-hb-raw" });
+
+      const handlebarsDecorator = new MatchDecorator({
+        regexp: /\{\{!--[\s\S]*?--\}\}|\{\{![\s\S]*?\}\}|\{\{\{[\s\S]*?\}\}\}|\{\{[\s\S]*?\}\}/g,
+        decoration: (match) => {
+          const token = match[0];
+          if (token.startsWith("{{!--") || token.startsWith("{{!")) return hbCommentMark;
+          if (token.startsWith("{{{")) return hbRawMark;
+          if (token.startsWith("{{>") || token.startsWith("{{ >")) return hbPartialMark;
+          if (token.startsWith("{{#") || token.startsWith("{{/") || /^\{\{\s*else\b/.test(token)) {
+            return hbBlockMark;
+          }
+          return hbExprMark;
+        }
+      });
+
+      const handlebarsHighlighting = ViewPlugin.fromClass(
+        class {
+          constructor(view) {
+            this.decorations = handlebarsDecorator.createDeco(view);
+          }
+
+          update(update) {
+            this.decorations = handlebarsDecorator.updateDeco(update, this.decorations);
+          }
+        },
+        {
+          decorations: (value) => value.decorations
+        }
+      );
 
       let templateDiagnostics = [];
 
@@ -761,9 +812,10 @@
 
         let data;
         try {
-          data = JSON.parse(dataSource || "null");
+          data = loadYaml(dataSource || "null");
+          if (typeof data === "undefined") data = null;
         } catch (error) {
-          setError("invalid JSON data: " + error.message);
+          setError("invalid YAML data: " + error.message);
           setOutput("");
           updateHash();
           return;
@@ -792,12 +844,13 @@
           debouncedRun();
         },
         [
+          handlebarsHighlighting,
           lintGutter(),
           linter(() => templateDiagnostics)
         ]
       );
 
-      const dataView = createEditor($("dataEditor"), "{}", json(), () => {
+      const dataView = createEditor($("dataEditor"), "{}", yaml(), () => {
         debouncedRun();
       });
 
@@ -813,7 +866,7 @@
       const commandDefinitions = [
         { title: "Run render now", shortcut: `${modLabel}+Enter`, action: () => run() },
         { title: "Focus template editor", shortcut: `${modLabel}+1`, action: () => templateView.focus() },
-        { title: "Focus JSON editor", shortcut: `${modLabel}+2`, action: () => dataView.focus() },
+        { title: "Focus YAML editor", shortcut: `${modLabel}+2`, action: () => dataView.focus() },
         { title: "Add partial tab", shortcut: `${modLabel}+Alt+N`, action: () => addPartial() },
         { title: "Copy share link", shortcut: `${modLabel}+Shift+C`, action: async () => copyShareLink() },
         { title: "Toggle output view", shortcut: `${modLabel}+Shift+V`, action: () => cycleView() }
@@ -886,7 +939,7 @@
         }
 
         active = 0;
-        setEditorText(dataView, JSON.stringify(example.data, null, 2));
+        setEditorText(dataView, dumpYaml(example.data, { indent: 2, lineWidth: -1, noRefs: true }));
         $("escape").value = "";
 
         const view = example.view === "source" ? "source" : "rendered";
