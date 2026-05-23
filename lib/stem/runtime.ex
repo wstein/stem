@@ -51,7 +51,7 @@ defmodule Stem.Runtime do
   All other values are truthy.
   """
   @spec is_truthy(term()) :: boolean()
-  def is_truthy(value), do: value not in [false, nil, 0, "", [], %{}]
+  def is_truthy(value), do: resolve(value) not in [false, nil, 0, "", [], %{}]
 
   @spec is_truthy(term(), keyword()) :: boolean()
   def is_truthy(value, opts) when is_list(opts) do

@@ -52,14 +52,31 @@ defmodule Stem.GettersTest do
     end
   end
 
-  describe "top-level computed getters (bytecode VM)" do
-    test "the VM invokes a zero-arity getter assign" do
-      assert vm_render("{{full_name}}", %{full_name: fn -> "Ada" end}) == "Ada"
+  describe "getters at a dotted-path leaf / consumption points" do
+    test "a leaf getter on a nested map is invoked when rendered" do
+      assigns = %{user: %{full_name: fn -> "Ada Lovelace" end}}
+      assert render("{{user.full_name}}", assigns) == "Ada Lovelace"
     end
 
-    test "the VM evaluates a getter for block truthiness and iteration" do
-      assert vm_render("{{#if on}}Y{{/if}}", %{on: fn -> true end}) == "Y"
-      assert vm_render("{{#each xs}}{{this}}{{/each}}", %{xs: fn -> [1, 2] end}) == "12"
+    test "a leaf getter feeds a transformer pipeline" do
+      assigns = %{user: %{name: fn -> "ada" end}}
+      strings = Stem.Transformers.Strings.all()
+      assert render("{{user.name |> upcase}}", assigns, strings) == "ADA"
+    end
+
+    test "a leaf getter is evaluated for block truthiness" do
+      assert render("{{#if user.active}}on{{else}}off{{/if}}", %{user: %{active: fn -> false end}}) ==
+               "off"
+    end
+
+    test "a leaf getter returning a map is bound by with" do
+      assigns = %{data: %{profile: fn -> %{name: "Ada"} end}}
+      assert render("{{#with data.profile}}{{this.name}}{{/with}}", assigns) == "Ada"
+    end
+
+    test "a leaf getter passed as a transformer argument is invoked" do
+      assigns = %{user: %{name: nil, fallback: fn -> "computed" end}}
+      assert render("{{default user.name user.fallback}}", assigns) == "computed"
     end
   end
 end

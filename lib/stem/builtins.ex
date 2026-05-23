@@ -4,6 +4,7 @@ defmodule Stem.Builtins do
   @moduledoc false
 
   @spec each_entries(term()) :: list()
+  def each_entries(value) when is_function(value, 0), do: each_entries(value.())
   def each_entries(nil), do: []
   def each_entries(false), do: []
   def each_entries(0), do: []
