@@ -67,6 +67,7 @@ defmodule Stem.Bytecode.VM do
   defp exec({:emit, value_op, escape_mode}, context) do
     value_op
     |> eval(context)
+    |> Stem.Runtime.resolve()
     |> String.Chars.to_string()
     |> apply_escape(escape_mode)
   end
@@ -90,7 +91,7 @@ defmodule Stem.Bytecode.VM do
   end
 
   defp exec({:with, subject_op, params, body, else_branch}, context) do
-    subject = eval(subject_op, context)
+    subject = Stem.Runtime.resolve(eval(subject_op, context))
 
     if Stem.Runtime.is_truthy(subject) do
       render_instructions(body, with_context(context, params, subject))
