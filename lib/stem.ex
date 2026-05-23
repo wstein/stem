@@ -69,7 +69,9 @@ defmodule Stem do
     * `:partials` - a map or keyword list of named partial templates that
       `{{> name}}` expands inline. Partials can expand other partials and
       inherit the surrounding assign scope, which makes them Stem's current
-      layout-composition mechanism. Defaults to `%{}`.
+      layout-composition mechanism. A partial may also take arguments —
+      `{{> name context}}` sets the partial's scope and `{{> name key=value}}`
+      passes hash arguments — see the syntax notes below. Defaults to `%{}`.
 
     * `:warn_on_missing_assigns` - when `true`, missing assigns print a warning
       instead of returning `nil` silently. Defaults to `false`.
@@ -105,7 +107,11 @@ defmodule Stem do
     * `{{expression}}` - evaluates the expression and prints the
       string result with the configured default escaping.
     * `{{! comment }}` and `{{!-- comment --}}` - discarded from the output.
-    * `{{> partial}}` - expands a named partial.
+    * `{{> partial}}` - expands a named partial, inheriting the caller's scope.
+      `{{> partial context}}` renders it with `context` as the scope (bare names
+      resolve against `context`), and `{{> partial key=value ...}}` passes hash
+      arguments that become assigns inside the partial (hash keys win over the
+      context). Both forms can combine: `{{> partial user role="admin"}}`.
     * `{{#if}}`, `{{#unless}}`, `{{#each}}`, `{{#with}}`, `{{#region name}}`
       with matching
       `{{/...}}` closing tags and an optional `{{else}}`.

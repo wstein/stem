@@ -111,7 +111,7 @@ Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 * `{{expression}}` evaluates an expression and prints the string result with HTML escaping by default (secure-by-default).
 * `{{{expression}}}` evaluates an expression and prints the string result without escaping (raw output).
 * `{{! comment }}` and `{{!-- comment --}}` are discarded.
-* `{{> partial}}` expands a named partial.
+* `{{> partial}}` expands a named partial, inheriting the caller's scope. `{{> partial context}}` renders it with `context` as the scope, and `{{> partial key=value}}` passes hash arguments that become assigns inside the partial (hash keys win over the context). The forms combine: `{{> partial user role="admin"}}`.
 * `{{#if}}`, `{{#unless}}`, `{{#each}}`, `{{#with}}`, and `{{#region name}}` open blocks closed by `{{/...}}`, with `{{else}}` available on conditional and iteration blocks.
 * `{{yield name}}` renders a named region from the current expanded template scope.
 * Helper calls support nested subexpressions such as `{{format (uppercase name)}}`.
