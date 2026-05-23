@@ -183,6 +183,14 @@
       .status.error { color: var(--danger); }
       .status.ok { color: var(--ok); }
 
+      .kbd {
+        font: 11px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        padding: 0.12rem 0.35rem;
+        background: #fff;
+      }
+
       .output-grid {
         display: grid;
         grid-template-rows: auto 1fr;
@@ -220,6 +228,66 @@
         .workspace { grid-template-columns: 1fr; }
         .panel-output { grid-column: 1; }
       }
+
+      .palette-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(10, 12, 16, 0.36);
+        display: grid;
+        place-items: start center;
+        padding-top: 12vh;
+        z-index: 100;
+      }
+
+      .palette {
+        width: min(680px, calc(100vw - 2rem));
+        background: #fff;
+        border: 1px solid var(--line);
+        border-radius: 12px;
+        box-shadow: 0 20px 60px rgba(10, 12, 16, 0.25);
+        overflow: hidden;
+      }
+
+      .palette input {
+        width: 100%;
+        border: 0;
+        border-bottom: 1px solid var(--line);
+        border-radius: 0;
+        padding: 0.7rem 0.85rem;
+      }
+
+      .palette-list {
+        margin: 0;
+        max-height: 45vh;
+        overflow: auto;
+        padding: 0.2rem;
+        list-style: none;
+      }
+
+      .palette-item {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        border: 0;
+        border-radius: 8px;
+        background: transparent;
+        padding: 0.42rem 0.5rem;
+        text-align: left;
+      }
+
+      .palette-item:hover,
+      .palette-item[aria-current="true"] {
+        background: var(--accent-soft);
+      }
+
+      .palette-empty {
+        margin: 0;
+        color: var(--muted);
+        font-size: 0.86rem;
+        padding: 0.65rem 0.8rem;
+      }
     </style>
   </head>
   <body>
@@ -235,8 +303,9 @@
           <label for="example">Example</label>
           <select id="example"></select>
           <button id="share" title="Copy a link that restores this template and data">Copy link</button>
+        <button id="commands" title="Open command palette">Commands</button>
         </div>
-        <div class="muted">Tip: press Cmd/Ctrl+Enter to run immediately.</div>
+        <div class="muted">Tip: <span class="kbd">Cmd/Ctrl+Shift+P</span> for commands.</div>
       </div>
 
       <section class="workspace">
@@ -298,20 +367,36 @@
           </div>
         </article>
       </section>
+<div class="palette-backdrop" id="paletteBackdrop" hidden>
+    <section class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
+        <input id="paletteSearch" placeholder="Type a command" />
+        <ul class="palette-list" id="paletteList"></ul>
+        <p class="palette-empty" id="paletteEmpty" hidden>No command matches your filter.</p>
+    </section>
+</div>
     </main>
 
     <script type="module">
       import { createRenderer } from "./stem.mjs";
-      import { debounce, decodeState, encodeState } from "./playground_utils.mjs";
+      import {
+        byteRangeToCharRange,
+        charToLineColumn,
+        debounce,
+        decodeState,
+        encodeState
+      } from "./playground_utils.mjs";
       import { EditorState } from "https://esm.sh/@codemirror/state@6.5.2";
       import { EditorView, keymap, lineNumbers, highlightActiveLineGutter } from "https://esm.sh/@codemirror/view@6.38.8";
       import { defaultKeymap, history, historyKeymap, indentWithTab } from "https://esm.sh/@codemirror/commands@6.9.1";
       import { defaultHighlightStyle, bracketMatching, syntaxHighlighting, highlightActiveLine } from "https://esm.sh/@codemirror/language@6.11.3";
+      import { lintGutter, linter, setDiagnosticsEffect } from "https://esm.sh/@codemirror/lint@6.8.5";
       import { json } from "https://esm.sh/@codemirror/lang-json@6.0.2";
       import { html } from "https://esm.sh/@codemirror/lang-html@6.4.11";
 
       const WASM = "../stem_native/target/wasm32-unknown-unknown/release/stem_native.wasm";
       const $ = (id) => document.getElementById(id);
+      const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
+      const modLabel = isMac ? "Cmd" : "Ctrl";
 
       const renderer = await createRenderer(await (await fetch(WASM)).arrayBuffer());
       const examples = await (await fetch("./examples.json")).json();
@@ -333,7 +418,9 @@
         keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab])
       ];
 
-      function createEditor(parent, doc, language, onChange) {
+      let templateDiagnostics = [];
+
+      function createEditor(parent, doc, language, onChange, extraExtensions = []) {
         return new EditorView({
           parent,
           state: EditorState.create({
@@ -341,6 +428,7 @@
             extensions: [
               ...sharedExtensions,
               language,
+              ...extraExtensions,
               EditorView.lineWrapping,
               EditorView.updateListener.of((update) => {
                 if (update.docChanged) onChange(update.state.doc.toString());
@@ -424,6 +512,7 @@
 
       function selectTab(i) {
         active = i;
+        clearTemplateDiagnostics();
         syncEditor();
       }
 
@@ -483,6 +572,15 @@
         $("preview").srcdoc = previewDoc(str);
       }
 
+      function updateTemplateDiagnostics(diags) {
+        templateDiagnostics = diags;
+        templateView.dispatch({ effects: setDiagnosticsEffect.of(diags) });
+      }
+
+      function clearTemplateDiagnostics() {
+        updateTemplateDiagnostics([]);
+      }
+
       function setError(message) {
         const error = $("error");
         if (message) {
@@ -515,6 +613,13 @@
 
       function currentView() {
         return document.querySelector('input[name="view"]:checked').value;
+      }
+
+      function cycleView() {
+        const next = currentView() === "rendered" ? "source" : "rendered";
+        document.querySelector(`input[name="view"][value="${next}"]`).checked = true;
+        setView(next);
+        updateHash();
       }
 
       function state() {
@@ -560,14 +665,33 @@
 
       function run() {
         const dataSource = dataView.state.doc.toString();
-        const compiled = renderer.compile(tabs[0].source, partialsMap());
+        const mainSource = tabs[0].source;
+        const compiled = renderer.compile(mainSource, partialsMap());
 
         if (compiled.error) {
-          setError(compiled.error.message);
+          if (active === 0) {
+            const [from, to] = byteRangeToCharRange(mainSource, compiled.error.start, compiled.error.end);
+            updateTemplateDiagnostics([
+              {
+                from,
+                to,
+                severity: "error",
+                message: compiled.error.message
+              }
+            ]);
+            const pos = charToLineColumn(mainSource, from);
+            setError(`${compiled.error.message} (line ${pos.line}, column ${pos.column})`);
+          } else {
+            clearTemplateDiagnostics();
+            setError(`${compiled.error.message} (in main template)`);
+          }
+
           setOutput("");
           updateHash();
           return;
         }
+
+        clearTemplateDiagnostics();
 
         let data;
         try {
@@ -593,14 +717,99 @@
 
       const debouncedRun = debounce(run, 150);
 
-      const templateView = createEditor($("templateEditor"), "", html(), (source) => {
-        activeTab().source = source;
-        debouncedRun();
-      });
+      const templateView = createEditor(
+        $("templateEditor"),
+        "",
+        html(),
+        (source) => {
+          activeTab().source = source;
+          debouncedRun();
+        },
+        [
+          lintGutter(),
+          linter(() => templateDiagnostics)
+        ]
+      );
 
       const dataView = createEditor($("dataEditor"), "{}", json(), () => {
         debouncedRun();
       });
+
+      async function copyShareLink() {
+        updateHash();
+        await navigator.clipboard?.writeText(location.href);
+        $("share").textContent = "Copied!";
+        setTimeout(() => {
+          $("share").textContent = "Copy link";
+        }, 1200);
+      }
+
+      const commandDefinitions = [
+        { title: "Run render now", shortcut: `${modLabel}+Enter`, action: () => run() },
+        { title: "Focus template editor", shortcut: `${modLabel}+1`, action: () => templateView.focus() },
+        { title: "Focus JSON editor", shortcut: `${modLabel}+2`, action: () => dataView.focus() },
+        { title: "Add partial tab", shortcut: `${modLabel}+Alt+N`, action: () => addPartial() },
+        { title: "Copy share link", shortcut: `${modLabel}+Shift+C`, action: async () => copyShareLink() },
+        { title: "Toggle output view", shortcut: `${modLabel}+Shift+V`, action: () => cycleView() }
+      ];
+
+      let paletteSelection = 0;
+
+      function filteredCommands() {
+        const needle = $("paletteSearch").value.trim().toLowerCase();
+        return commandDefinitions.filter((cmd) => cmd.title.toLowerCase().includes(needle));
+      }
+
+      function renderPaletteList() {
+        const items = filteredCommands();
+        const list = $("paletteList");
+        list.innerHTML = "";
+
+        if (items.length === 0) {
+          $("paletteEmpty").hidden = false;
+          paletteSelection = 0;
+          return;
+        }
+
+        $("paletteEmpty").hidden = true;
+        if (paletteSelection >= items.length) paletteSelection = items.length - 1;
+
+        items.forEach((item, index) => {
+          const li = document.createElement("li");
+          const button = document.createElement("button");
+          button.type = "button";
+          button.className = "palette-item";
+          if (index === paletteSelection) button.setAttribute("aria-current", "true");
+          button.innerHTML = `<span>${item.title}</span><span class="kbd">${item.shortcut}</span>`;
+          button.addEventListener("click", async () => {
+            closePalette();
+            await item.action();
+          });
+          li.append(button);
+          list.append(li);
+        });
+      }
+
+      function openPalette() {
+        $("paletteBackdrop").hidden = false;
+        $("paletteSearch").value = "";
+        paletteSelection = 0;
+        renderPaletteList();
+        $("paletteSearch").focus();
+      }
+
+      function closePalette() {
+        $("paletteBackdrop").hidden = true;
+        templateView.focus();
+      }
+
+      async function executePaletteSelection() {
+        const items = filteredCommands();
+        if (items.length === 0) return;
+        const selected = items[paletteSelection];
+        closePalette();
+        await selected.action();
+      }
 
       function loadExample(example) {
         tabs = [{ name: "main", source: example.template }];
@@ -634,6 +843,44 @@
 
       $("escape").addEventListener("change", debouncedRun);
       $("preview").addEventListener("load", resizePreview);
+      $("share").addEventListener("click", copyShareLink);
+      $("commands").addEventListener("click", openPalette);
+
+      $("paletteBackdrop").addEventListener("click", (event) => {
+        if (event.target === $("paletteBackdrop")) closePalette();
+      });
+      $("paletteSearch").addEventListener("input", () => {
+        paletteSelection = 0;
+        renderPaletteList();
+      });
+      $("paletteSearch").addEventListener("keydown", async (event) => {
+        const items = filteredCommands();
+
+        if (event.key === "Escape") {
+          event.preventDefault();
+          closePalette();
+          return;
+        }
+
+        if (event.key === "ArrowDown") {
+          event.preventDefault();
+          paletteSelection = Math.min(items.length - 1, paletteSelection + 1);
+          renderPaletteList();
+          return;
+        }
+
+        if (event.key === "ArrowUp") {
+          event.preventDefault();
+          paletteSelection = Math.max(0, paletteSelection - 1);
+          renderPaletteList();
+          return;
+        }
+
+        if (event.key === "Enter") {
+          event.preventDefault();
+          await executePaletteSelection();
+        }
+      });
 
       for (const radio of document.querySelectorAll('input[name="view"]')) {
         radio.addEventListener("change", () => {
@@ -642,19 +889,55 @@
         });
       }
 
-      $("share").addEventListener("click", async () => {
-        updateHash();
-        await navigator.clipboard?.writeText(location.href);
-        $("share").textContent = "Copied!";
-        setTimeout(() => {
-          $("share").textContent = "Copy link";
-        }, 1200);
-      });
-
       window.addEventListener("keydown", (event) => {
-        if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+        const mod = event.metaKey || event.ctrlKey;
+
+        if (mod && event.shiftKey && event.key.toLowerCase() === "p") {
+          event.preventDefault();
+          if ($("paletteBackdrop").hidden) openPalette();
+          else closePalette();
+          return;
+        }
+
+        if (!$("paletteBackdrop").hidden && event.key === "Escape") {
+          event.preventDefault();
+          closePalette();
+          return;
+        }
+
+        if (mod && event.key === "Enter") {
           event.preventDefault();
           run();
+          return;
+        }
+
+        if (mod && event.altKey && event.key.toLowerCase() === "n") {
+          event.preventDefault();
+          addPartial();
+          return;
+        }
+
+        if (mod && event.shiftKey && event.key.toLowerCase() === "c") {
+          event.preventDefault();
+          void copyShareLink();
+          return;
+        }
+
+        if (mod && event.shiftKey && event.key.toLowerCase() === "v") {
+          event.preventDefault();
+          cycleView();
+          return;
+        }
+
+        if (mod && event.key === "1") {
+          event.preventDefault();
+          templateView.focus();
+          return;
+        }
+
+        if (mod && event.key === "2") {
+          event.preventDefault();
+          dataView.focus();
         }
       });
 

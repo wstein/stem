@@ -26,6 +26,19 @@ export function byteToChar(source, byteOffset) {
   return source.length;
 }
 
+export function byteRangeToCharRange(source, startByte, endByte) {
+  const from = byteToChar(source, startByte);
+  const to = byteToChar(source, endByte);
+  return [from, Math.max(from + 1, to)];
+}
+
+export function charToLineColumn(source, charIndex) {
+  const index = Math.max(0, Math.min(charIndex, source.length));
+  const upToIndex = source.slice(0, index);
+  const lines = upToIndex.split("\n");
+  return { line: lines.length, column: lines[lines.length - 1].length + 1 };
+}
+
 export function encodeState(state) {
   const json = JSON.stringify(state);
 
