@@ -1,5 +1,5 @@
 ---
-id: 20260523130000
+id: 20260523140000
 aliases: [bracket keys, literal keys, anonymous block param, underscore wildcard]
 tags: [compiler, semantics, blocks, parser]
 ---
