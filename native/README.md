@@ -30,13 +30,29 @@ the host, escaping done natively.
   WASI bin reading stdin / writing stdout.
 - `run.mjs` — a Node WASI runner that loads the wasm module and forwards stdio.
 - `web/` — the browser demo: `stem.mjs` (glue), `index.html` (live page),
-  `examples.json` (templates precompiled on the BEAM), `validate.mjs` (a
-  browserless check of the no-WASI module + glue). The page is a multi-tab
-  editor: the first tab is the rendered entry template and the rest are
-  partials, pulled in with `{{> name}}` and compiled fully in the browser.
+  `examples.json` (templates precompiled on the BEAM), `playground_utils.mjs`
+  (shared browser utilities), and `validate.mjs` (a browserless check of the
+  no-WASI module + glue). The page is now a lightweight IDE-style, multi-tab
+  editor built with CodeMirror 6: the first tab is the rendered entry template
+  and the rest are partials, pulled in with `{{> name}}` and compiled fully in
+  the browser.
   `compile(source, partials)` sends `{ "compile": source, "partials": {name:
   source} }`; the engine expands partials inline with the same recursion guard
   as `Stem.Parser`.
+
+Playground workflow highlights:
+
+- Split-pane workspace (Templates, Data JSON, Output) with responsive collapse
+  on narrow screens.
+- Inline compile diagnostics in the template editor gutter, plus a status lane
+  with line/column locations.
+- Command palette and shortcuts:
+  - `Cmd/Ctrl+Shift+P` opens the palette.
+  - `Cmd/Ctrl+Enter` renders immediately.
+  - `Cmd/Ctrl+1` / `Cmd/Ctrl+2` focus template/data editor.
+  - `Cmd/Ctrl+Alt+N` adds a partial tab.
+  - `Cmd/Ctrl+Shift+C` copies the share link.
+  - `Cmd/Ctrl+Shift+V` toggles rendered/source output.
 
 ## Build
 
@@ -151,6 +167,9 @@ cargo build --release --target wasm32-unknown-unknown --lib
 # browserless check of the module + glue (Node uses the same WebAssembly API):
 node native/web/validate.mjs
 # => browser glue: 4/4 examples render correctly
+
+# utility tests for state encoding and UTF-8 span mapping:
+node native/web/playground_utils.test.mjs
 
 # live demo (must be served over HTTP so fetch() can load the .wasm):
 python3 -m http.server   # then open http://localhost:8000/native/web/

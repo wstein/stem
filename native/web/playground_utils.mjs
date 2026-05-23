@@ -18,9 +18,16 @@ export function byteToChar(source, byteOffset) {
   if (byteOffset <= 0) return 0;
 
   let bytes = 0;
-  for (let i = 0; i < source.length; i++) {
+  for (let i = 0; i < source.length; ) {
     if (bytes >= byteOffset) return i;
-    bytes += encoder.encode(source[i]).length;
+
+    const codePoint = source.codePointAt(i);
+    const char = String.fromCodePoint(codePoint);
+    const charBytes = encoder.encode(char).length;
+    if (bytes + charBytes > byteOffset) return i;
+
+    bytes += charBytes;
+    i += codePoint > 0xffff ? 2 : 1;
   }
 
   return source.length;
