@@ -16,9 +16,6 @@ const expected = {
   Greeting: "Hello &lt;Nina&gt;!",
   Pipeline: "NINA",
   List: "<ul><li>1. a</li><li>2. b</li><li>3. c</li></ul>",
-  // Native-only: the {"$getter": "full_name"} sentinel is computed by a
-  // host-authored getter, with the user object as its "self".
-  Getter: "Ada Lovelace",
   // Each + if + pipeline rendering a card grid (shown via the Rendered view).
   "HTML cards":
     '<div style="display:grid;grid-template-columns:repeat(2,1fr);gap:10px;font-family:system-ui">' +
