@@ -35,6 +35,7 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
   # ported (expected to land in the pending bucket, proving the gate classifies
   # rather than miscompiles). Grow this list as the grammar expands.
   @templates [
+    # Text + expressions
     "",
     "no tags here",
     "Hello {{name}}!",
@@ -45,11 +46,26 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "{{{raw}}}",
     "{{{user.bio}}}",
     "prefix {{x}} mid {{y.z}} suffix",
+    "{{@index}} {{@index1}} {{@key}}",
+    "{{../name}}",
+    # Block helpers
+    "{{#if active}}on{{else}}off{{/if}}",
+    "{{#unless active}}off{{/unless}}",
+    "{{#each items}}{{this}};{{/each}}",
+    "{{#each items}}x{{else}}none{{/each}}",
+    "{{#each items as |item|}}{{item}} {{/each}}",
+    "{{#each items as |item idx|}}{{idx}}:{{item}} {{/each}}",
+    "{{#each rows as |row i0 i1|}}{{i0}}/{{i1}} {{/each}}",
+    "{{#each rows}}{{@index1}}. {{this.name}}{{/each}}",
+    "{{#with user}}{{this.name}}{{/with}}",
+    "{{#with user as |u|}}{{u.name}} <{{u.email}}>{{/with}}",
+    "<ul>{{#each items}}<li>{{@index1}}. {{this}}</li>{{/each}}</ul>",
+    "{{#each items}}{{../title}}: {{this}}{{/each}}",
+    "{{#each rows}}{{#if this.active}}[{{this.name}}]{{/if}}{{/each}}",
     # Not yet ported — should be reported as pending, not mismatched.
     "{{name |> upcase}}",
-    "{{#if active}}on{{/if}}",
-    "{{@index}}",
-    "{{../name}}"
+    "{{default user.name \"anon\"}}",
+    "{{42}}"
   ]
 
   @impl true
