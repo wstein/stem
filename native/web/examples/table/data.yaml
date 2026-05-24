@@ -1,0 +1,6 @@
+# A flat list of rows. The template loops over it once to build the table body —
+# one <tr> per language. {{@index1}} is the 1-based loop counter.
+languages:
+  - { name: Elixir, paradigm: Functional, year: 2011 }
+  - { name: Rust, paradigm: Systems, year: 2010 }
+  - { name: Python, paradigm: Scripting, year: 1991 }

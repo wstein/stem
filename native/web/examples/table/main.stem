@@ -1,0 +1,8 @@
+<table>
+  <thead>
+    <tr><th>#</th><th>Language</th><th>Paradigm</th><th>First release</th></tr>
+  </thead>
+  <tbody>
+{{#each languages}}    <tr><td>{{@index1}}</td><td>{{name}}</td><td>{{paradigm}}</td><td>{{year}}</td></tr>
+{{/each}}  </tbody>
+</table>

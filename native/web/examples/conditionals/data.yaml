@@ -1,0 +1,8 @@
+# Each task has flags the template branches on:
+#   {{#if done}}…{{else}}…{{/if}}  picks one of two outputs
+#   {{#if priority}}…{{/if}}        shows something only when a value is present
+#   {{#unless tasks}}…{{/unless}}   renders only when the list is empty
+tasks:
+  - { title: Write the parser, done: true,  priority: high }
+  - { title: Add more tests,   done: false, priority: high }
+  - { title: Polish the docs,  done: false }

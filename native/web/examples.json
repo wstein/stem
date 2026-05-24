@@ -1,10 +1,34 @@
 [
-  { "id": "greeting", "label": "Greeting", "view": "source", "main": "main.stem", "partials": [], "data": "data.yaml" },
-  { "id": "pipeline", "label": "Pipeline", "view": "source", "main": "main.stem", "partials": [], "data": "data.yaml" },
-  { "id": "list", "label": "List", "view": "rendered", "main": "main.stem", "partials": [], "data": "data.yaml" },
+  { "id": "greeting", "label": "Simple - Hello World!", "view": "source", "main": "main.stem", "partials": [], "data": "data.yaml" },
+  { "id": "pipeline", "label": "Simple - Transformers", "view": "source", "main": "main.stem", "partials": [], "data": "data.yaml" },
+  { "id": "list", "label": "Simple - HTML list", "view": "rendered", "main": "main.stem", "partials": [], "data": "data.yaml" },
+  {
+    "id": "table",
+    "label": "Intermediate - HTML table",
+    "view": "rendered",
+    "main": "main.stem",
+    "partials": [],
+    "data": "data.yaml"
+  },
+  {
+    "id": "markdown-basic",
+    "label": "Intermediate - Markdown",
+    "view": "markdown",
+    "main": "main.stem",
+    "partials": [],
+    "data": "data.yaml"
+  },
+  {
+    "id": "conditionals",
+    "label": "Intermediate - Conditionals",
+    "view": "rendered",
+    "main": "main.stem",
+    "partials": [],
+    "data": "data.yaml"
+  },
   {
     "id": "partials",
-    "label": "Partials",
+    "label": "Intermediate - Partials",
     "view": "rendered",
     "main": "main.stem",
     "partials": ["header", "row"],
@@ -12,7 +36,7 @@
   },
   {
     "id": "partial-arguments",
-    "label": "Partial arguments",
+    "label": "Intermediate - Partial arguments",
     "view": "rendered",
     "main": "main.stem",
     "partials": ["row"],
@@ -20,7 +44,7 @@
   },
   {
     "id": "html-cards",
-    "label": "HTML cards",
+    "label": "Advanced - HTML cards",
     "view": "rendered",
     "main": "main.stem",
     "partials": ["styles", "header", "card", "avatar", "lead_badge", "identity", "name", "role"],
@@ -28,7 +52,7 @@
   },
   {
     "id": "markdown",
-    "label": "Markdown changelog",
+    "label": "Advanced - Markdown changelog",
     "view": "markdown",
     "main": "main.stem",
     "partials": [],
@@ -37,7 +61,7 @@
   },
   {
     "id": "infographic",
-    "label": "Infographic",
+    "label": "Advanced - Infographic",
     "view": "rendered",
     "main": "main.stem",
     "partials": ["styles", "donut", "bars", "bar", "waffle", "spark"],

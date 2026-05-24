@@ -1,0 +1,10 @@
+# Plain values and a list. No transform here — the template interpolates the
+# values straight into Markdown. (See "Advanced - Markdown changelog" for a
+# version that reshapes data with JSONata first.)
+title: Stem
+tagline: A tiny, logic-less template engine.
+features:
+  - Compiles templates to portable bytecode
+  - Runs on Elixir and Rust / WebAssembly
+  - Escapes output by default
+note: Pick an example from the dropdown to keep exploring.

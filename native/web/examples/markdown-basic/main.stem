@@ -1,0 +1,9 @@
+# {{title}}
+
+> {{tagline}}
+
+## Features
+
+{{#each features}}- {{this}}
+{{/each}}
+Built with **{{title}}**. {{note}}
