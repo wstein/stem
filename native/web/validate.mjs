@@ -72,3 +72,53 @@ if (failures > 0) {
   process.exit(1);
 }
 console.log(`browser glue: ${manifest.length}/${manifest.length} examples compile + render correctly`);
+
+// Source-map pass: compile + render each example with `map: true` and assert the
+// segments tile the output (ordered, contiguous, no gaps/overlaps, covering the
+// whole output in bytes) and attribute every run to a known file. This guards
+// the provenance the playground's Source view relies on. Mapped rendering must
+// reproduce the same output bytes as the plain path.
+const enc = new TextEncoder();
+let mapFailures = 0;
+for (const ex of manifest) {
+  const { main, partials, data } = await loadExample(ex);
+  const known = new Set(["main", ...Object.keys(partials)]);
+
+  const compiled = compile(main, partials, { map: true });
+  if (compiled.error) {
+    mapFailures++;
+    console.error(`  FAIL ${ex.label} (map compile): ${compiled.error.message}`);
+    continue;
+  }
+
+  const { output, segments } = render(compiled.program, data, { map: true });
+  if (output !== expected[ex.label]) {
+    mapFailures++;
+    console.error(`  FAIL ${ex.label} (map output): diverged from the plain render`);
+    continue;
+  }
+
+  const total = enc.encode(output).length;
+  let cursor = 0;
+  let problem = null;
+  for (const s of segments) {
+    if (s.out !== cursor) { problem = `gap/overlap at byte ${cursor} (segment starts ${s.out})`; break; }
+    if (!(s.len > 0)) { problem = `empty segment at byte ${s.out}`; break; }
+    if (!known.has(s.file)) { problem = `unknown file '${s.file}'`; break; }
+    cursor += s.len;
+  }
+  if (!problem && cursor !== total) problem = `segments cover ${cursor}/${total} output bytes`;
+
+  if (problem) {
+    mapFailures++;
+    console.error(`  FAIL ${ex.label} (source map): ${problem}`);
+  } else {
+    console.log(`  ok  ${ex.label}: ${segments.length} segment(s) tile ${total} bytes`);
+  }
+}
+
+if (mapFailures > 0) {
+  console.error(`source map: ${mapFailures} check(s) diverged`);
+  process.exit(1);
+}
+console.log(`source map: ${manifest.length}/${manifest.length} examples tile their output with valid provenance`);

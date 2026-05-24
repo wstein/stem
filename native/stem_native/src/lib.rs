@@ -35,10 +35,16 @@ struct Program {
 enum Instr {
     Text {
         text: String,
+        // Provenance for the source map. Present only in span-annotated programs
+        // (compiled via `compile_to_wire_with_spans`); absent on the parity wire.
+        #[serde(default)]
+        src: Option<Src>,
     },
     Emit {
         value: Op,
         escape: String,
+        #[serde(default)]
+        src: Option<Src>,
     },
     If {
         cond: Op,
@@ -102,6 +108,35 @@ enum Op {
     },
 }
 
+// Provenance attached to a `text`/`emit` instruction by the span-annotated
+// compiler: which template/partial it came from and (for `emit`) the byte span
+// of the originating `{{ }}` tag in that file's source.
+#[derive(Deserialize)]
+struct Src {
+    file: String,
+    #[serde(default)]
+    start: Option<usize>,
+    #[serde(default)]
+    end: Option<usize>,
+}
+
+// One contiguous run of rendered output attributed to a source instruction. The
+// segments returned by a mapped render tile the output in order, so the browser
+// can map any output offset back to its originating file/tag.
+#[derive(serde::Serialize)]
+struct Segment {
+    // Byte offset and length of this run within the rendered output.
+    out: usize,
+    len: usize,
+    // Originating template/partial ("main" for the entry).
+    file: String,
+    // Byte span of the source tag in `file` (emit only; absent for literal text).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    start: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    end: Option<usize>,
+}
+
 // Render context, mirroring `Stem.Bytecode.VM`'s threaded state.
 struct Ctx {
     root: Value,
@@ -140,7 +175,9 @@ pub fn handle_with_getters(raw: &str, resolve: GetterResolver) -> String {
     // backend-free compile step.
     if let Some(Value::String(source)) = request.get("compile") {
         let partials = parse_partials(request.get("partials"));
-        return serde_json::to_string(&compile_result(source, &partials)).unwrap_or_default();
+        let with_spans = request.get("map").and_then(Value::as_bool).unwrap_or(false);
+        return serde_json::to_string(&compile_result(source, &partials, with_spans))
+            .unwrap_or_default();
     }
 
     // `{"compile_batch": [...]}` compiles many templates in one process and
@@ -151,9 +188,9 @@ pub fn handle_with_getters(raw: &str, resolve: GetterResolver) -> String {
         let outputs: Vec<Value> = entries
             .iter()
             .map(|entry| match entry {
-                Value::String(src) => compile_result(src, &compile::Partials::new()),
+                Value::String(src) => compile_result(src, &compile::Partials::new(), false),
                 Value::Object(obj) => match obj.get("template").and_then(Value::as_str) {
-                    Some(src) => compile_result(src, &parse_partials(obj.get("partials"))),
+                    Some(src) => compile_result(src, &parse_partials(obj.get("partials")), false),
                     None => json!({ "error": { "message": "compile_batch object needs a string `template`", "start": 0, "end": 0 } }),
                 },
                 _ => json!({ "error": { "message": "compile_batch entries must be strings or objects", "start": 0, "end": 0 } }),
@@ -174,7 +211,11 @@ pub fn handle_with_getters(raw: &str, resolve: GetterResolver) -> String {
             Err(err) => format!("stem_native error: invalid batch shape: {err}"),
         }
     } else {
+        // `{"map": true}` returns `{"output", "segments"}` JSON (the source map);
+        // otherwise a single `{program, data}` renders to a raw output string.
+        let mapped = request.get("map").and_then(Value::as_bool).unwrap_or(false);
         match serde_json::from_value::<Input>(request) {
+            Ok(input) if mapped => render_input_mapped(&input, resolve),
             Ok(input) => render_input(&input, resolve),
             Err(err) => format!("stem_native error: invalid request shape: {err}"),
         }
@@ -222,9 +263,16 @@ pub unsafe extern "C" fn stem_render(ptr: *const u8, len: usize) -> u64 {
 }
 
 // Compile one template to its wire program, or an `{"error": {message, span}}`
-// object the playground can underline.
-fn compile_result(source: &str, partials: &compile::Partials) -> Value {
-    match compile::compile_to_wire(source, partials) {
+// object the playground can underline. With `with_spans`, the program carries
+// `src` provenance for the render-time source map (a superset wire); without it
+// the output is byte-identical to the BEAM reference.
+fn compile_result(source: &str, partials: &compile::Partials, with_spans: bool) -> Value {
+    let compiled = if with_spans {
+        compile::compile_to_wire_with_spans(source, partials)
+    } else {
+        compile::compile_to_wire(source, partials)
+    };
+    match compiled {
         Ok(program) => program,
         Err(err) => json!({
             "error": { "message": err.message, "start": err.start, "end": err.end }
@@ -244,27 +292,43 @@ fn parse_partials(value: Option<&Value>) -> compile::Partials {
     }
 }
 
-fn render_input(input: &Input, resolve: GetterResolver) -> String {
-    // Refuse — never panic — on any feature this core cannot render with
-    // byte-parity: escape modes beyond none/html/xml/json, transformers outside
-    // the parity stdlib, and keyword arguments. Returning a structured error
-    // here turns an input-triggered abort (a DoS in the browser/WASM build) into
-    // a recoverable message.
-    if let Some(feature) = unsupported_feature(&input.program.instructions) {
-        return format!("stem_native error: unsupported {feature} in this native PoC");
-    }
+// The first construct in the program this core cannot render with byte-parity,
+// as a recoverable error string. Refusing — never panicking — turns an
+// input-triggered abort (a DoS in the browser/WASM build) into a message.
+fn refuse_unsupported(input: &Input) -> Option<String> {
+    unsupported_feature(&input.program.instructions)
+        .map(|feature| format!("stem_native error: unsupported {feature} in this native PoC"))
+}
 
-    let ctx = Ctx {
-        root: input.data.clone(),
+fn root_ctx(data: &Value, resolve: GetterResolver) -> Ctx {
+    Ctx {
+        root: data.clone(),
         this: Value::Null,
         index: 0,
         key: Value::Null,
         in_each: false,
         locals: HashMap::new(),
         resolve,
-    };
+    }
+}
 
-    render(&input.program.instructions, &ctx)
+fn render_input(input: &Input, resolve: GetterResolver) -> String {
+    if let Some(error) = refuse_unsupported(input) {
+        return error;
+    }
+    render(&input.program.instructions, &root_ctx(&input.data, resolve))
+}
+
+// Render returning a JSON string `{"output", "segments"}`: the output plus a
+// source map tiling it (see `render_mapped`). Used by the playground's mapped
+// render path; the segment list is empty unless the program carries `src`
+// provenance (compiled with `map: true`).
+fn render_input_mapped(input: &Input, resolve: GetterResolver) -> String {
+    let (output, segments) = match refuse_unsupported(input) {
+        Some(error) => (error, Vec::new()),
+        None => render_mapped(&input.program.instructions, &root_ctx(&input.data, resolve)),
+    };
+    serde_json::to_string(&json!({ "output": output, "segments": segments })).unwrap_or_default()
 }
 
 // Escape modes the native renderer implements with byte-parity to the BEAM.
@@ -315,7 +379,7 @@ fn unsupported_feature(instrs: &[Instr]) -> Option<String> {
 fn instr_unsupported(instr: &Instr) -> Option<String> {
     match instr {
         Instr::Text { .. } => None,
-        Instr::Emit { value, escape } => {
+        Instr::Emit { value, escape, .. } => {
             if !SUPPORTED_ESCAPES.contains(&escape.as_str()) {
                 Some(format!("escape mode '{escape}'"))
             } else {
@@ -366,20 +430,55 @@ fn op_unsupported(op: &Op) -> Option<String> {
 }
 
 fn render(instructions: &[Instr], ctx: &Ctx) -> String {
-    let mut out = String::new();
-    for instr in instructions {
-        exec(instr, ctx, &mut out);
-    }
+    let (out, _segments) = render_mapped(instructions, ctx);
     out
 }
 
-fn exec(instr: &Instr, ctx: &Ctx, out: &mut String) {
-    match instr {
-        Instr::Text { text } => out.push_str(text),
+// Render and, alongside the output, a segment map tiling it: each `text`/`emit`
+// instruction that carries `src` provenance records the byte range it produced.
+// Block instructions append their children into the same shared buffer, so the
+// recorded offsets are global to the whole output. A program without `src`
+// (the parity wire) yields an empty segment list and identical output.
+fn render_mapped(instructions: &[Instr], ctx: &Ctx) -> (String, Vec<Segment>) {
+    let mut out = String::new();
+    let mut segs = Vec::new();
+    exec_all(instructions, ctx, &mut out, &mut segs);
+    (out, segs)
+}
 
-        Instr::Emit { value, escape } => {
+fn exec_all(instructions: &[Instr], ctx: &Ctx, out: &mut String, segs: &mut Vec<Segment>) {
+    for instr in instructions {
+        exec(instr, ctx, out, segs);
+    }
+}
+
+// Record a non-empty output run `[begin, end)` against its source provenance.
+// Empty runs (e.g. an emit that renders to "") map to no output and are skipped.
+fn record(segs: &mut Vec<Segment>, src: &Option<Src>, begin: usize, end: usize) {
+    if let (Some(src), true) = (src, end > begin) {
+        segs.push(Segment {
+            out: begin,
+            len: end - begin,
+            file: src.file.clone(),
+            start: src.start,
+            end: src.end,
+        });
+    }
+}
+
+fn exec(instr: &Instr, ctx: &Ctx, out: &mut String, segs: &mut Vec<Segment>) {
+    match instr {
+        Instr::Text { text, src } => {
+            let begin = out.len();
+            out.push_str(text);
+            record(segs, src, begin, out.len());
+        }
+
+        Instr::Emit { value, escape, src } => {
+            let begin = out.len();
             let rendered = to_string(&eval(value, ctx));
             out.push_str(&escape_with(&rendered, escape));
+            record(segs, src, begin, out.len());
         }
 
         Instr::If {
@@ -387,11 +486,8 @@ fn exec(instr: &Instr, ctx: &Ctx, out: &mut String) {
             then,
             otherwise,
         } => {
-            if truthy(&eval(cond, ctx)) {
-                out.push_str(&render(then, ctx));
-            } else {
-                out.push_str(&render(otherwise, ctx));
-            }
+            let branch = if truthy(&eval(cond, ctx)) { then } else { otherwise };
+            exec_all(branch, ctx, out, segs);
         }
 
         Instr::Each {
@@ -406,11 +502,11 @@ fn exec(instr: &Instr, ctx: &Ctx, out: &mut String) {
                     in_each: false,
                     ..clone_ctx(ctx)
                 };
-                out.push_str(&render(otherwise, &else_ctx));
+                exec_all(otherwise, &else_ctx, out, segs);
             } else {
                 for (index, (current, key)) in entries.into_iter().enumerate() {
                     let inner = each_context(ctx, params, current, key, index as i64);
-                    out.push_str(&render(body, &inner));
+                    exec_all(body, &inner, out, segs);
                 }
             }
         }
@@ -423,14 +519,14 @@ fn exec(instr: &Instr, ctx: &Ctx, out: &mut String) {
         } => {
             let value = eval(subject, ctx);
             if truthy(&value) {
-                out.push_str(&render(body, &with_context(ctx, params, value)));
+                exec_all(body, &with_context(ctx, params, value), out, segs);
             } else {
-                out.push_str(&render(otherwise, ctx));
+                exec_all(otherwise, ctx, out, segs);
             }
         }
 
         Instr::Scope { base, hash, body } => {
-            out.push_str(&render(body, &scope_context(ctx, base, hash)));
+            exec_all(body, &scope_context(ctx, base, hash), out, segs);
         }
     }
 }
@@ -1310,5 +1406,111 @@ mod guard_tests {
         assert_eq!(render_if(json!({ "x": 0 })), "N");
         assert_eq!(render_if(json!({ "x": 0.5 })), "Y");
         assert_eq!(render_if(json!({ "x": 3 })), "Y");
+    }
+}
+
+#[cfg(test)]
+mod source_map_tests {
+    use super::*;
+    use serde_json::json;
+
+    // Compile with span provenance via the `{"compile", "map": true}` request,
+    // returning the wire program (or error object).
+    fn compile_mapped(source: &str, partials: &[(&str, &str)]) -> Value {
+        let mut map = serde_json::Map::new();
+        for (name, src) in partials {
+            map.insert((*name).into(), json!(src));
+        }
+        let request = json!({ "compile": source, "partials": map, "map": true });
+        serde_json::from_str(&handle(&request.to_string())).expect("compile json")
+    }
+
+    // Render with `{"map": true}`, returning the parsed `{output, segments}`.
+    fn render_mapped_req(program: &Value, data: Value) -> Value {
+        let request = json!({ "program": program, "data": data, "map": true });
+        serde_json::from_str(&handle(&request.to_string())).expect("render json")
+    }
+
+    // The segments must tile the output: ordered, contiguous, no gaps/overlaps,
+    // covering exactly `[0, output.len())`. Returns the parsed segment array.
+    fn assert_tiles(result: &Value) -> Vec<Value> {
+        let output = result["output"].as_str().expect("output string");
+        let segments = result["segments"].as_array().expect("segments array").clone();
+        let mut cursor = 0usize;
+        for seg in &segments {
+            let out = seg["out"].as_u64().unwrap() as usize;
+            let len = seg["len"].as_u64().unwrap() as usize;
+            assert_eq!(out, cursor, "segment gap/overlap at {cursor}; segments: {segments:?}");
+            assert!(len > 0, "empty segment recorded: {seg:?}");
+            cursor += len;
+        }
+        assert_eq!(cursor, output.len(), "segments do not cover the whole output");
+        segments
+    }
+
+    #[test]
+    fn segments_attribute_text_and_emit_to_their_file() {
+        let program = compile_mapped("Hi {{name}}!", &[]);
+        let result = render_mapped_req(&program, json!({ "name": "Ada" }));
+        assert_eq!(result["output"], "Hi Ada!");
+
+        let segments = assert_tiles(&result);
+        // "Hi " (text, main) | "Ada" (emit, main, with span) | "!" (text, main).
+        assert_eq!(segments.len(), 3);
+        assert_eq!(segments[0]["file"], "main");
+        assert!(segments[0].get("start").is_none(), "text carries no span");
+        assert_eq!(segments[1]["file"], "main");
+        assert_eq!(segments[1]["start"], 3); // byte offset of `{{name}}`
+        assert_eq!(segments[1]["end"], 11);
+    }
+
+    #[test]
+    fn emit_from_a_partial_is_attributed_to_the_partial() {
+        let program = compile_mapped("a {{> card}} b", &[("card", "[{{name}}]")]);
+        let result = render_mapped_req(&program, json!({ "name": "X" }));
+        assert_eq!(result["output"], "a [X] b");
+
+        let segments = assert_tiles(&result);
+        // The emitted "X" run must trace back to the `card` partial, not "main".
+        let emit = segments
+            .iter()
+            .find(|s| s.get("start").is_some())
+            .expect("an emit segment");
+        assert_eq!(emit["file"], "card");
+    }
+
+    #[test]
+    fn empty_emit_records_no_segment() {
+        // A missing assign renders to "" and must not leave a zero-length segment.
+        let program = compile_mapped("[{{missing}}]", &[]);
+        let result = render_mapped_req(&program, json!({}));
+        assert_eq!(result["output"], "[]");
+        let segments = assert_tiles(&result);
+        assert_eq!(segments.len(), 2, "only the two bracket texts: {segments:?}");
+    }
+
+    #[test]
+    fn default_wire_carries_no_src_and_maps_to_no_segments() {
+        // Compiling without `map` yields the parity wire (no `src`); rendering it
+        // with `map: true` still works but produces an empty segment list.
+        let program = compile::compile_to_wire("Hi {{name}}!", &compile::Partials::new())
+            .expect("compiles");
+        let instrs = program["instructions"].as_array().unwrap();
+        assert!(instrs.iter().all(|i| i.get("src").is_none()), "wire leaked src");
+
+        let result = render_mapped_req(&program, json!({ "name": "Ada" }));
+        assert_eq!(result["output"], "Hi Ada!");
+        assert!(result["segments"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn block_output_is_attributed_through_recursion() {
+        let program = compile_mapped("{{#each xs}}{{this}}{{/each}}", &[]);
+        let result = render_mapped_req(&program, json!({ "xs": ["a", "b", "c"] }));
+        assert_eq!(result["output"], "abc");
+        // Each iteration's emit records a global-offset segment tiling the output.
+        let segments = assert_tiles(&result);
+        assert_eq!(segments.len(), 3);
+        assert!(segments.iter().all(|s| s["file"] == "main"));
     }
 }

@@ -283,6 +283,28 @@
         color: var(--fg-faint); font-size: 12px; pointer-events: none;
       }
 
+      /* Source view: each run of output is a segment tracing back to the file
+         (and, for expressions, the tag) that produced it. Hover to highlight +
+         tooltip; click to jump to the source. */
+      .output-body pre .seg { border-radius: 2px; cursor: pointer; }
+      .output-body pre .seg.seg-expr { box-shadow: inset 0 -1px 0 var(--accent-soft); }
+      .output-body pre .seg:hover {
+        background: var(--accent-soft);
+        box-shadow: inset 0 0 0 1px var(--accent);
+      }
+      .seg-tip {
+        position: fixed; z-index: 60; max-width: 340px; padding: 6px 9px;
+        border-radius: 7px; background: var(--bg-pane); color: var(--fg);
+        border: 1px solid var(--border); box-shadow: var(--shadow-pop);
+        font: 11.5px/1.45 system-ui, sans-serif; pointer-events: none;
+      }
+      .seg-tip .seg-tip-file { color: var(--accent-2); font-weight: 600; }
+      .seg-tip code {
+        display: block; margin-top: 3px; font: 11px/1.4 var(--font-mono);
+        color: var(--fg-secondary); word-break: break-all;
+      }
+      .seg-tip[hidden] { display: none; }
+
       /* ── Status bar ──────────────────────────────────────────────── */
       .statusbar {
         flex: 0 0 var(--statusbar-h); height: var(--statusbar-h);
@@ -565,6 +587,7 @@
             <iframe id="output-preview" sandbox="allow-same-origin" title="Rendered output"></iframe>
             <pre id="output-source" hidden></pre>
           </div>
+          <div id="seg-tip" class="seg-tip" role="tooltip" hidden></div>
         </section>
       </main>
 
@@ -826,16 +849,53 @@
         );
       }
 
-      function setOutput(str) {
-        byId("output-source").textContent = str;
+      function setOutput(str, segments = []) {
         byId("output-preview").srcdoc = previewDoc(str);
+        renderSourceView(str, segments);
         qs(".output-body").dataset.empty = str ? "false" : "true";
+      }
+
+      // The file behind a segment ("main" is tab 0; partials are the rest).
+      function tabIndexByFile(file) {
+        return file === "main" ? 0 : tabs.findIndex((t, i) => i > 0 && t.name === file);
+      }
+      function fileSource(file) {
+        const i = tabIndexByFile(file);
+        return i >= 0 ? tabs[i].source : "";
+      }
+
+      // Build the Source view as a run of segment spans, each tracing a slice of
+      // the output back to the template/partial (and, for expressions, the tag)
+      // that produced it. Segment offsets are output BYTE offsets, so they are
+      // converted to JS char offsets to slice the output string. Text nodes are
+      // built via the DOM (never innerHTML) so output content cannot inject HTML.
+      function renderSourceView(output, segments) {
+        const pre = byId("output-source");
+        pre.textContent = "";
+        if (!segments.length) { pre.textContent = output; return; }
+
+        let cursor = 0; // chars already appended
+        for (const seg of segments) {
+          const [from, to] = byteRangeToCharRange(output, seg.out, seg.out + seg.len);
+          if (from > cursor) pre.appendChild(document.createTextNode(output.slice(cursor, from)));
+          const isExpr = typeof seg.start === "number";
+          const span = document.createElement("span");
+          span.className = "seg" + (isExpr ? " seg-expr" : "");
+          span.dataset.file = seg.file;
+          if (isExpr) { span.dataset.start = String(seg.start); span.dataset.end = String(seg.end); }
+          span.textContent = output.slice(from, to);
+          pre.appendChild(span);
+          cursor = to;
+        }
+        if (cursor < output.length) pre.appendChild(document.createTextNode(output.slice(cursor)));
       }
 
       function run() {
         const dataSource = dataView.state.doc.toString();
         const mainSource = tabs[0].source;
-        const compiled = renderer.compile(mainSource, partialsMap());
+        // Compile with span provenance so the rendered output can be mapped back
+        // to its source files/tags in the Source view.
+        const compiled = renderer.compile(mainSource, partialsMap(), { map: true });
 
         if (compiled.error) {
           if (activeTabIdx === 0) {
@@ -863,7 +923,8 @@
 
         try {
           const program = applyEscape(compiled.program, escapeMode);
-          setOutput(renderer.render(program, data));
+          const { output, segments } = renderer.render(program, data, { map: true });
+          setOutput(output, segments);
           setError("");
         } catch (err) {
           setError("render error: " + err.message);
@@ -914,9 +975,82 @@
         const rendered = view !== "source";
         byId("output-preview").hidden = !rendered;
         byId("output-source").hidden = rendered;
+        hideSegTip();
         for (const b of document.querySelectorAll(".segmented button"))
           b.classList.toggle("on", b.dataset.view === view);
       }
+
+      // ── Source-map interactions (Source view) ─────────────────────────
+      const segTip = byId("seg-tip");
+      function hideSegTip() { segTip.hidden = true; }
+
+      function showSegTip(seg) {
+        const file = seg.dataset.file;
+        const isExpr = seg.dataset.start !== undefined;
+        segTip.textContent = "";
+
+        const head = document.createElement("div");
+        head.append(document.createTextNode((isExpr ? "expression" : "literal text") + " · "));
+        const fileEl = document.createElement("span");
+        fileEl.className = "seg-tip-file";
+        fileEl.textContent = file === "main" ? "main (entry)" : file;
+        head.append(fileEl);
+        segTip.append(head);
+
+        if (isExpr) {
+          const src = fileSource(file);
+          const [s, e] = byteRangeToCharRange(src, Number(seg.dataset.start), Number(seg.dataset.end));
+          const tag = src.slice(s, e);
+          if (tag) {
+            const code = document.createElement("code");
+            code.textContent = tag;
+            segTip.append(code);
+          }
+        }
+
+        // Position above the segment, flipping below / clamping to the viewport.
+        segTip.hidden = false;
+        const r = seg.getBoundingClientRect();
+        const t = segTip.getBoundingClientRect();
+        let top = r.top - t.height - 6;
+        if (top < 4) top = r.bottom + 6;
+        let left = Math.min(r.left, window.innerWidth - t.width - 6);
+        segTip.style.top = `${top}px`;
+        segTip.style.left = `${Math.max(4, left)}px`;
+      }
+
+      // Jump from a rendered run to the file/tag that produced it: open the file's
+      // tab and, for an expression, select its source span in the editor.
+      function openSourceLocation(file, start, end) {
+        const idx = tabIndexByFile(file);
+        if (idx < 0) return;
+        selectTemplateTab(idx);
+        templateView.focus();
+        if (start !== null) {
+          const [from, to] = byteRangeToCharRange(tabs[idx].source, start, end);
+          templateView.dispatch({ selection: { anchor: from, head: to }, scrollIntoView: true });
+        }
+        hideSegTip();
+      }
+
+      (() => {
+        const pre = byId("output-source");
+        pre.addEventListener("mouseover", (e) => {
+          const seg = e.target.closest?.(".seg");
+          if (seg) showSegTip(seg);
+        });
+        pre.addEventListener("mouseout", (e) => {
+          if (e.target.closest?.(".seg")) hideSegTip();
+        });
+        pre.addEventListener("scroll", hideSegTip);
+        pre.addEventListener("click", (e) => {
+          const seg = e.target.closest?.(".seg");
+          if (!seg) return;
+          const start = seg.dataset.start !== undefined ? Number(seg.dataset.start) : null;
+          const end = seg.dataset.end !== undefined ? Number(seg.dataset.end) : null;
+          openSourceLocation(seg.dataset.file, start, end);
+        });
+      })();
 
       // ── Splitter ──────────────────────────────────────────────────────
       let splits = { w0: null, h0: null, ew: null, eh: null };

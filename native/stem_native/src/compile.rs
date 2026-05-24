@@ -65,13 +65,33 @@ pub struct CompileError {
 // Compiles template source to the wire program `{"version", "instructions"}`,
 // expanding any `{{> name}}` partials from the given map.
 pub fn compile_to_wire(source: &str, partials: &Partials) -> Result<Value, CompileError> {
+    compile_inner(source, partials, false)
+}
+
+// Same as `compile_to_wire`, but annotates each `text`/`emit` instruction with
+// a `src` provenance object (`{file, start, end}`) so a render-time segment map
+// can attribute output back to the originating template/partial. This produces a
+// superset wire program; the plain `compile_to_wire` output stays byte-identical
+// to the BEAM reference (the cross-backend parity gate uses that path).
+pub fn compile_to_wire_with_spans(
+    source: &str,
+    partials: &Partials,
+) -> Result<Value, CompileError> {
+    compile_inner(source, partials, true)
+}
+
+fn compile_inner(
+    source: &str,
+    partials: &Partials,
+    with_spans: bool,
+) -> Result<Value, CompileError> {
     let tokens = tokenize(source)?;
     let mut asm = Asm {
         partials,
         stack: Vec::new(),
     };
     let nodes = assemble(tokens, &mut asm)?;
-    let instructions = lower_nodes(&nodes, &Scope::root(), &Regions::new(), &[])?;
+    let instructions = lower_nodes(&nodes, &Scope::root(), &Regions::new(), &[], with_spans)?;
     Ok(json!({ "version": VERSION, "instructions": instructions }))
 }
 
@@ -326,11 +346,18 @@ enum Stop {
 }
 
 enum Node {
-    Text(String),
+    Text {
+        text: String,
+        // The template/partial the text came from ("main" for the entry), used
+        // only when compiling a span-annotated program.
+        file: String,
+    },
     Emit {
         expr: Expr,
         escape: &'static str,
         span: Span,
+        // The template/partial the expression came from ("main" for the entry).
+        file: String,
     },
     If {
         cond: Expr,
@@ -389,6 +416,15 @@ fn assemble(tokens: Vec<Token>, asm: &mut Asm) -> Result<Vec<Node>, CompileError
     }
 }
 
+// The file currently being assembled: the entry is "main"; while a partial is
+// expanded its name sits on top of the recursion-guard stack.
+fn current_file(asm: &Asm) -> String {
+    asm.stack
+        .last()
+        .cloned()
+        .unwrap_or_else(|| "main".to_string())
+}
+
 fn collect(
     it: &mut std::vec::IntoIter<Token>,
     asm: &mut Asm,
@@ -397,12 +433,16 @@ fn collect(
     loop {
         match it.next() {
             None => return Ok((nodes, Stop::Eof)),
-            Some(Token::Text(text)) => nodes.push(Node::Text(text)),
+            Some(Token::Text(text)) => nodes.push(Node::Text {
+                text,
+                file: current_file(asm),
+            }),
             Some(Token::Expr { raw, escape, span }) => {
                 nodes.push(Node::Emit {
                     expr: parse_expr(&raw, span)?,
                     escape,
                     span,
+                    file: current_file(asm),
                 });
             }
             Some(Token::Else(span)) => return Ok((nodes, Stop::Else(span))),
@@ -1249,6 +1289,7 @@ fn lower_nodes<'a>(
     scope: &Scope,
     regions: &Regions<'a>,
     stack: &[String],
+    with_spans: bool,
 ) -> Result<Vec<Value>, CompileError> {
     // Collect every region defined in this list first (a yield may reference one
     // defined later), merged over the regions inherited from enclosing lists.
@@ -1261,7 +1302,7 @@ fn lower_nodes<'a>(
 
     let mut out = Vec::new();
     for node in nodes {
-        out.extend(lower_node(node, scope, &merged, stack)?);
+        out.extend(lower_node(node, scope, &merged, stack, with_spans)?);
     }
     Ok(out)
 }
@@ -1271,15 +1312,35 @@ fn lower_node<'a>(
     scope: &Scope,
     regions: &Regions<'a>,
     stack: &[String],
+    with_spans: bool,
 ) -> Result<Vec<Value>, CompileError> {
     let single = |value| Ok(vec![value]);
     match node {
         // Region definitions are inlined at yield sites, never emitted in place.
         Node::Region { .. } => Ok(Vec::new()),
-        Node::Text(text) => single(json!({ "t": "text", "text": text })),
-        Node::Emit { expr, escape, span } => single(
-            json!({ "t": "emit", "value": lower_value(expr, scope, *span)?, "escape": escape }),
-        ),
+        Node::Text { text, file } => {
+            let mut instr = json!({ "t": "text", "text": text });
+            if with_spans {
+                instr["src"] = json!({ "file": file });
+            }
+            single(instr)
+        }
+        Node::Emit {
+            expr,
+            escape,
+            span,
+            file,
+        } => {
+            let mut instr = json!({
+                "t": "emit",
+                "value": lower_value(expr, scope, *span)?,
+                "escape": escape,
+            });
+            if with_spans {
+                instr["src"] = json!({ "file": file, "start": span.0, "end": span.1 });
+            }
+            single(instr)
+        }
         Node::If {
             cond,
             then,
@@ -1288,8 +1349,8 @@ fn lower_node<'a>(
         } => single(json!({
             "t": "if",
             "cond": lower_value(cond, scope, *span)?,
-            "then": lower_nodes(then, scope, regions, stack)?,
-            "else": lower_nodes(otherwise, scope, regions, stack)?,
+            "then": lower_nodes(then, scope, regions, stack, with_spans)?,
+            "else": lower_nodes(otherwise, scope, regions, stack, with_spans)?,
         })),
         Node::Each {
             subject,
@@ -1301,8 +1362,8 @@ fn lower_node<'a>(
             "t": "each",
             "subject": lower_value(subject, scope, *span)?,
             "params": params,
-            "body": lower_nodes(body, &scope.each_body(params), regions, stack)?,
-            "else": lower_nodes(otherwise, &scope.each_else(), regions, stack)?,
+            "body": lower_nodes(body, &scope.each_body(params), regions, stack, with_spans)?,
+            "else": lower_nodes(otherwise, &scope.each_else(), regions, stack, with_spans)?,
         })),
         Node::With {
             subject,
@@ -1314,8 +1375,8 @@ fn lower_node<'a>(
             "t": "with",
             "subject": lower_value(subject, scope, *span)?,
             "params": params,
-            "body": lower_nodes(body, &scope.with_body(params), regions, stack)?,
-            "else": lower_nodes(otherwise, scope, regions, stack)?,
+            "body": lower_nodes(body, &scope.with_body(params), regions, stack, with_spans)?,
+            "else": lower_nodes(otherwise, scope, regions, stack, with_spans)?,
         })),
         // A yield inlines the named region's instructions, with a recursion
         // guard. An undefined region yields nothing, matching the BEAM.
@@ -1330,7 +1391,7 @@ fn lower_node<'a>(
                 Some(body) => {
                     let mut nested = stack.to_vec();
                     nested.push(name.clone());
-                    lower_nodes(body, scope, regions, &nested)
+                    lower_nodes(body, scope, regions, &nested, with_spans)
                 }
                 None => Ok(Vec::new()),
             }
@@ -1360,7 +1421,7 @@ fn lower_node<'a>(
                 "t": "scope",
                 "base": base,
                 "hash": hash_map,
-                "body": lower_nodes(body, &Scope::root(), regions, stack)?,
+                "body": lower_nodes(body, &Scope::root(), regions, stack, with_spans)?,
             }))
         }
     }

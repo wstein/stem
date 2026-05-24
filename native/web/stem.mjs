@@ -33,9 +33,17 @@ export async function createRenderer(wasmBytes) {
     return decoder.decode(output);
   }
 
-  // Render a compiled program against data, returning the output string.
-  function render(program, data) {
-    return call({ program, data });
+  // Render a compiled program against data. By default returns the output
+  // string. With `{ map: true }` it returns `{ output, segments }`, where each
+  // segment ties a byte run of the output back to its source: `{ out, len, file,
+  // start?, end? }` (`out`/`len` are output byte offsets; `start`/`end` are the
+  // originating tag's byte span in `file`, present for expressions only). The
+  // segments tile the output in order, so any output offset maps to a source.
+  // Mapped rendering needs a program compiled with `compile(.., { map: true })`;
+  // an unmapped program renders correctly but yields an empty segment list.
+  function render(program, data, { map = false } = {}) {
+    const raw = call({ program, data, map });
+    return map ? JSON.parse(raw) : raw;
   }
 
   // Compile template source to a wire program with no backend. `partials` is an
@@ -43,9 +51,12 @@ export async function createRenderer(wasmBytes) {
   // Returns `{ program }` on success, or `{ error: { message, start, end } }`
   // when the source uses a construct the native compiler does not yet support
   // (or references an unknown/recursive partial) — the span lets the editor
-  // underline the offending tag.
-  function compile(source, partials = {}) {
-    const result = JSON.parse(call({ compile: source, partials }));
+  // underline the offending tag. With `{ map: true }` the program additionally
+  // carries `src` provenance so a mapped render can build a source map; this is
+  // a superset wire and the default (unmapped) output stays byte-identical to
+  // the BEAM reference.
+  function compile(source, partials = {}, { map = false } = {}) {
+    const result = JSON.parse(call({ compile: source, partials, map }));
     return result && result.error ? { error: result.error } : { program: result };
   }
 
