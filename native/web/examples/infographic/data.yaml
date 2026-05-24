@@ -1,0 +1,23 @@
+# Raw statistics only — the Model. No colors, no coordinates: the transform
+# (Controller) turns these numbers into drawable geometry for the SVG template.
+title: Stem by the numbers
+subtitle: One engine, two backends, byte-for-byte the same output.
+
+# Donut — share of render time by phase (%)
+phases:
+  - { label: Parse, value: 18 }
+  - { label: Compile, value: 34 }
+  - { label: Render, value: 48 }
+
+# Bars — transformer stdlib, by capability group (count)
+groups:
+  - { label: Strings, value: 42 }
+  - { label: Collections, value: 33 }
+  - { label: Predicates, value: 15 }
+  - { label: Minimum, value: 10 }
+
+# Waffle — line coverage (%)
+coverage: 98
+
+# Sparkline — commits per sprint
+throughput: [12, 18, 16, 27, 31, 38]

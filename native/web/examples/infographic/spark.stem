@@ -1,0 +1,4 @@
+<svg class="ig-spark" viewBox="-6 -6 262 74" role="img" aria-label="Throughput per sprint">
+  <polyline points="{{spark.points}}" fill="none" stroke="#7c4dff" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"></polyline>
+{{#each spark.dots}}  <circle cx="{{x}}" cy="{{y}}" r="3.5" fill="#5a2ea6"></circle>
+{{/each}}</svg>

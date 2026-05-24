@@ -713,6 +713,7 @@
       import { html } from "https://esm.sh/@codemirror/lang-html@6.4.11?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
       import { load as loadYaml } from "./vendor/js-yaml.mjs";
       import { marked } from "./vendor/marked.mjs";
+      import jsonata from "./vendor/jsonata.mjs";
 
       // ── Bootstrap ─────────────────────────────────────────────────────
       const WASM = "../stem_native/target/wasm32-unknown-unknown/release/stem_native.wasm";
@@ -733,6 +734,9 @@
       let escapeMode   = "";
       let focusMode    = null;
       let templateDiagnostics = [];
+      // Optional   tran           pplied to the parsed data bef          ndering
+      // (the data->view-model "Controller"). Empty string = pass data through.
+      let transformSrc = "";
 
       const activeTab = () => tabs[activeTabIdx];
 
@@ -1111,6 +1115,18 @@
         } catch (err) {
           setError("invalid YAML: " + err.message);
           setOutput(""); saveHash(); return;
+        }
+
+        // Controller step: a JSONata transform maps the raw data to the view-model
+        // the template renders. JSONata is sandboxed (no JS/DOM), so it is safe to
+        // run from editable/shared content.
+        if (transformSrc.trim()) {
+          try {
+            data = jsonata(transformSrc).evaluate(data);
+          } catch (err) {
+            setError("transform error: " + (err.message || err.code || "invalid JSONata"));
+            setOutput(""); saveHash(); return;
+          }
         }
 
         try {
@@ -1509,6 +1525,9 @@
         activeTabIdx = 0; activeView = "tmpl";
         // Examples ship their data as YAML, so load it into the editor verbatim.
         setEditorText(dataView, dataText);
+        transformSrc = ex.transform
+          ? await fetch(dir + ex.transform).then((r) => r.text())
+          : "";
         escapeMode = "";
         byId("escape-select").value = "";
         byId("example-select").value = String(idx);
@@ -1521,6 +1540,7 @@
         return {
           tabs: tabs.map((t) => ({ n: t.name, s: t.source })),
           d: dataView.state.doc.toString(),
+          t: transformSrc,
           e: escapeMode, v: outputView,
           av: activeView, ai: activeTabIdx,
         };
@@ -1540,6 +1560,7 @@
           activeTabIdx = Math.max(0, Math.min(tabs.length - 1, s.ai ?? 0));
           activeView = s.av === "data" ? "data" : "tmpl";
           setEditorText(dataView, s.d ?? "");
+          transformSrc = s.t ?? "";
           escapeMode = s.e ?? "";
           byId("escape-select").value = escapeMode;
           byId("example-select").value = "-1";

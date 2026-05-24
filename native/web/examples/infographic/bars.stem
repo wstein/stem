@@ -1,0 +1,3 @@
+<div class="ig-bars">
+{{#each bars}}{{> bar}}
+{{/each}}</div>

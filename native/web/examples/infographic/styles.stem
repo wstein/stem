@@ -1,0 +1,26 @@
+<style>
+  .ig { font-family: system-ui, sans-serif; color: #1e293b; max-width: 760px; }
+  .ig-hero h1 { margin: 0 0 4px; font-size: 1.6rem; letter-spacing: -.01em; }
+  .ig-hero p { margin: 0 0 16px; color: #64748b; }
+  .ig-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .ig-card { border: 1px solid #e5e7eb; border-radius: 14px; padding: 14px 16px; background: #fff; box-shadow: 0 1px 2px rgba(16,24,40,.04); }
+  .ig-card.ig-wide { grid-column: 1 / -1; }
+  .ig-card h2 { margin: 0 0 12px; font-size: .92rem; color: #334155; }
+  .ig-donut { display: flex; align-items: center; gap: 16px; }
+  .ig-donut svg { width: 132px; height: 132px; flex: 0 0 auto; }
+  .ig-legend { list-style: none; margin: 0; padding: 0; font-size: 13px; color: #475569; }
+  .ig-legend li { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+  .ig-legend .sw { width: 11px; height: 11px; border-radius: 3px; flex: 0 0 auto; }
+  .ig-bars { display: flex; flex-direction: column; gap: 10px; }
+  .ig-bar-row { display: flex; align-items: center; gap: 9px; font-size: 13px; }
+  .ig-bar-label { flex: 0 0 80px; color: #475569; }
+  .ig-bar-track { flex: 1 1 auto; height: 10px; background: #f1f5f9; border-radius: 5px; overflow: hidden; }
+  .ig-bar-fill { display: block; height: 100%; border-radius: 5px; }
+  .ig-bar-val { flex: 0 0 26px; text-align: right; font-weight: 600; color: #334155; }
+  .ig-waffle { display: flex; align-items: center; gap: 16px; }
+  .ig-waffle svg { width: 134px; height: 134px; flex: 0 0 auto; }
+  .ig-dot { fill: #e5e7eb; }
+  .ig-dot.on { fill: #7c4dff; }
+  .ig-waffle-pct { font-size: 2.1rem; font-weight: 700; color: #5a2ea6; }
+  .ig-spark { display: block; width: 100%; height: auto; }
+</style>

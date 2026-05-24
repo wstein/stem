@@ -1,0 +1,10 @@
+<div class="ig-donut">
+  <svg viewBox="0 0 140 140" role="img" aria-label="Render time by phase">
+    <g transform="rotate(-90 70 70)">
+{{#each donut.segments}}      <circle cx="{{cx}}" cy="{{cy}}" r="{{r}}" fill="none" stroke="{{color}}" stroke-width="{{sw}}" stroke-dasharray="{{dasharray}}" stroke-dashoffset="{{offset}}"></circle>
+{{/each}}    </g>
+  </svg>
+  <ul class="ig-legend">
+{{#each donut.segments}}    <li><span class="sw" style="background:{{color}}"></span>{{label}} · {{value}}%</li>
+{{/each}}  </ul>
+</div>

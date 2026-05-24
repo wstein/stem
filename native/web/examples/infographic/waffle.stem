@@ -1,0 +1,6 @@
+<div class="ig-waffle">
+  <svg viewBox="0 0 135 135" role="img" aria-label="Test coverage">
+{{#each waffle.dots}}    <circle cx="{{x}}" cy="{{y}}" r="4.6" class="ig-dot{{#if on}} on{{/if}}"></circle>
+{{/each}}  </svg>
+  <div class="ig-waffle-pct">{{waffle.pct}}%</div>
+</div>

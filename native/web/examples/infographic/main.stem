@@ -1,0 +1,25 @@
+{{> styles}}
+<div class="ig">
+  <header class="ig-hero">
+    <h1>{{title}}</h1>
+    <p>{{subtitle}}</p>
+  </header>
+  <div class="ig-grid">
+    <section class="ig-card">
+      <h2>Render time by phase</h2>
+      {{> donut}}
+    </section>
+    <section class="ig-card">
+      <h2>Transformer stdlib by group</h2>
+      {{> bars}}
+    </section>
+    <section class="ig-card">
+      <h2>Test coverage</h2>
+      {{> waffle}}
+    </section>
+    <section class="ig-card ig-wide">
+      <h2>Throughput · commits / sprint · last {{spark.last}}</h2>
+      {{> spark}}
+    </section>
+  </div>
+</div>

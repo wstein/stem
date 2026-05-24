@@ -1,0 +1,54 @@
+/* Controller: raw stats -> a drawable view-model. All geometry is derived from
+   the numbers (no hand-placed coordinates). Sandboxed JSONata — no JS, no DOM. */
+(
+  $palette := ["#c4b5fd", "#a98bff", "#8b6dff", "#7c4dff", "#5a2ea6"];
+
+  /* Bars: width scaled to the largest value. */
+  $bmax := $max(groups.value);
+  $bars := groups#$i.{
+    "label": label,
+    "value": value,
+    "w": $round(value / $bmax * 240, 1),
+    "color": $palette[$i % 5]
+  };
+
+  /* Donut via stroke-dasharray: each phase is an arc length of the circumference,
+     offset by the cumulative length of the phases before it. */
+  $r := 52;
+  $C := 2 * 3.1415927 * $r;
+  $tot := $sum(phases.value);
+  $cum := $reduce(phases.value, function($a, $v){ $append($a, $a[-1] + $v) }, [0]);
+  $donut := {
+    "segments": phases#$i.{
+      "label": label,
+      "value": value,
+      "color": $palette[($i * 2) % 5],
+      "cx": 70, "cy": 70, "r": $r, "sw": 22,
+      "dasharray": $round(value / $tot * $C, 2) & " " & $round($C, 2),
+      "offset": $round(-$cum[$i] / $tot * $C, 2)
+    }
+  };
+
+  /* Waffle: 10x10 grid, the first round(coverage) cells filled. */
+  $waffle := {
+    "pct": $round(coverage),
+    "dots": [0..99].{
+      "x": ($ % 10) * 13 + 5,
+      "y": $floor($ / 10) * 13 + 5,
+      "on": $ < $round($$.coverage)
+    }
+  };
+
+  /* Sparkline: a polyline over the value series, plus dot markers. */
+  $n := $count(throughput);
+  $smax := $max(throughput);
+  $W := 250; $H := 56;
+  $pt := function($v, $i){ $round($i / ($n - 1) * $W, 1) & "," & $round($H - $v / $smax * $H + 2, 1) };
+  $spark := {
+    "last": throughput[-1],
+    "points": $join(throughput#$i.$pt($, $i), " "),
+    "dots": throughput#$i.{ "x": $round($i / ($n - 1) * $W, 1), "y": $round($H - $ / $smax * $H + 2, 1) }
+  };
+
+  { "title": title, "subtitle": subtitle, "bars": $bars, "donut": $donut, "waffle": $waffle, "spark": $spark }
+)

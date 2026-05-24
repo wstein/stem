@@ -1,0 +1,5 @@
+  <div class="ig-bar-row">
+    <span class="ig-bar-label">{{label}}</span>
+    <span class="ig-bar-track"><span class="ig-bar-fill" style="width:{{w}}px;background:{{color}}"></span></span>
+    <span class="ig-bar-val">{{value}}</span>
+  </div>

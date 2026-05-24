@@ -25,5 +25,14 @@
     "main": "main.stem",
     "partials": ["row"],
     "data": "data.yaml"
+  },
+  {
+    "id": "infographic",
+    "label": "Infographic",
+    "view": "rendered",
+    "main": "main.stem",
+    "partials": ["styles", "donut", "bars", "bar", "waffle", "spark"],
+    "data": "data.yaml",
+    "transform": "transform.jsonata"
   }
 ]
