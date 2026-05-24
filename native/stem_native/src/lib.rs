@@ -16,7 +16,7 @@
 // can be checked byte-for-byte against the BEAM reference.
 
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
 mod compile;
@@ -107,12 +107,10 @@ enum Op {
     Call {
         name: String,
         args: Vec<Op>,
-        // The BEAM lowers keyword args to Elixir `{key, value}` tuples appended
-        // to the flat arg list — a shape no native transformer consumes and a
-        // JSON value cannot represent. They are captured here (not silently
-        // dropped) so the pre-check can refuse a program that carries any,
-        // rather than render with the keywords missing. Optional on the wire so
-        // older programs without the field still deserialize.
+        // Keyword arguments, keyed by name. Built-in transformers take none, so
+        // the pre-check refuses a built-in call that carries any; a host
+        // transformer (the custom API) receives them evaluated. Optional on the
+        // wire so older programs without the field still deserialize.
         #[serde(default)]
         kwargs: HashMap<String, Op>,
     },
@@ -159,25 +157,63 @@ struct Ctx {
     in_each: bool,
     locals: HashMap<String, Value>,
     resolve: GetterResolver,
+    transform: TransformerResolver,
 }
 
-/// Renders a JSON request to its output string with no host getters: a
-/// `{"$getter": ...}` field is inert and resolves to null. This is the entry the
-/// C ABI (and thus the browser) uses — the shipped engine ships no getters.
+/// What a Rust embedder supplies to extend the engine: computed getters and
+/// custom transformers. Both are inert by default (the C ABI / browser use
+/// [`Host::default`]), so the shipped engine ships neither — the analogue of the
+/// BEAM, whose getters and `transformers:` binding are the caller's business.
+pub struct Host {
+    /// Resolves `{"$getter": "name"}` data fields. See [`GetterResolver`].
+    pub getter: GetterResolver,
+    /// Resolves custom transformer calls. See [`TransformerResolver`].
+    pub transform: TransformerResolver,
+    /// The transformer names `transform` handles. Declared up front so the
+    /// pre-check can admit them (and refuse genuinely unknown names) without
+    /// invoking the resolver — mirroring the BEAM binding, which is an
+    /// enumerable map of name to function.
+    pub transformer_names: &'static [&'static str],
+}
+
+impl Default for Host {
+    fn default() -> Self {
+        Host {
+            getter: no_getters,
+            transform: no_transformers,
+            transformer_names: &[],
+        }
+    }
+}
+
+/// Renders a JSON request with no host extensions: `{"$getter": ...}` fields are
+/// inert (null) and only built-in transformers are available. This is the entry
+/// the C ABI (and thus the browser) uses.
 pub fn handle(raw: &str) -> String {
-    handle_with_getters(raw, no_getters)
+    handle_with_host(raw, &Host::default())
 }
 
-/// Like [`handle`], but a Rust embedder supplies a [`GetterResolver`] so that
-/// `{"$getter": "name"}` fields resolve to host-computed values. The getter
-/// logic lives entirely in the embedder's `resolve`; the engine only detects the
-/// marker and delegates.
+/// Like [`handle`], but a Rust embedder supplies a [`GetterResolver`] for
+/// `{"$getter": "name"}` fields. Convenience for the common getters-only case;
+/// see [`handle_with_host`] for the full extension surface.
+pub fn handle_with_getters(raw: &str, resolve: GetterResolver) -> String {
+    handle_with_host(
+        raw,
+        &Host {
+            getter: resolve,
+            ..Host::default()
+        },
+    )
+}
+
+/// Renders a JSON request with a full [`Host`]: computed getters and custom
+/// transformers both supplied by the embedder.
 ///
 /// Total: malformed input yields a distinguishable error string rather than a
 /// panic or process exit. `{"batch": [{program, data}, ...]}` renders many
 /// requests and returns a JSON array of outputs (used by the differential fuzz
 /// harness). Otherwise a single `{program, data}` renders to a raw string.
-pub fn handle_with_getters(raw: &str, resolve: GetterResolver) -> String {
+pub fn handle_with_host(raw: &str, host: &Host) -> String {
     let request: Value = match serde_json::from_str(raw) {
         Ok(value) => value,
         Err(err) => return format!("stem_native error: invalid input JSON: {err}"),
@@ -217,7 +253,7 @@ pub fn handle_with_getters(raw: &str, resolve: GetterResolver) -> String {
             Ok(inputs) => {
                 let outputs: Vec<String> = inputs
                     .iter()
-                    .map(|input| render_input(input, resolve))
+                    .map(|input| render_input(input, host))
                     .collect();
                 serde_json::to_string(&outputs).unwrap_or_default()
             }
@@ -228,8 +264,8 @@ pub fn handle_with_getters(raw: &str, resolve: GetterResolver) -> String {
         // otherwise a single `{program, data}` renders to a raw output string.
         let mapped = request.get("map").and_then(Value::as_bool).unwrap_or(false);
         match serde_json::from_value::<Input>(request) {
-            Ok(input) if mapped => render_input_mapped(&input, resolve),
-            Ok(input) => render_input(&input, resolve),
+            Ok(input) if mapped => render_input_mapped(&input, host),
+            Ok(input) => render_input(&input, host),
             Err(err) => format!("stem_native error: invalid request shape: {err}"),
         }
     }
@@ -311,12 +347,15 @@ fn parse_partials(value: Option<&Value>) -> compile::Partials {
 // emitting partial output — turns an input-triggered abort (a DoS in the
 // browser/WASM build) into a message and mirrors the BEAM, which raises before
 // rendering when a template reaches an unloaded transformer.
-fn refuse_unsupported(input: &Input) -> Option<String> {
-    let groups = parse_groups(&input.transformers);
-    check_instrs(&input.program.instructions, groups)
+fn refuse_unsupported(input: &Input, host: &Host) -> Option<String> {
+    let caps = Caps {
+        groups: parse_groups(&input.transformers),
+        host_names: host.transformer_names,
+    };
+    check_instrs(&input.program.instructions, &caps)
 }
 
-fn root_ctx(data: &Value, resolve: GetterResolver) -> Ctx {
+fn root_ctx(data: &Value, host: &Host) -> Ctx {
     Ctx {
         root: data.clone(),
         this: Value::Null,
@@ -324,25 +363,26 @@ fn root_ctx(data: &Value, resolve: GetterResolver) -> Ctx {
         key: Value::Null,
         in_each: false,
         locals: HashMap::new(),
-        resolve,
+        resolve: host.getter,
+        transform: host.transform,
     }
 }
 
-fn render_input(input: &Input, resolve: GetterResolver) -> String {
-    if let Some(error) = refuse_unsupported(input) {
+fn render_input(input: &Input, host: &Host) -> String {
+    if let Some(error) = refuse_unsupported(input, host) {
         return error;
     }
-    render(&input.program.instructions, &root_ctx(&input.data, resolve))
+    render(&input.program.instructions, &root_ctx(&input.data, host))
 }
 
 // Render returning a JSON string `{"output", "segments"}`: the output plus a
 // source map tiling it (see `render_mapped`). Used by the playground's mapped
 // render path; the segment list is empty unless the program carries `src`
 // provenance (compiled with `map: true`).
-fn render_input_mapped(input: &Input, resolve: GetterResolver) -> String {
-    let (output, segments) = match refuse_unsupported(input) {
+fn render_input_mapped(input: &Input, host: &Host) -> String {
+    let (output, segments) = match refuse_unsupported(input, host) {
         Some(error) => (error, Vec::new()),
-        None => render_mapped(&input.program.instructions, &root_ctx(&input.data, resolve)),
+        None => render_mapped(&input.program.instructions, &root_ctx(&input.data, host)),
     };
     serde_json::to_string(&json!({ "output": output, "segments": segments })).unwrap_or_default()
 }
@@ -388,7 +428,7 @@ fn parse_groups(names: &[String]) -> u8 {
 // with the match arms in `call`.
 fn builtin_groups(name: &str) -> Option<u8> {
     Some(match name {
-        "escape_html" | "escape_json" | "default" | "lookup" | "join" => GROUP_MINIMUM,
+        "escape_html" | "escape_json" | "default" | "lookup" | "join" | "log" => GROUP_MINIMUM,
         "trim" | "upcase" | "downcase" | "capitalize" | "truncate" | "replace" | "starts_with"
         | "ends_with" => GROUP_STRINGS,
         "take" | "drop" | "slice" | "first" | "reverse" => GROUP_STRINGS | GROUP_COLLECTIONS,
@@ -398,6 +438,13 @@ fn builtin_groups(name: &str) -> Option<u8> {
         "contains" | "empty?" | "present?" => GROUP_PREDICATES,
         _ => return None,
     })
+}
+
+// Transformer names the BEAM delegates to a host translator (the i18n group).
+// They have no native built-in, so they are usable only when a host supplies
+// them through the [`Host::transform`] resolver.
+fn is_i18n_transformer(name: &str) -> bool {
+    matches!(name, "t" | "translate")
 }
 
 // Group names in a bitset, joined with " or " for the unloaded-group message.
@@ -416,15 +463,22 @@ fn group_phrase(set: u8) -> String {
     .join(" or ")
 }
 
-// Walk a program for the first construct the native core cannot render with
-// byte-parity, or the first transformer call outside the enabled groups,
-// returning the full error string (no source span: the render input carries the
-// compiled program, not the original template).
-fn check_instrs(instrs: &[Instr], groups: u8) -> Option<String> {
-    instrs.iter().find_map(|instr| check_instr(instr, groups))
+// The capability state a program is checked against: the enabled built-in
+// groups and the transformer names the host resolver handles.
+struct Caps<'a> {
+    groups: u8,
+    host_names: &'a [&'a str],
 }
 
-fn check_instr(instr: &Instr, groups: u8) -> Option<String> {
+// Walk a program for the first construct the native core cannot render with
+// byte-parity, or the first transformer call the caller has not enabled,
+// returning the full error string (no source span: the render input carries the
+// compiled program, not the original template).
+fn check_instrs(instrs: &[Instr], caps: &Caps) -> Option<String> {
+    instrs.iter().find_map(|instr| check_instr(instr, caps))
+}
+
+fn check_instr(instr: &Instr, caps: &Caps) -> Option<String> {
     match instr {
         Instr::Text { .. } => None,
         Instr::Emit { value, escape, .. } => {
@@ -433,16 +487,16 @@ fn check_instr(instr: &Instr, groups: u8) -> Option<String> {
                     "stem_native error: unsupported escape mode '{escape}'"
                 ))
             } else {
-                check_op(value, groups)
+                check_op(value, caps)
             }
         }
         Instr::If {
             cond,
             then,
             otherwise,
-        } => check_op(cond, groups)
-            .or_else(|| check_instrs(then, groups))
-            .or_else(|| check_instrs(otherwise, groups)),
+        } => check_op(cond, caps)
+            .or_else(|| check_instrs(then, caps))
+            .or_else(|| check_instrs(otherwise, caps)),
         Instr::Each {
             subject,
             body,
@@ -454,36 +508,59 @@ fn check_instr(instr: &Instr, groups: u8) -> Option<String> {
             body,
             otherwise,
             ..
-        } => check_op(subject, groups)
-            .or_else(|| check_instrs(body, groups))
-            .or_else(|| check_instrs(otherwise, groups)),
-        Instr::Scope { base, hash, body } => check_op(base, groups)
-            .or_else(|| hash.values().find_map(|op| check_op(op, groups)))
-            .or_else(|| check_instrs(body, groups)),
+        } => check_op(subject, caps)
+            .or_else(|| check_instrs(body, caps))
+            .or_else(|| check_instrs(otherwise, caps)),
+        Instr::Scope { base, hash, body } => check_op(base, caps)
+            .or_else(|| hash.values().find_map(|op| check_op(op, caps)))
+            .or_else(|| check_instrs(body, caps)),
     }
 }
 
-fn check_op(op: &Op, groups: u8) -> Option<String> {
+fn check_op(op: &Op, caps: &Caps) -> Option<String> {
     match op {
-        Op::Call { name, args, kwargs } => match builtin_groups(name) {
-            None => Some(format!("stem_native error: unknown transformer '{name}'")),
-            Some(provides) => {
+        Op::Call { name, args, kwargs } => {
+            if caps.host_names.contains(&name.as_str()) {
+                // A host transformer: enabled because the embedder supplied it
+                // (the binding is the enablement, as on the BEAM). It may take
+                // keyword args, so validate both arg lists for nested calls.
+                args.iter()
+                    .chain(kwargs.values())
+                    .find_map(|arg| check_op(arg, caps))
+            } else if let Some(provides) = builtin_groups(name) {
                 if !kwargs.is_empty() {
                     Some(format!(
                         "stem_native error: keyword arguments to transformer '{name}' are not supported"
                     ))
-                } else if provides & groups == 0 {
+                } else if provides & caps.groups == 0 {
                     Some(format!(
                         "stem_native error: transformer '{name}' requires the {} capability group, \
                          which is not enabled. Add it to the request \"transformers\" list.",
                         group_phrase(provides)
                     ))
                 } else {
-                    args.iter().find_map(|arg| check_op(arg, groups))
+                    args.iter().find_map(|arg| check_op(arg, caps))
                 }
+            } else if is_i18n_transformer(name) {
+                // i18n is host-delegated: it needs both the group loaded and a
+                // host translator. Either gap is knowable here, so refuse up
+                // front rather than rendering to null.
+                if caps.groups & GROUP_I18N == 0 {
+                    Some(format!(
+                        "stem_native error: transformer '{name}' requires the i18n capability group, \
+                         which is not enabled. Add it to the request \"transformers\" list."
+                    ))
+                } else {
+                    Some(format!(
+                        "stem_native error: transformer '{name}' requires a host translator; \
+                         supply one through the transformer resolver."
+                    ))
+                }
+            } else {
+                Some(format!("stem_native error: unknown transformer '{name}'"))
             }
-        },
-        Op::Get { base, .. } => check_op(base, groups),
+        }
+        Op::Get { base, .. } => check_op(base, caps),
         _ => None,
     }
 }
@@ -621,6 +698,7 @@ fn scope_context(ctx: &Ctx, base: &Op, hash: &HashMap<String, Op>) -> Ctx {
         in_each: false,
         locals: HashMap::new(),
         resolve: ctx.resolve,
+        transform: ctx.transform,
     }
 }
 
@@ -658,6 +736,7 @@ fn each_context(ctx: &Ctx, params: &[String], current: Value, key: Value, index:
         in_each: true,
         locals,
         resolve: ctx.resolve,
+        transform: ctx.transform,
     }
 }
 
@@ -683,6 +762,7 @@ fn clone_ctx(ctx: &Ctx) -> Ctx {
         in_each: ctx.in_each,
         locals: ctx.locals.clone(),
         resolve: ctx.resolve,
+        transform: ctx.transform,
     }
 }
 
@@ -706,11 +786,27 @@ fn eval(op: &Op, ctx: &Ctx) -> Value {
             }
             value
         }
-        // Keyword args are refused up front by `unsupported_feature`, so a Call
-        // reaching the VM only has positional args.
-        Op::Call { name, args, .. } => {
+        // A host transformer (consulted first, so it can override a built-in,
+        // matching the BEAM precedence: caller binding → built-ins) takes both
+        // positional and keyword arguments. Built-ins take positional only;
+        // `check_op` has already refused any built-in call carrying kwargs.
+        Op::Call { name, args, kwargs } => {
             let positional: Vec<Value> = args.iter().map(|a| eval(a, ctx)).collect();
-            call(name, &positional)
+            let keyword: Map<String, Value> = kwargs
+                .iter()
+                .map(|(key, op)| (key.clone(), eval(op, ctx)))
+                .collect();
+            let host_call = TransformerCall {
+                name,
+                args: &positional,
+                kwargs: &keyword,
+                assigns: &ctx.root,
+                this: &ctx.this,
+            };
+            match (ctx.transform)(&host_call) {
+                Some(value) => value,
+                None => call(name, &positional),
+            }
         }
     }
 }
@@ -761,6 +857,48 @@ fn resolve_getter(value: Value, parent: &Value, resolve: GetterResolver) -> Valu
         }
     }
     value
+}
+
+// ── Per-host custom transformers ─────────────────────────────────────────────
+//
+// A transformer call the engine has no built-in for (or one the host wants to
+// override) is dispatched to a host-supplied [`TransformerResolver`]. This is
+// the native analogue of the BEAM `transformers:` binding: the embedder owns
+// the function, the engine only routes the call. The resolver is consulted
+// before the built-ins, so it can override them, matching the BEAM precedence.
+//
+// It powers the i18n group too: `t`/`translate` have no native built-in and are
+// usable only when the host supplies them, mirroring the BEAM's configured
+// translator. The engine ships **no** transformers beyond the built-ins; the
+// resolver is inert by default ([`no_transformers`], used by [`handle`] and the
+// C ABI), so a browser build has no host transformers.
+
+/// One transformer invocation handed to a host resolver, mirroring the
+/// `(args, %{assigns, this})` shape a BEAM transformer receives.
+pub struct TransformerCall<'a> {
+    /// The transformer name (e.g. `"t"`).
+    pub name: &'a str,
+    /// Positional arguments, already evaluated. The pipeline value, if any, is
+    /// the first argument (the BEAM prepends it the same way).
+    pub args: &'a [Value],
+    /// Keyword arguments, already evaluated, keyed by name.
+    pub kwargs: &'a Map<String, Value>,
+    /// The current assigns (the render root), as the BEAM's `:assigns`.
+    pub assigns: &'a Value,
+    /// The current block item inside `{{#each}}`/`{{#with}}`, else null — the
+    /// BEAM's `:this`.
+    pub this: &'a Value,
+}
+
+/// Resolves a custom transformer call to its value, or `None` to fall through to
+/// the engine's built-in for that name (so a host need only handle the names it
+/// adds or overrides).
+pub type TransformerResolver = fn(&TransformerCall) -> Option<Value>;
+
+/// The default resolver: no custom transformers. Every call falls through to the
+/// built-ins.
+pub fn no_transformers(_call: &TransformerCall) -> Option<Value> {
+    None
 }
 
 // ── Value helpers (mirror Stem.Runtime / String.Chars) ──────────────────────
@@ -892,6 +1030,11 @@ fn call(name: &str, args: &[Value]) -> Value {
         "lookup" => lookup(&args[0], &args[1]),
         "escape_html" => Value::from(escape_with(&to_string(&args[0]), "html")),
         "escape_json" => Value::from(escape_json(&to_string(&args[0]))),
+        // `log` renders to "" on the BEAM (its value is the side effect); the
+        // native build keeps the output parity and leaves any logging to a host
+        // transformer override. So a `{{ x |> log }}` stage is a transparent ""
+        // pass-through here.
+        "log" => Value::from(""),
 
         // Collections
         "map" => Value::Array(
@@ -1563,6 +1706,153 @@ mod guard_tests {
         assert_eq!(render_if(json!({ "x": 0 })), "N");
         assert_eq!(render_if(json!({ "x": 0.5 })), "Y");
         assert_eq!(render_if(json!({ "x": 3 })), "Y");
+    }
+
+    #[test]
+    fn log_is_a_transparent_empty_pass_through() {
+        let out = render(
+            json!([{
+                "t": "emit",
+                "value": { "t": "call", "name": "log", "args": [{ "t": "assign", "name": "x" }], "kwargs": {} },
+                "escape": "html"
+            }]),
+            json!({ "x": "noisy" }),
+        );
+        assert_eq!(out, "");
+    }
+}
+
+#[cfg(test)]
+mod host_transformer_tests {
+    use super::*;
+    use serde_json::json;
+
+    // A demo host transformer set, the embedder's analogue of a BEAM
+    // `transformers:` binding. Lives in the test, never the engine.
+    fn demo(call: &TransformerCall) -> Option<Value> {
+        match call.name {
+            // A brand-new custom transformer.
+            "shout" => Some(Value::from(format!(
+                "{}!",
+                to_string(&call.args[0]).to_uppercase()
+            ))),
+            // Overrides the built-in `upcase`, to prove host precedence.
+            "upcase" => Some(Value::from(format!("<{}>", to_string(&call.args[0])))),
+            // A fake i18n translator: interpolates the `name` keyword binding.
+            "t" | "translate" => {
+                let msgid = to_string(&call.args[0]);
+                let name = call.kwargs.get("name").map(to_string).unwrap_or_default();
+                let text = match msgid.as_str() {
+                    "greeting" => format!("Hello, {name}!"),
+                    other => other.to_string(),
+                };
+                Some(Value::from(text))
+            }
+            _ => None,
+        }
+    }
+
+    const WITH_I18N: &[&str] = &["shout", "upcase", "t", "translate"];
+    const WITHOUT_I18N: &[&str] = &["shout", "upcase"];
+
+    fn render_host(program: Value, data: Value, groups: &[&str], names: &'static [&str]) -> String {
+        let request =
+            json!({ "program": { "instructions": program }, "data": data, "transformers": groups });
+        let host = Host {
+            transform: demo,
+            transformer_names: names,
+            ..Host::default()
+        };
+        handle_with_host(&request.to_string(), &host)
+    }
+
+    fn call_program(name: &str, arg: &str) -> Value {
+        json!([{
+            "t": "emit",
+            "value": { "t": "call", "name": name, "args": [{ "t": "assign", "name": arg }], "kwargs": {} },
+            "escape": "none"
+        }])
+    }
+
+    #[test]
+    fn custom_transformer_is_dispatched_to_the_host() {
+        // `shout` is not a built-in; the host provides it, so it is admitted and
+        // dispatched even with only the Minimum floor loaded.
+        let out = render_host(
+            call_program("shout", "x"),
+            json!({ "x": "hi" }),
+            &[],
+            WITHOUT_I18N,
+        );
+        assert_eq!(out, "HI!");
+    }
+
+    #[test]
+    fn host_transformer_overrides_a_builtin() {
+        // The resolver is consulted before the built-in, so `upcase` resolves to
+        // the host's override rather than the native implementation — and the
+        // host opting in enables it without loading the Strings group.
+        let out = render_host(
+            call_program("upcase", "x"),
+            json!({ "x": "hi" }),
+            &[],
+            WITHOUT_I18N,
+        );
+        assert_eq!(out, "<hi>");
+    }
+
+    #[test]
+    fn unprovided_custom_name_is_refused() {
+        // The host does not declare `shout`, so it is genuinely unknown.
+        let out = render_host(call_program("shout", "x"), json!({ "x": "hi" }), &[], &[]);
+        assert!(out.contains("unknown transformer 'shout'"), "got: {out}");
+    }
+
+    #[test]
+    fn i18n_translate_threads_keyword_bindings_through_the_host() {
+        let program = json!([{
+            "t": "emit",
+            "value": {
+                "t": "call", "name": "t",
+                "args": [{ "t": "lit", "value": "greeting" }],
+                "kwargs": { "name": { "t": "assign", "name": "user" } }
+            },
+            "escape": "none"
+        }]);
+        let out = render_host(program, json!({ "user": "Ada" }), &["i18n"], WITH_I18N);
+        assert_eq!(out, "Hello, Ada!");
+    }
+
+    #[test]
+    fn i18n_without_its_group_is_refused() {
+        // No i18n group and the host does not declare `t`: the message points at
+        // the missing group.
+        let program = json!([{
+            "t": "emit",
+            "value": { "t": "call", "name": "t", "args": [{ "t": "lit", "value": "greeting" }], "kwargs": {} },
+            "escape": "none"
+        }]);
+        let out = render_host(program, json!({}), &[], WITHOUT_I18N);
+        assert!(
+            out.contains("transformer 't' requires the i18n capability group"),
+            "got: {out}"
+        );
+    }
+
+    #[test]
+    fn i18n_group_without_a_translator_is_refused() {
+        // i18n loaded but no host translator declared: the message points at the
+        // missing translator.
+        let program = json!([{
+            "t": "emit",
+            "value": { "t": "call", "name": "t", "args": [{ "t": "lit", "value": "greeting" }], "kwargs": {} },
+            "escape": "none"
+        }]);
+        let out = render_host(program, json!({}), &["i18n"], WITHOUT_I18N);
+        assert!(
+            out.contains("transformer 't' requires a host translator"),
+            "got: {out}"
+        );
     }
 }
 
