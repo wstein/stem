@@ -15,24 +15,25 @@
     <style>
       /* ── Design tokens ───────────────────────────────────────────── */
       :root {
+        /* Light — violet-kissed whites */
         --bg: #ffffff;
-        --bg-1: #fbfbfc;
-        --bg-2: #f4f4f5;
-        --bg-3: #ededef;
+        --bg-1: #faf8ff;      /* barely-violet wash */
+        --bg-2: #f2effc;      /* violet-8 at 70% */
+        --bg-3: #e8e3f8;
         --bg-toolbar: #ffffff;
-        --bg-statusbar: #fafafa;
+        --bg-statusbar: #faf8ff;
         --bg-tab-active: #ffffff;
         --bg-tab-inactive: transparent;
         --bg-pane: #ffffff;
-        --bg-gutter: #fafafa;
+        --bg-gutter: #f7f4fe;
 
-        --fg: #18181b;
-        --fg-secondary: #52525b;
-        --fg-muted: #71717a;
-        --fg-faint: #a1a1aa;
+        --fg: #18181b;             /* near-black for readability */
+        --fg-secondary: #3b1b6b;   /* brand violet-4 */
+        --fg-muted: #6b5ca5;       /* muted purple */
+        --fg-faint: #9e8dc4;       /* light purple-gray */
 
-        --border: #e4e4e7;
-        --border-strong: #d4d4d8;
+        --border: #ddd6f8;         /* violet-tinted */
+        --border-strong: #c8bff2;
 
         /* Brand palette — Stem Identity v0.1 */
         --accent: #7c4dff;        /* Elixir Purple · violet-6 */
@@ -354,12 +355,19 @@
 
       /* ── Themes ──────────────────────────────────────────────────── */
       body[data-theme="dim"] {
-        --bg: #f4f1ea; --bg-1: #ebe6da; --bg-2: #e0d8c8; --bg-3: #d4caB6;
-        --bg-toolbar: #f4f1ea; --bg-statusbar: #ebe6da;
-        --bg-tab-active: #faf6ee; --bg-pane: #f8f4ec; --bg-gutter: #ede8dd;
-        --fg: #2b2620; --fg-secondary: #524a3e; --fg-muted: #7c715f; --fg-faint: #a89c87;
-        --border: #cfc7b4; --border-strong: #bdb49e;
+        /* Dim — mid-dark violet; lighter sibling of Dark */
+        --bg: #1e1338; --bg-1: #251740; --bg-2: #2f1d52; --bg-3: #3b2568;
+        --bg-toolbar: #1e1338; --bg-statusbar: #180f2e;
+        --bg-tab-active: #2f1d52; --bg-pane: #231545; --bg-gutter: #1a1030;
+        --fg: #e7defc; --fg-secondary: #b59bff; --fg-muted: #8065c4; --fg-faint: #4e3880;
+        --border: #3b1b6b; --border-strong: #5a2ea6;
+        --accent-soft: #3b1b6b; --accent-softer: #251740;
+        --tok-tag: #b59bff; --tok-cmt: #5a4490; --tok-key: #93c5fd;
+        --tok-str: #3ee0a3; --tok-num: #fbbf24;
+        --success: #3ee0a3;
+        --danger-faint: #3b0a0a;
       }
+      body[data-theme="dim"] iframe { background: #1a1030; }
       body[data-theme="dark"] {
         --bg: #0c0612; --bg-1: #160a25; --bg-2: #231040; --bg-3: #3b1b6b;
         --bg-toolbar: #160a25; --bg-statusbar: #0c0612;
@@ -374,7 +382,7 @@
         --danger-faint: #3b0a0a;
       }
       body[data-theme="dark"] { background-color: var(--bg) !important; }
-      body[data-theme="dim"]  { background-color: var(--bg-1) !important; }
+      body[data-theme="dim"]  { background-color: var(--bg) !important; }
       body[data-theme="dark"] iframe { background: #0a0612; }
 
       /* ── Moods ───────────────────────────────────────────────────── */
@@ -411,8 +419,12 @@
         font-style: italic; font-size: 13px;
       }
       body[data-mood="notebook"][data-theme="light"] {
-        --bg-1: #faf5e9; --bg-2: #f1ebd9; --bg-pane: #fefaef;
-        --bg-toolbar: #faf5e9; --bg-gutter: #f5efde;
+        /* Notebook+light: override back to warm paper since violet-kissed doesn't suit serif editorial */
+        --bg: #fef9ef; --bg-1: #faf5e9; --bg-2: #f1ebd9; --bg-3: #e8e1d0;
+        --bg-toolbar: #faf5e9; --bg-statusbar: #f1ebd9;
+        --bg-tab-active: #fef9ef; --bg-pane: #fefaef; --bg-gutter: #f5efde;
+        --fg: #2b2620; --fg-secondary: #524a3e; --fg-muted: #7c715f; --fg-faint: #a89c87;
+        --border: #cfc7b4; --border-strong: #bdb49e;
       }
 
       /* ── Stacked layout ──────────────────────────────────────────── */
@@ -1188,7 +1200,7 @@
       const TWEAK_OPTS = {
         theme: [
           { value: "light", label: "Light", swatch: ["#ffffff","#f4f4f5","#18181b"] },
-          { value: "dim",   label: "Dim",   swatch: ["#f4f1ec","#e8e3da","#2b2620"] },
+          { value: "dim",   label: "Dim",   swatch: ["#1e1338","#2f1d52","#b59bff"] },
           { value: "dark",  label: "Dark",  swatch: ["#0c0612","#231040","#e7defc"] },
         ],
         mood: [
