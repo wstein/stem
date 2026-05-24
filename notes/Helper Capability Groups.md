@@ -62,6 +62,10 @@ Pin defaults in `.stem.config.json` as comma-separated module names:
 
 Register globally with `Stem.Transformers.register/2`, or pass per-call by merging into the `transformers:` map. Custom entries are available regardless of built-in groups.
 
+### Native backend parity
+
+The native (Rust/WASM) core enforces the **same** model off the BEAM (see [[Native Backend Strategy]] and `native/README.md`). The render request carries the loaded groups in a `transformers` list of group names (`"strings"`, `"collections"`, `"predicates"`, `"i18n"`, or the `"standard"` bundle); Minimum is the always-on floor, and a call into an unloaded group is refused before render with a group-naming message — the analogue of `invoke/3` raising. The list is absent on the parity wire and from the C ABI, defaulting to Minimum-only, so a browser embed is secure by default. Custom transformers (including `i18n`'s host-delegated `t`/`translate`) come from a host `TransformerResolver`, consulted before the built-ins for the same caller-binding-first precedence; declaring the resolver's names lets the pre-check admit them while still refusing genuinely unknown names. The full built-in stdlib reaches byte-parity except for the value-formatting gaps in [[Cross-Backend Conformance Spec]].
+
 ## Migration
 
 To adopt: add `transformers: SomeGroup.all()` (or a `Map.merge/2` of groups) to `eval_string/3`/`eval_file/3`, and pin defaults in `.stem.config.json`. Compile-time templates inline operations at build time and need no changes.

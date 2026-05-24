@@ -8,8 +8,8 @@ The Rust/WASM native core stays gated for *production* on a BEAM perf basis, but
 
 ## What
 
-- A **PoC** Rust→`wasm32-wasip1` renderer lives in `native/` (crate `stem_native`, Node WASI runner `native/run.mjs`). It consumes `Stem.Bytecode.to_wire/1` programs and renders the structured language off the BEAM; `mix stem.native.verify` confirms 27/27 conformance vectors match the BEAM reference byte-for-byte. This proves the architecture in [[Native Backend Strategy]].
-- A **production** native core is still gated behind two conditions: (1) a real non-BEAM or edge consumer that must render Stem off the BEAM, and (2) a benchmark showing the compiled BEAM backend is a bottleneck. The PoC's stdlib is a subset and is not production-hardened.
+- A **PoC** Rust→`wasm32-wasip1` renderer lives in `native/` (crate `stem_native`, Node WASI runner `native/run.mjs`). It consumes `Stem.Bytecode.to_wire/1` programs and renders the structured language off the BEAM, with the **full** built-in transformer stdlib gated by capability group and a host hook for custom transformers (`t`/`translate` host-delegated); `mix stem.native.verify` confirms 35/35 conformance vectors match the BEAM reference byte-for-byte. This proves the architecture in [[Native Backend Strategy]].
+- A **production** native core is still gated behind two conditions: (1) a real non-BEAM or edge consumer that must render Stem off the BEAM, and (2) a benchmark showing the compiled BEAM backend is a bottleneck. The stdlib now reaches transformer parity (bar the value-formatting gaps in [[Cross-Backend Conformance Spec]]), but the core is otherwise not production-hardened: the data model is `serde_json::Value` and there is no wire-format versioning.
 - `bench/render.exs` (run with `mix run bench/render.exs`) is that benchmark: it compares the compiled backend against the bytecode VM, compile-once / render-many, for a simple and a loop-heavy template.
 
 ## Why

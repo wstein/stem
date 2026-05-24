@@ -10,9 +10,12 @@ defmodule Mix.Tasks.Stem.Native.Fuzz do
   native (Rust/WASM) engine renders each byte-for-byte identically to the BEAM
   reference. The BEAM is the oracle.
 
-  The generator stays within the transformer/value space the native PoC claims
-  parity for (ASCII data; no `json`/`inspect`/`i18n`), so any divergence is a
-  real engine bug, not an out-of-scope construct.
+  The generator stays within the value/transformer space whose parity is
+  deterministic under random input: ASCII data, and the Strings, Collections and
+  Predicates groups. `json`/`inspect` are covered by the fixed conformance
+  corpus instead (their parity is bounded to the float-free value domain and, for
+  `inspect`, to non-map values), and `i18n` is host-delegated. So any divergence
+  here is a real engine bug, not an out-of-scope construct.
 
   ## Usage
 

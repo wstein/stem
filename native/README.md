@@ -16,12 +16,14 @@ the host, escaping done natively.
 
 - **Is:** a working `wasm32-wasip1` module that renders the whole structured Stem
   language (text, expressions, paths, `if`/`unless`/`each`/`with`, regions/yields
-  via inlining, `@index`/`@index1`/`@key`/`this`, block params) plus the
-  transformer subset the conformance corpus uses, validated against every vector
-  in [`conformance/vectors.json`](../conformance/vectors.json).
-- **Isn't:** production-ready. The transformer stdlib is a subset; the data model
-  uses `serde_json::Value`; there is no wire-format versioning negotiation. It
-  exists to de-risk and demonstrate, not to ship.
+  via inlining, `@index`/`@index1`/`@key`/`this`, block params), the full built-in
+  transformer stdlib gated by capability group, and a host hook for custom
+  transformers — validated against every vector in
+  [`conformance/vectors.json`](../conformance/vectors.json).
+- **Isn't:** production-ready. The data model uses `serde_json::Value`; there is
+  no wire-format versioning negotiation; a few value-formatting edge cases stay
+  out of byte-parity (see [Parity scope](#parity-scope)). It exists to de-risk
+  and demonstrate, not to ship.
 
 ## Layout
 
@@ -104,20 +106,55 @@ Generates random templates over the matchable grammar, renders each on the BEAM
 and the native engine (one batched wasm process), and asserts byte-for-byte
 equality. The seed is printed so any failure is reproducible.
 
+## Capability groups
+
+Transformers are gated by capability group, mirroring the BEAM's
+secure-by-default model (see [`Stem.Transformers`](../lib/stem/transformers.ex)
+and [notes/Helper Capability Groups.md](../notes/Helper%20Capability%20Groups.md)).
+The render request names the loaded groups:
+
+```jsonc
+{ "program": { ... }, "data": { ... }, "transformers": ["strings", "collections"] }
+```
+
+The **Minimum** group is always on; **Strings**, **Collections**, **Predicates**,
+and **I18n** are opt-in, and `"standard"` is the Minimum+Strings bundle. A
+template that calls a transformer from an unloaded group is **refused before any
+output is produced**, with a message naming the group to enable — the native
+analogue of the BEAM raising at an unloaded transformer. The list is absent on
+the parity wire and from the C ABI, where it defaults to Minimum-only, so a
+browser embed is secure by default until it opts a group in.
+
 ## Parity scope
 
-The engine reimplements the built-in transformers that *can* match the BEAM
-byte-for-byte: the Strings, Collections, and Predicates groups plus the
-Minimum group's `default`/`join`/`lookup`/`escape_html`/`escape_json`. Three are
-deliberately **out of scope** (no cross-language byte-parity is achievable, so
-they panic loudly and are excluded from the fuzzer):
+The engine implements the **full** built-in transformer stdlib — Minimum,
+Strings, Collections, and Predicates — byte-for-byte against the BEAM, including
+`json` and `inspect` (over the JSON value domain) and `log` (which renders to `""`,
+its BEAM output; the stderr side effect is left to a host override). The `i18n`
+group's `t`/`translate` are **host-delegated**: they have no native built-in and
+resolve through the custom-transformer hook below, requiring both the `i18n`
+group and a host translator (mirroring the BEAM's configured translator).
 
-- `json` / `inspect` — Elixir-specific serialization formatting and map key order;
-- `i18n` `t` — delegates to a host translator (a host closure), so the bytecode
-  marks it a host transformer the native core cannot run.
+A few value-formatting cases stay out of byte-parity and are kept out of the
+conformance corpus and the differential fuzzer (see
+[notes/Cross-Backend Conformance Spec.md](../notes/Cross-Backend%20Conformance%20Spec.md)
+for the gap list):
 
-Cased transforms (`upcase`/`downcase`/`capitalize`) match for ASCII; the fuzzer
-restricts inputs accordingly.
+- **G2 — floats:** serde_json's float `Display` differs from Erlang's
+  `:erlang.float_to_binary(_, [:short])`; this also bounds `json` to non-float
+  values in the corpus.
+- **G4 — Unicode casing:** `upcase`/`downcase`/`capitalize` match for ASCII; the
+  fuzzer restricts inputs accordingly.
+- **G5 — map key order:** native always sorts object keys; the BEAM iterates a
+  map in its internal order (which varies by key type and size), so `{{#each}}`
+  over a multi-key map, `group_by`, and `json` object key order are not
+  cross-backend stable. The corpus uses single-key maps to stay deterministic.
+- **G6 — heterogeneous `sort`/`sort_by`:** the native term ordering is approximate
+  for mixed-type lists.
+- **G7 — `inspect` of maps:** native values are always string-keyed, so a map
+  prints as `%{"k" => v}`; the conformance harness builds atom-keyed maps from
+  JSON, which the BEAM prints as `%{k: v}`. `inspect` is exercised over scalars
+  and lists, where the two agree.
 
 ## Per-host computed getters
 
@@ -163,6 +200,58 @@ Because the getter logic lives in the host, this has no cross-backend byte-parit
 and is deliberately **out of the conformance corpus**; `src/lib.rs` covers the
 hook with native-only unit tests (which supply a `full_name`/`initials` resolver)
 and asserts the default path leaves the marker inert.
+
+## Custom transformers (host hook)
+
+The BEAM lets a caller supply transformers via the `transformers:` binding,
+consulted before the built-ins so it can add or override names. The native
+engine mirrors this with a host hook on the same precedence: a `Host` carries a
+`TransformerResolver` — `fn(&TransformerCall) -> Option<Value>` — consulted
+before the built-in stdlib, returning `None` to fall through. The call carries
+the (evaluated) positional args, keyword args, the current assigns, and the block
+`this`, mirroring the BEAM's `(args, %{assigns, this})` shape.
+
+The host also declares the names it handles, so the pre-check can admit them and
+still refuse genuinely unknown names without invoking the resolver — the wire
+stays portable, and a browser embed (using `handle`) gets no host transformers,
+exactly like getters. The `i18n` `t`/`translate` transformers are delivered this
+way:
+
+```rust
+use serde_json::Value;
+use stem_native::{handle_with_host, Host, TransformerCall};
+
+fn transformers(call: &TransformerCall) -> Option<Value> {
+    match call.name {
+        // A fake translator: interpolate the `name` keyword binding.
+        "t" | "translate" => {
+            let name = call.kwargs.get("name").and_then(Value::as_str).unwrap_or("");
+            Some(Value::from(format!("Hello, {name}!")))
+        }
+        _ => None, // fall through to the built-in stdlib
+    }
+}
+
+let host = Host {
+    transform: transformers,
+    transformer_names: &["t", "translate"],
+    ..Host::default()
+};
+
+// `t` needs the i18n group loaded *and* a host translator; both are present.
+let request = r#"{"program":{"version":"stem-bc/v1","instructions":[
+  {"t":"emit","escape":"none","value":{"t":"call","name":"t",
+    "args":[{"t":"lit","value":"greeting"}],
+    "kwargs":{"name":{"t":"assign","name":"user"}}}}]},
+  "data":{"user":"Ada"},"transformers":["i18n"]}"#;
+
+assert_eq!(handle_with_host(request, &host), "Hello, Ada!");
+```
+
+Like getters, custom transformers live in the host, so they carry no
+cross-backend parity and stay out of the conformance corpus; `src/lib.rs` covers
+the hook (dispatch, built-in override, keyword bindings, and the i18n refusal
+paths) with native-only unit tests.
 
 ## Browser / edge (no WASI)
 

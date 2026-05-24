@@ -26,10 +26,10 @@ Deliver in independently-useful phases; never build a later phase on spec:
 
 1. **Spec + conformance vectors** — pin the authoritative rules (single escaping table, truthiness, path resolution, capability set, contract semantics) and generate vectors from the Elixir reference. See [[Cross-Backend Conformance Spec]].
 2. **Bytecode + pure-Elixir VM** — add a second AST backend and an Elixir interpreter; prove `VM(compile(ast), data) == Compiler(ast).(data)` across the suite. De-risks ~80% with zero Rust and yields a serializable compiled-template artifact on its own. *Landed* (`Stem.Bytecode`/`.VM` + differential conformance suite); blocks and regions/yields are next. See [[Portable Stem Bytecode]].
-3. **Rust interpreter → single WASM module** — port the VM and native stdlib, run the same vectors, add differential fuzzing.
+3. **Rust interpreter → single WASM module** — port the VM and native stdlib, run the same vectors, add differential fuzzing. *Landed* as a PoC (`native/stem_native`): the full built-in transformer stdlib gated by capability group, a host hook for custom transformers, differential fuzzing, and 35/35 conformance vectors green. See [[Native Backend Phase 2 Gate]].
 4. **Host shims** — thin Python/Node loaders plus an edge-render demo.
 
-Gate phases 3–4 on a real non-BEAM/edge demand signal and a benchmark; until then they live in a separate experimental repo, feature-gated, out of mainline. Custom host transformers are out of native scope by design — such templates render on the BEAM backend or fail loudly at compile.
+Gate phases 3–4 on a real non-BEAM/edge demand signal and a benchmark; until then they live in a separate experimental repo, feature-gated, out of mainline. Custom host transformers *are* supported, mirroring the BEAM `transformers:` binding: a host `TransformerResolver` (consulted before the built-ins) supplies or overrides names, and `i18n`'s `t`/`translate` are delivered this way. As with computed getters, the host logic lives in the embedder, so it carries no cross-backend byte-parity and stays out of the conformance corpus.
 
 ## Links
 
