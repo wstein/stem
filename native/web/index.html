@@ -1046,8 +1046,16 @@
         try {
           const program = applyEscape(compiled.program, escapeMode);
           const { output, segments } = renderer.render(program, data, { map: true });
-          setOutput(output, segments);
-          setError("");
+          // The engine reports a feature it can't render by returning a
+          // `stem_native error: …` string rather than throwing — surface that in
+          // the status bar instead of presenting it as if it were the output.
+          if (output.startsWith("stem_native error:")) {
+            setError(output.replace(/^stem_native error:/, "render error:"));
+            setOutput("");
+          } else {
+            setOutput(output, segments);
+            setError("");
+          }
         } catch (err) {
           setError("render error: " + err.message);
           setOutput("");
