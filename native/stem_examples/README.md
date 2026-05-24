@@ -1,7 +1,8 @@
 # Stem Native — embedder examples
 
-Two ways to drive the [`stem_native`](../stem_native) engine from Rust, both
-adding **custom transformers**.
+Ways to drive the [`stem_native`](../stem_native) engine from Rust, exercising
+both **built-in** transformers (gated by capability group) and **custom**
+transformers (the host hook).
 
 ```sh
 cargo run --example compile_time     # template baked in at compile time
@@ -9,7 +10,7 @@ cargo run --example dynamic_eval     # template + data supplied at runtime
 cargo test                           # unit tests for the shared glue
 ```
 
-## The two examples
+## The examples
 
 - [`examples/compile_time.rs`](examples/compile_time.rs) — a `macro_rules!`
   macro (`stem!`) takes the template as a string *literal*, so it is baked into
@@ -21,17 +22,22 @@ cargo test                           # unit tests for the shared glue
   evaluated against each data record. Optionally takes a template string and a
   JSON-array data file as arguments.
 
-## About "custom transformers"
+## Transformers
 
-The engine's built-in transformer stdlib (`upcase`, `join`, `truncate`, ...) is
-a **closed set** — an unknown name in a `{{ x | name }}` pipe is *refused*, not
-dispatched to host code. The one host-extension point the engine exposes is the
-getter hook: a data field whose value is the sentinel `{"$getter": "<name>"}`
-is computed by a host `fn(name, parent) -> Value` at render time, with `parent`
-as its "self".
+The shared glue in [`src/lib.rs`](src/lib.rs) shows both kinds:
 
-So in these examples a custom transformer is a custom getter —
-[`custom_transformers`](src/lib.rs) in the shared lib defines `shout`, `slug`,
-`word_count`, and `reading_time`, each deriving a value from its sibling fields.
-See [`../README.md`](../README.md#per-host-computed-getters) for the hook's
-design.
+- **Built-in** transformers (`upcase`, `truncate`, `sort`, `join`, ...) are gated
+  by capability group. The render request names the loaded groups — these
+  examples load `["strings", "collections", "predicates"]` on top of the
+  always-on Minimum. A template that reaches a transformer from an unloaded group
+  is refused before render.
+- **Custom** transformers (`slugify`, `reading_time`, `shout`) come from a host
+  `TransformerResolver` passed via `Host`, consulted before the built-ins so it
+  can add or override names. The pipeline value arrives as the first positional
+  argument, so `{{ title |> slugify }}` calls the resolver with `title`. The host
+  declares its names so the engine admits them and still refuses genuinely
+  unknown ones.
+
+See [`../README.md`](../README.md#capability-groups) for the capability-group
+model and [`../README.md`](../README.md#custom-transformers-host-hook) for the
+host hook.

@@ -4,10 +4,10 @@
 //
 // The `stem!` macro requires its template argument to be a string *literal*
 // (`$source:literal`), so the template is baked into the binary at Rust compile
-// time and checked at macro-expansion time — a typo'd `json!` value or a
-// non-literal template fails to compile. The Stem source is then lowered to
-// portable bytecode on first render (the engine is an interpreter, not a Rust
-// proc-macro), and rendered with our custom transformers (host getters).
+// time and checked at macro-expansion time. The Stem source is lowered to
+// portable bytecode on first render (the engine is an interpreter, not a proc
+// macro), then rendered with the loaded capability groups and custom
+// transformers (see `src/lib.rs`).
 //
 //   cargo run --example compile_time
 
@@ -23,22 +23,20 @@ macro_rules! stem {
 
 fn main() {
     let result = stem!(
-        "# {{ title }}\n\n\
-         **{{ headline }}**\n\n\
-         - slug: `{{ slug }}`\n\
-         - {{ words }} words · {{ reading_time }}\n",
+        // `upcase` and `truncate` are built-in (Strings); `sort`/`join` are
+        // built-in (Collections/Minimum); `slugify` and `reading_time` are
+        // custom transformers supplied by the host.
+        "# {{ title |> upcase }}\n\n\
+         - slug: `{{ title |> slugify }}`\n\
+         - tags: {{ tags |> sort |> join(\", \") }}\n\
+         - {{ body |> reading_time }}\n\
+         - teaser: {{ body |> truncate(24, \"…\") }}\n",
         json!({
             "title": "Hello Brave World",
+            "tags": ["wasm", "beam", "rust"],
             "body": "Stem compiles a template down to portable bytecode that a tiny \
                      Rust engine renders byte for byte like the BEAM reference does. \
-                     The very same engine also runs in the browser as WebAssembly, \
-                     with no server and no Elixir at runtime.",
-            // Each field below is computed by a custom transformer (getter),
-            // reading its sibling fields above as "self".
-            "headline":     {"$getter": "shout"},
-            "slug":         {"$getter": "slug"},
-            "words":        {"$getter": "word_count"},
-            "reading_time": {"$getter": "reading_time"}
+                     The same engine also runs in the browser as WebAssembly."
         })
     );
 

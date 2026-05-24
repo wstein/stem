@@ -4,12 +4,13 @@
 //
 // Nothing here is baked into the binary by a macro — the template is assembled
 // (or read from argv) at runtime, compiled to portable bytecode once, then
-// evaluated against each data record. The same custom transformers (host
-// getters) resolve as before.
+// evaluated against each data record. Built-in transformers (gated by the loaded
+// capability groups) and custom transformers (the host hook) resolve the same
+// way as in the compile-time example.
 //
-//   cargo run --example dynamic_eval                       # built-in template + records
-//   cargo run --example dynamic_eval -- '{{ headline }}'   # override the template
-//   cargo run --example dynamic_eval -- '{{ slug }}' records.json
+//   cargo run --example dynamic_eval                          # built-in template + records
+//   cargo run --example dynamic_eval -- '{{ title |> slugify }}'
+//   cargo run --example dynamic_eval -- '{{ title |> upcase }}' records.json
 //
 // `records.json` is a JSON array of data objects.
 
@@ -44,36 +45,27 @@ fn main() {
     }
 }
 
-/// Assembled from parts at runtime to underline that the source is dynamic.
+/// Assembled from parts at runtime to underline that the source is dynamic. It
+/// mixes built-in (`upcase`, `sort`, `join`) and custom (`slugify`)
+/// transformers.
 fn default_template() -> String {
     [
-        "{{ headline }}",
+        "{{ title |> upcase }}",
         " — ",
-        "{{ slug }}",
-        " ({{ reading_time }})",
+        "{{ title |> slugify }}",
+        " [{{ tags |> sort |> join(\", \") }}]",
     ]
     .concat()
 }
 
 fn sample_records() -> Vec<Value> {
     [
-        "Hello Brave World",
-        "Portable Bytecode Everywhere",
-        "Rust Meets the BEAM",
+        ("Hello Brave World", json!(["wasm", "beam", "rust"])),
+        ("Portable Bytecode Everywhere", json!(["edge", "browser"])),
+        ("Rust Meets the BEAM", json!(["parity", "wasm"])),
     ]
     .into_iter()
-    .map(|title| {
-        json!({
-            "title": title,
-            "body": "Stem compiles templates to portable bytecode rendered \
-                     natively in Rust and in the browser via WebAssembly, byte \
-                     for byte like the BEAM reference engine.",
-            "headline":     {"$getter": "shout"},
-            "slug":         {"$getter": "slug"},
-            "words":        {"$getter": "word_count"},
-            "reading_time": {"$getter": "reading_time"}
-        })
-    })
+    .map(|(title, tags)| json!({ "title": title, "tags": tags }))
     .collect()
 }
 

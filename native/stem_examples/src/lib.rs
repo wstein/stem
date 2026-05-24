@@ -1,59 +1,71 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Shared glue for the two example binaries. The `stem_native` engine is a
-// JSON-in / string-out renderer: you compile template source to a portable
-// wire program (`stem-bc/v1`), then render that program against some data.
+// Shared glue for the example binaries. The `stem_native` engine is a JSON-in /
+// string-out renderer: you compile template source to a portable wire program
+// (`stem-bc/v1`), then render that program against some data.
 //
-// Custom transformers: the engine's built-in transformer stdlib (`upcase`,
-// `join`, `truncate`, ...) is a *closed* set — an unknown name in a `{{ x |
-// name }}` pipe is refused, not dispatched to host code. The one extension
-// point an embedder gets is the getter hook: a data field whose value is the
-// sentinel `{"$getter": "<name>"}` is computed by a host `fn(name, parent)`
-// at render time, with `parent` as its "self". So in these examples a "custom
-// transformer" is a custom getter — host Rust that derives a value from its
-// sibling fields.
+// Two kinds of transformer are shown:
+//
+//   * Built-in transformers (`upcase`, `sort`, `join`, ...) are gated by
+//     capability group. The render request names the loaded groups; Minimum is
+//     always on. These examples load Strings, Collections, and Predicates.
+//   * Custom transformers are supplied through the host hook: a
+//     `TransformerResolver` the engine consults before its built-ins, so an
+//     embedder can add (or override) names. The pipeline value arrives as the
+//     first positional argument, mirroring the BEAM `transformers:` binding.
 
 use serde_json::{json, Value};
-use stem_native::handle_with_getters;
+use stem_native::{handle_with_host, Host, TransformerCall};
 
-/// Custom value transformers, exposed to templates through the getter hook.
-///
-/// Each arm reads sibling fields from `parent` (the object that carried the
-/// `{"$getter": ...}` sentinel) and returns a computed [`Value`]. An unknown
-/// name resolves to null, mirroring the engine's default resolver.
-pub fn custom_transformers(name: &str, parent: &Value) -> Value {
-    let field = |key: &str| parent.get(key).and_then(Value::as_str).unwrap_or("");
-    match name {
-        // SHOUT the title.
-        "shout" => Value::from(format!("{}!", field("title").to_uppercase())),
+// Capability groups these examples load. The example author is trusted, so it
+// opts into the data-transformation groups on top of the always-on Minimum.
+const GROUPS: &[&str] = &["strings", "collections", "predicates"];
 
-        // URL slug from the title: lowercased words joined with dashes.
-        "slug" => {
-            let slug = field("title")
+// The custom transformer names our resolver handles. Declared so the engine's
+// pre-check admits them (and still refuses genuinely unknown names).
+const CUSTOM_NAMES: &[&str] = &["slugify", "reading_time", "shout"];
+
+/// Custom transformers, supplied to the engine through the host hook. Each
+/// receives the pipeline value as its first positional argument (the engine
+/// prepends it), so `{{ title |> slugify }}` calls `slugify(title)`. Returning
+/// `None` falls through to the built-in stdlib.
+pub fn custom_transformers(call: &TransformerCall) -> Option<Value> {
+    let subject = call.args.first().and_then(Value::as_str).unwrap_or("");
+    match call.name {
+        // SHOUT the subject.
+        "shout" => Some(Value::from(format!("{}!", subject.to_uppercase()))),
+
+        // A URL slug: lowercased words joined with dashes.
+        "slugify" => Some(Value::from(
+            subject
                 .to_lowercase()
                 .split_whitespace()
                 .collect::<Vec<_>>()
-                .join("-");
-            Value::from(slug)
-        }
+                .join("-"),
+        )),
 
-        // Word count of the body.
-        "word_count" => Value::from(field("body").split_whitespace().count()),
-
-        // Rough reading time of the body at 200 wpm, at least one minute.
+        // Rough reading time at 200 wpm, at least one minute.
         "reading_time" => {
-            let words = field("body").split_whitespace().count();
+            let words = subject.split_whitespace().count();
             let minutes = ((words as f64) / 200.0).ceil().max(1.0) as i64;
-            Value::from(format!("{minutes} min read"))
+            Some(Value::from(format!("{minutes} min read")))
         }
 
-        _ => Value::Null,
+        _ => None,
+    }
+}
+
+fn host() -> Host {
+    Host {
+        transform: custom_transformers,
+        transformer_names: CUSTOM_NAMES,
+        ..Host::default()
     }
 }
 
 /// Compile template source to its portable wire program. Compilation needs no
-/// getters, so it goes through the plain `handle` entry; a parse error comes
-/// back as a message rather than a panic.
+/// host, so it goes through the plain `handle` entry; a parse error comes back
+/// as a message rather than a panic.
 pub fn compile(source: &str) -> Result<Value, String> {
     let request = json!({ "compile": source }).to_string();
     let value: Value = serde_json::from_str(&stem_native::handle(&request))
@@ -68,11 +80,11 @@ pub fn compile(source: &str) -> Result<Value, String> {
     Ok(value)
 }
 
-/// Render a compiled wire program against `data`, resolving custom transformers
-/// at every assign and dotted-path step.
+/// Render a compiled wire program against `data`, loading the example capability
+/// groups and resolving custom transformers through the host hook.
 pub fn render(program: &Value, data: Value) -> String {
-    let request = json!({ "program": program, "data": data }).to_string();
-    handle_with_getters(&request, custom_transformers)
+    let request = json!({ "program": program, "data": data, "transformers": GROUPS }).to_string();
+    handle_with_host(&request, &host())
 }
 
 /// Compile and render a template in one step.
@@ -85,38 +97,43 @@ mod tests {
     use super::*;
 
     #[test]
-    fn custom_transformer_computes_from_self() {
-        let data = json!({ "title": "Hello Brave World", "body": "one two three" });
+    fn custom_transformer_receives_the_pipeline_value() {
+        let call = |name: &str, value: &str| {
+            let args = [Value::from(value)];
+            let kwargs = serde_json::Map::new();
+            let assigns = Value::Null;
+            let this = Value::Null;
+            custom_transformers(&TransformerCall {
+                name,
+                args: &args,
+                kwargs: &kwargs,
+                assigns: &assigns,
+                this: &this,
+            })
+        };
+        assert_eq!(call("shout", "hi"), Some(Value::from("HI!")));
         assert_eq!(
-            custom_transformers("shout", &data),
-            json!("HELLO BRAVE WORLD!")
+            call("slugify", "Hello Brave World"),
+            Some(Value::from("hello-brave-world"))
         );
         assert_eq!(
-            custom_transformers("slug", &data),
-            json!("hello-brave-world")
+            call("reading_time", "one two three"),
+            Some(Value::from("1 min read"))
         );
-        assert_eq!(custom_transformers("word_count", &data), json!(3));
-        assert_eq!(
-            custom_transformers("reading_time", &data),
-            json!("1 min read")
-        );
-        assert_eq!(custom_transformers("nope", &data), Value::Null);
+        assert_eq!(call("nope", "x"), None);
     }
 
     #[test]
-    fn render_template_resolves_custom_transformers() {
+    fn builtin_and_custom_transformers_render_together() {
         let out = render_template(
-            "{{ headline }} / {{ slug }} / {{ words }}",
-            json!({
-                "title": "Hello Brave World",
-                "body": "a b c d",
-                "headline": {"$getter": "shout"},
-                "slug": {"$getter": "slug"},
-                "words": {"$getter": "word_count"}
-            }),
+            "{{ title |> upcase }} / {{ title |> slugify }} / {{ tags |> sort |> join(\", \") }}",
+            json!({ "title": "Hello Brave World", "tags": ["rust", "beam", "wasm"] }),
         )
         .unwrap();
-        assert_eq!(out, "HELLO BRAVE WORLD! / hello-brave-world / 4");
+        assert_eq!(
+            out,
+            "HELLO BRAVE WORLD / hello-brave-world / beam, rust, wasm"
+        );
     }
 
     #[test]
