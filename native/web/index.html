@@ -10,7 +10,10 @@
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <!-- Load the web fonts without blocking first paint: the shell renders
+         immediately in the system fallback, then the fonts swap in. -->
+    <link rel="stylesheet" media="print" onload="this.media='all'"
+          href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" />
     <title>Stem Playground — IDE</title>
     <style>
       /* ── Design tokens ───────────────────────────────────────────── */
@@ -64,6 +67,11 @@
 
         --shadow-pop: 0 12px 32px -8px rgba(24,24,27,.18), 0 0 0 1px rgba(24,24,27,.06);
       }
+
+      /* First-paint background before the inline theme script runs, so a
+         dark/System-dark load doesn't flash the light default. */
+      html { background: #ffffff; }
+      @media (prefers-color-scheme: dark) { html { background: #16141d; } }
 
       * { box-sizing: border-box; }
       [hidden] { display: none !important; }
@@ -521,6 +529,20 @@
     </style>
   </head>
   <body>
+    <!-- Apply the saved theme before first paint (the module below loads
+         CodeMirror from a CDN and would otherwise set it seconds later, flashing
+         the light default). Mirrors the tweaks defaults in the module. -->
+    <script>
+      (function () {
+        var theme = "system";
+        try {
+          var tw = JSON.parse(localStorage.getItem("stem-playground:tweaks") || "{}");
+          if (tw.theme === "dim") tw.theme = "dark";
+          if (["light", "dark", "system"].indexOf(tw.theme) >= 0) theme = tw.theme;
+        } catch (e) {}
+        document.body.dataset.theme = theme;
+      })();
+    </script>
     <div id="app">
       <!-- ── Top bar ──────────────────────────────────────────────── -->
       <header class="topbar">
