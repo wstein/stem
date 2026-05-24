@@ -32,9 +32,10 @@ the host, escaping done natively.
 - `web/` — the browser demo: `stem.mjs` (glue), `index.html` (live page),
   `examples.json` (a small manifest indexing the examples), `examples/<id>/`
   (each example as individual files: `main.stem`, one `.stem` per partial, and
-  `data.json`), `playground_utils.mjs` (shared browser utilities), and
-  `validate.mjs` (a browserless check of the no-WASI module + glue that loads
-  those same files). The page is a lightweight IDE-style, multi-tab editor built
+  `data.yaml`), `vendor/js-yaml.mjs` (the YAML parser, vendored so the Node
+  validator parses YAML without an install), `playground_utils.mjs` (shared
+  browser utilities), and `validate.mjs` (a browserless check of the no-WASI
+  module + glue that loads those same files). The page is a lightweight IDE-style, multi-tab editor built
   with CodeMirror 6: the first tab is the rendered entry template and the rest
   are partials, pulled in with `{{> name}}` and compiled fully in the browser.
   `compile(source, partials)` sends `{ "compile": source, "partials": {name:

@@ -2,7 +2,7 @@
 //
 // Validates the wasm32-unknown-unknown module + browser glue without a browser.
 // For each example it loads the same individual files the browser fetches
-// (examples/<id>/main.stem, one .stem per partial, and data.json), compiles them
+// (examples/<id>/main.stem, one .stem per partial, and data.yaml), compiles them
 // through the glue, renders, and checks against the expected output. Node uses
 // the same WebAssembly API as browsers, so a pass here proves the browser path.
 // Run from the repo root:
@@ -12,6 +12,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createRenderer } from "./stem.mjs";
+import { load as loadYaml } from "./vendor/js-yaml.mjs";
 
 const WASM = "native/stem_native/target/wasm32-unknown-unknown/release/stem_native.wasm";
 
@@ -33,11 +34,12 @@ const { render, compile } = await createRenderer(await readFile(WASM));
 const manifest = JSON.parse(await readFile(`${EXAMPLES_DIR}.json`, "utf8"));
 
 // Load an example's individual files: main.stem, one .stem per partial, and
-// data.json — the same files the browser fetches at runtime.
+// data.yaml — the same files the browser fetches at runtime. The data is YAML,
+// parsed with the vendored js-yaml so this matches the browser's parser.
 async function loadExample(ex) {
   const dir = path.join(EXAMPLES_DIR, ex.id);
   const main = await readFile(path.join(dir, ex.main), "utf8");
-  const data = JSON.parse(await readFile(path.join(dir, ex.data), "utf8"));
+  const data = loadYaml(await readFile(path.join(dir, ex.data), "utf8"));
   const partials = {};
   for (const name of ex.partials) {
     partials[name] = await readFile(path.join(dir, `${name}.stem`), "utf8");

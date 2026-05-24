@@ -1,14 +1,14 @@
 [
-  { "id": "greeting", "label": "Greeting", "view": "source", "main": "main.stem", "partials": [], "data": "data.json" },
-  { "id": "pipeline", "label": "Pipeline", "view": "source", "main": "main.stem", "partials": [], "data": "data.json" },
-  { "id": "list", "label": "List", "view": "rendered", "main": "main.stem", "partials": [], "data": "data.json" },
+  { "id": "greeting", "label": "Greeting", "view": "source", "main": "main.stem", "partials": [], "data": "data.yaml" },
+  { "id": "pipeline", "label": "Pipeline", "view": "source", "main": "main.stem", "partials": [], "data": "data.yaml" },
+  { "id": "list", "label": "List", "view": "rendered", "main": "main.stem", "partials": [], "data": "data.yaml" },
   {
     "id": "html-cards",
     "label": "HTML cards",
     "view": "rendered",
     "main": "main.stem",
     "partials": ["styles", "header", "card", "avatar", "lead_badge", "identity", "name", "role"],
-    "data": "data.json"
+    "data": "data.yaml"
   },
   {
     "id": "partials",
@@ -16,7 +16,7 @@
     "view": "rendered",
     "main": "main.stem",
     "partials": ["header", "row"],
-    "data": "data.json"
+    "data": "data.yaml"
   },
   {
     "id": "partial-arguments",
@@ -24,6 +24,6 @@
     "view": "rendered",
     "main": "main.stem",
     "partials": ["row"],
-    "data": "data.json"
+    "data": "data.yaml"
   }
 ]

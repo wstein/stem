@@ -1,0 +1,22 @@
+team: Engineering
+members:
+  - name: Ada Lovelace
+    role: Compiler
+    lead: true
+    emoji: "⚙️"
+    note: Lowers templates to portable bytecode
+  - name: Grace Hopper
+    role: Runtime
+    lead: false
+    emoji: "🚀"
+    note: Renders bytecode on every host
+  - name: Alan Turing
+    role: Parser
+    lead: false
+    emoji: "🧩"
+    note: Turns source into a clean AST
+  - name: Barbara Liskov
+    role: Type systems
+    lead: true
+    emoji: "🔭"
+    note: Keeps the contracts honest

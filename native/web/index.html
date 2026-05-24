@@ -652,7 +652,7 @@
       import { lintGutter, linter, setDiagnosticsEffect } from "https://esm.sh/@codemirror/lint@6.8.5?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
       import { yaml } from "https://esm.sh/@codemirror/lang-yaml@6.1.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
       import { html } from "https://esm.sh/@codemirror/lang-html@6.4.11?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
-      import { dump as dumpYaml, load as loadYaml } from "https://esm.sh/js-yaml@4.1.0";
+      import { load as loadYaml } from "https://esm.sh/js-yaml@4.1.0";
 
       // ── Bootstrap ─────────────────────────────────────────────────────
       const WASM = "../stem_native/target/wasm32-unknown-unknown/release/stem_native.wasm";
@@ -1213,7 +1213,8 @@
         tabs = [{ name: "main", source: mainSrc }];
         ex.partials.forEach((name, i) => tabs.push({ name, source: partialSrcs[i] }));
         activeTabIdx = 0; activeView = "tmpl";
-        setEditorText(dataView, dumpYaml(JSON.parse(dataText), { indent: 2, lineWidth: -1, noRefs: true }));
+        // Examples ship their data as YAML, so load it into the editor verbatim.
+        setEditorText(dataView, dataText);
         escapeMode = "";
         byId("escape-select").value = "";
         byId("example-select").value = String(idx);
