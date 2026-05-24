@@ -171,17 +171,6 @@
       .pane-controls { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
       .pane-header .divider { width: 1px; height: 16px; background: var(--border); flex: 0 0 auto; }
 
-      .segmented {
-        display: inline-flex; border: 1px solid var(--border-strong);
-        border-radius: var(--radius); overflow: hidden; background: var(--bg);
-      }
-      .segmented button {
-        background: transparent; border: 0; padding: 0 10px; height: 24px;
-        font-size: 12px; color: var(--fg-secondary); cursor: pointer;
-      }
-      .segmented button:hover { background: var(--bg-2); }
-      .segmented button.on { background: var(--accent-soft); color: var(--accent-2); font-weight: 600; }
-
       /* ── Tabs ────────────────────────────────────────────────────── */
       .tabs-wrap {
         flex: 0 0 var(--tabs-h); height: var(--tabs-h);
@@ -631,16 +620,19 @@
             </div>
             <div class="divider"></div>
             <div class="pane-controls">
-              <!-- The "source" view shows the rendered output as text (with
-                   click-to-source provenance); the "rendered" view shows it
-                   visually in the iframe. Labels read "Rendered" / "Preview";
-                   the data-view keys are kept stable (used by examples + state). -->
-              <div class="segmented" role="tablist">
-                <button data-view="source">Plain Text</button>
-                <button data-view="rendered" class="on">HTML Preview</button>
-                <button data-view="markdown">Markdown Preview</button>
-                <button data-view="data" title="The data the template renders — after the JSONata transform — as YAML">View Model</button>
-              </div>
+              <!-- Output view selector. "source" = the output as text with
+                   click-to-source provenance; "rendered"/"markdown" = the iframe;
+                   "data" = the post-transform view-model as YAML. The view keys
+                   are kept stable (used by examples + URL state). -->
+              <span class="field-label" style="font-size:11px">View</span>
+              <select id="view-select" class="select" aria-label="Output view">
+                <option value="source">Plain Text</option>
+                <option value="rendered">HTML Preview</option>
+                <option value="markdown">Markdown Preview</option>
+                <option value="data">View Model</option>
+              </select>
+              <span class="field-label" id="out-lang-label" style="font-size:11px" hidden>Highlight</span>
+              <select id="out-lang-select" class="select" aria-label="Plain Text highlight language" title="Syntax highlighting for the Plain Text view" hidden></select>
               <span class="field-label" style="font-size:11px">Escape</span>
               <select id="escape-select" class="select" aria-label="Escape mode">
                 <option value="">(as compiled)</option>
@@ -701,7 +693,7 @@
         highlightActiveLineGutter
       } from "https://esm.sh/@codemirror/view@6.38.8/X-ZEBjb2RlbWlycm9yL3N0YXRlQDYuNS4y/es2022/view.mjs";
       import { defaultKeymap, history as cmHistory, historyKeymap, indentWithTab } from "https://esm.sh/@codemirror/commands@6.10.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
-      import { HighlightStyle, bracketMatching, syntaxHighlighting } from "https://esm.sh/@codemirror/language@6.11.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
+      import { HighlightStyle, StreamLanguage, bracketMatching, syntaxHighlighting } from "https://esm.sh/@codemirror/language@6.11.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
       import { tags as t } from "https://esm.sh/@lezer/highlight@1.2.3?target=es2022";
       import { lintGutter, linter, setDiagnosticsEffect } from "https://esm.sh/@codemirror/lint@6.8.5?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
       import { yaml } from "https://esm.sh/@codemirror/lang-yaml@6.1.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
@@ -1131,33 +1123,80 @@
             catch { text = String(lastData); }
           }
           lastSegViews = [];
-          setOutputDoc(text, [yaml(), yamlHighlighting], Decoration.none);
+          setOutputDoc(text, Decoration.none);
         } else {
           const { segViews, deco } = buildProvenance(lastOutput, lastSegments);
           lastSegViews = segViews;
-          setOutputDoc(lastOutput, outLanguageFor(), deco);
+          setOutputDoc(lastOutput, deco);
         }
+        updateOutLang();
       }
 
-      // Language for the Plain Text view = the loaded example's output format
-      // (rendered->HTML, markdown->Markdown, plain source->none). Custom/edited
-      // state has no example, so default to HTML (the common template output).
-      function outLanguageFor() {
-        const ex = examples[loadedExampleIdx];
-        const kind = ex ? ex.view : "rendered";
-        if (kind === "markdown") return [markdown()];
-        if (kind === "source") return [];
-        return [html()];
+      // Output highlight languages. "auto" follows the example's output format;
+      // the rest are explicit picks. The programming-language grammars come from
+      // the CodeMirror legacy-modes collection, lazy-loaded (and cached) on first
+      // use so the playground stays light. (AsciiDoc has no CodeMirror grammar.)
+      const OUT_LANGS = [
+        ["auto", "Auto"], ["none", "Plain text"],
+        ["html", "HTML"], ["xml", "XML"], ["css", "CSS"], ["json", "JSON"],
+        ["yaml", "YAML"], ["markdown", "Markdown"],
+        ["javascript", "JavaScript"], ["typescript", "TypeScript"],
+        ["java", "Java"], ["cpp", "C / C++"], ["csharp", "C#"],
+        ["python", "Python"], ["rust", "Rust"], ["go", "Go"],
+        ["ruby", "Ruby"], ["shell", "Shell"], ["sql", "SQL"], ["lua", "Lua"],
+      ];
+      // key -> [legacy-modes module, export] for the lazy-loaded stream grammars.
+      const STREAM_MODES = {
+        xml: ["xml", "xml"], css: ["css", "css"], json: ["javascript", "json"],
+        javascript: ["javascript", "javascript"], typescript: ["javascript", "typescript"],
+        java: ["clike", "java"], cpp: ["clike", "cpp"], csharp: ["clike", "csharp"],
+        python: ["python", "python"], rust: ["rust", "rust"], go: ["go", "go"],
+        ruby: ["ruby", "ruby"], shell: ["shell", "shell"], sql: ["sql", "standardSQL"], lua: ["lua", "lua"],
+      };
+      let outLangChoice = "auto";
+      const langCache = new Map();
+      async function loadLang(key) {
+        if (langCache.has(key)) return langCache.get(key);
+        let ext;
+        if (key === "none") ext = [];
+        else if (key === "html") ext = html();
+        else if (key === "markdown") ext = markdown();
+        else if (key === "yaml") ext = [yaml(), yamlHighlighting];
+        else {
+          const [mod, exp] = STREAM_MODES[key] || STREAM_MODES.javascript;
+          try {
+            const m = await import(`https://esm.sh/@codemirror/legacy-modes@6.4.3/mode/${mod}?deps=@codemirror/language@6.11.3,@codemirror/state@6.5.2,@codemirror/view@6.38.8`);
+            ext = StreamLanguage.define(m[exp]);
+          } catch { ext = []; }
+        }
+        langCache.set(key, ext);
+        return ext;
+      }
+      // Resolve the active output language (View Model is always YAML; Plain Text
+      // is the manual pick, or the example's output format when "auto") and apply
+      // it to the read-only editor's language compartment. Async: a grammar may
+      // be lazy-loaded, so the highlight appears as soon as it resolves.
+      async function updateOutLang() {
+        let key;
+        if (outputView === "data") key = "yaml";
+        else if (outputView !== "source") return;
+        else if (outLangChoice !== "auto") key = outLangChoice;
+        else {
+          const ex = examples[loadedExampleIdx];
+          key = ex ? ({ rendered: "html", markdown: "markdown", source: "none" }[ex.view] || "none") : "html";
+        }
+        const ext = await loadLang(key);
+        outputEditor.dispatch({ effects: outLangComp.reconfigure(ext) });
       }
 
-      // Swap the output editor's document, language, and provenance in one
-      // programmatic transaction (and clear any stale caret-link highlight).
-      function setOutputDoc(text, langExts, provenanceDeco) {
+      // Swap the output editor's document and provenance in one programmatic
+      // transaction (and clear any stale caret-link highlight). Language is applied
+      // separately by updateOutLang, which may lazy-load a grammar.
+      function setOutputDoc(text, provenanceDeco) {
         const cur = outputEditor.state.doc.toString();
         outputEditor.dispatch({
           changes: cur === text ? undefined : { from: 0, to: cur.length, insert: text },
           effects: [
-            outLangComp.reconfigure(langExts),
             setProvenance.of(provenanceDeco),
             setOutLink.of(Decoration.none),
           ],
@@ -1349,8 +1388,11 @@
         byId("output-text").hidden = !isText;
         byId("output-preview").hidden = isText;
         hideSegTip(); clearLink();
-        for (const b of document.querySelectorAll(".segmented button"))
-          b.classList.toggle("on", b.dataset.view === view);
+        byId("view-select").value = view;
+        // The highlight picker only applies to Plain Text (View Model is YAML).
+        const showLang = view === "source";
+        byId("out-lang-select").hidden = !showLang;
+        byId("out-lang-label").hidden = !showLang;
         if (isText) { paintTextView(); outputEditor.requestMeasure(); } else renderPreview();
         qs(".output-body").dataset.empty =
           (view === "data" ? lastData != null : !!lastOutput) ? "false" : "true";
@@ -1655,6 +1697,8 @@
         byId("escape-select").value = "";
         byId("example-select").value = String(idx);
         loadedExampleIdx = idx;
+        outLangChoice = "auto"; // each example highlights in its own output language
+        byId("out-lang-select").value = "auto";
         setOutputView(validView(ex.view));
         showActiveTab(); run();
       }
@@ -1992,9 +2036,15 @@
         escapeMode = e.target.value; run(); updateStatusMeta();
       });
 
-      for (const b of document.querySelectorAll(".segmented button")) {
-        b.addEventListener("click", () => { setOutputView(b.dataset.view); run(); });
+      byId("view-select").addEventListener("change", (e) => { setOutputView(e.target.value); run(); });
+
+      // Populate the Plain Text highlight picker and apply manual choices.
+      for (const [value, label] of OUT_LANGS) {
+        const opt = document.createElement("option");
+        opt.value = value; opt.textContent = label;
+        byId("out-lang-select").append(opt);
       }
+      byId("out-lang-select").addEventListener("change", (e) => { outLangChoice = e.target.value; updateOutLang(); });
 
       for (const b of document.querySelectorAll(".focus-toggle")) {
         b.addEventListener("click", () => toggleFocus(b.dataset.pane));
