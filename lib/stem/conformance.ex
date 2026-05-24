@@ -195,6 +195,44 @@ defmodule Stem.Conformance do
       template: "{{#region body}}Hi {{name}}{{/region}}<main>{{yield body}}</main>",
       data: %{name: "Nina"},
       transformers: []
+    },
+    # `json`/`inspect` (Minimum). Triple-stash keeps the serialized output raw so
+    # the transformer's bytes are compared directly. The data stays in the
+    # cross-language value domain (no floats — see gap G2). A small string-keyed
+    # map exercises key ordering, which agrees because Elixir ≤32-key maps and the
+    # native BTreeMap both iterate keys in sorted (byte) order.
+    %{
+      name: "json string",
+      template: "{{{s |> json}}}",
+      data: %{s: "hi"},
+      transformers: [:minimum]
+    },
+    %{
+      name: "json list",
+      template: "{{{nums |> json}}}",
+      data: %{nums: [1, 2, 3]},
+      transformers: [:minimum]
+    },
+    %{
+      name: "json object",
+      template: "{{{obj |> json}}}",
+      data: %{obj: %{"a" => 1, "b" => 2}},
+      transformers: [:minimum]
+    },
+    %{
+      name: "inspect integer",
+      template: "{{{n |> inspect}}}",
+      data: %{n: 42},
+      transformers: [:minimum]
+    },
+    # `inspect` is exercised over scalars and lists only: a map's keys print as
+    # quoted strings, so the atom-keyed maps this corpus builds from JSON would
+    # render as `%{a: 1}` on the BEAM but `%{"a" => 1}` natively — see gap G7.
+    %{
+      name: "inspect list",
+      template: "{{{words |> inspect}}}",
+      data: %{words: ["a", "b"]},
+      transformers: [:minimum]
     }
   ]
 

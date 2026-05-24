@@ -28,5 +28,10 @@
   {"data":{"user":{"name":"Nina"}},"escape":"html","expected":"Nina","name":"with this-field","template":"{{#with user}}{{this.name}}{{/with}}","transformers":[]},
   {"data":{"user":{"name":"A"}},"escape":"html","expected":"A","name":"with block param and else","template":"{{#with user as |u|}}{{u.name}}{{else}}none{{/with}}","transformers":[]},
   {"data":{"items":["a","","b"]},"escape":"html","expected":"<a><b>","name":"nested each and if","template":"{{#each items}}{{#if this}}<{{this}}>{{/if}}{{/each}}","transformers":[]},
-  {"data":{"name":"Nina"},"escape":"html","expected":"<main>Hi Nina</main>","name":"region and yield","template":"{{#region body}}Hi {{name}}{{/region}}<main>{{yield body}}</main>","transformers":[]}
+  {"data":{"name":"Nina"},"escape":"html","expected":"<main>Hi Nina</main>","name":"region and yield","template":"{{#region body}}Hi {{name}}{{/region}}<main>{{yield body}}</main>","transformers":[]},
+  {"data":{"s":"hi"},"escape":"html","expected":"\"hi\"","name":"json string","template":"{{{s |> json}}}","transformers":["minimum"]},
+  {"data":{"nums":[1,2,3]},"escape":"html","expected":"[1,2,3]","name":"json list","template":"{{{nums |> json}}}","transformers":["minimum"]},
+  {"data":{"obj":{"a":1,"b":2}},"escape":"html","expected":"{\"a\":1,\"b\":2}","name":"json object","template":"{{{obj |> json}}}","transformers":["minimum"]},
+  {"data":{"n":42},"escape":"html","expected":"42","name":"inspect integer","template":"{{{n |> inspect}}}","transformers":["minimum"]},
+  {"data":{"words":["a","b"]},"escape":"html","expected":"[\"a\", \"b\"]","name":"inspect list","template":"{{{words |> inspect}}}","transformers":["minimum"]}
 ]

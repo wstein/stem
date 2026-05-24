@@ -428,7 +428,8 @@ fn parse_groups(names: &[String]) -> u8 {
 // with the match arms in `call`.
 fn builtin_groups(name: &str) -> Option<u8> {
     Some(match name {
-        "escape_html" | "escape_json" | "default" | "lookup" | "join" | "log" => GROUP_MINIMUM,
+        "escape_html" | "escape_json" | "json" | "inspect" | "default" | "lookup" | "join"
+        | "log" => GROUP_MINIMUM,
         "trim" | "upcase" | "downcase" | "capitalize" | "truncate" | "replace" | "starts_with"
         | "ends_with" => GROUP_STRINGS,
         "take" | "drop" | "slice" | "first" | "reverse" => GROUP_STRINGS | GROUP_COLLECTIONS,
@@ -1030,6 +1031,8 @@ fn call(name: &str, args: &[Value]) -> Value {
         "lookup" => lookup(&args[0], &args[1]),
         "escape_html" => Value::from(escape_with(&to_string(&args[0]), "html")),
         "escape_json" => Value::from(escape_json(&to_string(&args[0]))),
+        "json" => Value::from(json_encode(&args[0])),
+        "inspect" => Value::from(inspect(&args[0])),
         // `log` renders to "" on the BEAM (its value is the side effect); the
         // native build keeps the output parity and leaves any logging to a host
         // transformer override. So a `{{ x |> log }}` stage is a transparent ""
@@ -1264,6 +1267,59 @@ fn escape_json(s: &str) -> String {
         .and_then(|e| e.strip_suffix('"'))
         .unwrap_or(&encoded)
         .to_string()
+}
+
+// Compact JSON, matching Elixir's `JSON.encode!/1` over the JSON value domain:
+// serde_json sorts object keys (BTreeMap) and an Elixir ≤32-key string-keyed map
+// iterates in the same term (byte) order, so the encodings agree. Floats inherit
+// the `to_string` float divergence (gap G2) and are kept out of the corpus.
+fn json_encode(value: &Value) -> String {
+    serde_json::to_string(value).unwrap_or_default()
+}
+
+// Elixir's `Kernel.inspect/1` over the JSON value domain: `nil`, booleans and
+// integers verbatim; strings quoted with escapes; lists `[a, b]`; string-keyed
+// maps `%{"k" => v}` in sorted-key order. (Floats inherit gap G2; a map's keys
+// print as quoted strings, so the atom-keyed maps the conformance harness builds
+// from JSON are exercised only via scalars and lists — see the spec note.)
+fn inspect(value: &Value) -> String {
+    match value {
+        Value::Null => "nil".to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Number(n) => n.to_string(),
+        Value::String(s) => inspect_string(s),
+        Value::Array(items) => {
+            let inner = items.iter().map(inspect).collect::<Vec<_>>().join(", ");
+            format!("[{inner}]")
+        }
+        Value::Object(map) => {
+            let inner = map
+                .iter()
+                .map(|(key, value)| format!("{} => {}", inspect_string(key), inspect(value)))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("%{{{inner}}}")
+        }
+    }
+}
+
+// A string as Elixir's `inspect/1` renders it: double-quoted, with backslash,
+// quote, and the common control characters escaped.
+fn inspect_string(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push('"');
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            _ => out.push(ch),
+        }
+    }
+    out.push('"');
+    out
 }
 
 fn count_arg(value: &Value) -> usize {
@@ -1852,6 +1908,64 @@ mod host_transformer_tests {
         assert!(
             out.contains("transformer 't' requires a host translator"),
             "got: {out}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod serialization_tests {
+    use super::*;
+    use serde_json::json;
+
+    // Render `{{ x |> name }}` with no escaping so the serializer output is
+    // verbatim. `json`/`inspect` are Minimum, so the default groups suffice.
+    fn render(name: &str, data: Value) -> String {
+        let request = json!({
+            "program": { "instructions": [{
+                "t": "emit",
+                "value": { "t": "call", "name": name, "args": [{ "t": "assign", "name": "x" }], "kwargs": {} },
+                "escape": "none"
+            }] },
+            "data": data
+        });
+        handle(&request.to_string())
+    }
+
+    #[test]
+    fn json_encodes_the_value_domain() {
+        assert_eq!(render("json", json!({ "x": "hi" })), r#""hi""#);
+        assert_eq!(render("json", json!({ "x": [1, 2, 3] })), "[1,2,3]");
+        assert_eq!(render("json", json!({ "x": true })), "true");
+        assert_eq!(render("json", json!({ "x": null })), "null");
+        assert_eq!(render("json", json!({ "x": 42 })), "42");
+    }
+
+    #[test]
+    fn json_sorts_object_keys() {
+        // serde_json's BTreeMap sorts keys, matching an Elixir ≤32-key map's
+        // term-ordered iteration.
+        assert_eq!(
+            render("json", json!({ "x": { "b": 2, "a": 1 } })),
+            r#"{"a":1,"b":2}"#
+        );
+    }
+
+    #[test]
+    fn inspect_matches_elixir_for_scalars_and_lists() {
+        assert_eq!(render("inspect", json!({ "x": null })), "nil");
+        assert_eq!(render("inspect", json!({ "x": true })), "true");
+        assert_eq!(render("inspect", json!({ "x": 42 })), "42");
+        assert_eq!(render("inspect", json!({ "x": "hi" })), r#""hi""#);
+        assert_eq!(render("inspect", json!({ "x": [1, 2, 3] })), "[1, 2, 3]");
+    }
+
+    #[test]
+    fn inspect_escapes_strings_and_renders_maps() {
+        assert_eq!(render("inspect", json!({ "x": "a\"b" })), r#""a\"b""#);
+        assert_eq!(render("inspect", json!({ "x": "a\nb" })), r#""a\nb""#);
+        assert_eq!(
+            render("inspect", json!({ "x": { "a": 1 } })),
+            r#"%{"a" => 1}"#
         );
     }
 }
