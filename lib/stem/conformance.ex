@@ -198,9 +198,10 @@ defmodule Stem.Conformance do
     },
     # `json`/`inspect` (Minimum). Triple-stash keeps the serialized output raw so
     # the transformer's bytes are compared directly. The data stays in the
-    # cross-language value domain (no floats — see gap G2). A small string-keyed
-    # map exercises key ordering, which agrees because Elixir ≤32-key maps and the
-    # native BTreeMap both iterate keys in sorted (byte) order.
+    # cross-language value domain (no floats — see gap G2). The object is
+    # single-key: native always sorts object keys, but the BEAM's `JSON.encode!`
+    # preserves the map's internal order (which varies by key type and size), so
+    # multi-key order is not cross-backend stable (gap G5).
     %{
       name: "json string",
       template: "{{{s |> json}}}",
@@ -216,7 +217,7 @@ defmodule Stem.Conformance do
     %{
       name: "json object",
       template: "{{{obj |> json}}}",
-      data: %{obj: %{"a" => 1, "b" => 2}},
+      data: %{obj: %{"role" => "admin"}},
       transformers: [:minimum]
     },
     %{

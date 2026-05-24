@@ -1942,8 +1942,10 @@ mod serialization_tests {
 
     #[test]
     fn json_sorts_object_keys() {
-        // serde_json's BTreeMap sorts keys, matching an Elixir ≤32-key map's
-        // term-ordered iteration.
+        // Native always sorts object keys (serde_json's BTreeMap). This is a
+        // native behavioural guarantee, not cross-backend parity: the BEAM's
+        // JSON.encode! preserves the map's internal order, so multi-key object
+        // order is a documented divergence (gap G5) kept out of the corpus.
         assert_eq!(
             render("json", json!({ "x": { "b": 2, "a": 1 } })),
             r#"{"a":1,"b":2}"#
