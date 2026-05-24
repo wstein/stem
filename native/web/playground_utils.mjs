@@ -48,9 +48,11 @@ export function byteRangeToCharRange(source, startByte, endByte) {
 
 // The partial name if `charIndex` sits inside a `{{> name ...}}` tag, else null.
 // A partial tag expands inline and produces no output run of its own, so the
-// playground uses this to map a caret on the tag to that partial's output.
+// playground uses this to map a caret on the tag to that partial's output. The
+// name capture excludes `~` so a trailing whitespace-control marker (`{{> x~}}`)
+// isn't taken as part of the name (the compiler strips it, yielding file "x").
 export function partialNameAt(source, charIndex) {
-  const re = /\{\{~?\s*>\s*([^\s}]+)[^}]*\}\}/g;
+  const re = /\{\{~?\s*>\s*([^\s}~]+)[^}]*\}\}/g;
   let m;
   while ((m = re.exec(source)) !== null) {
     if (charIndex >= m.index && charIndex < m.index + m[0].length) return m[1];

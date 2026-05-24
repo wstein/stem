@@ -67,6 +67,14 @@ test("partialNameAt finds the partial under the caret", () => {
   assert.equal(partialNameAt(src, 20), "row");  // inside {{> row x=1}}
 });
 
+test("partialNameAt strips whitespace-control tildes from the name", () => {
+  // The compiler trims `~`, so the run's file is "header" either way; the name
+  // detection must agree so caret→output sync still matches.
+  assert.equal(partialNameAt("{{> header~}}", 5), "header");
+  assert.equal(partialNameAt("{{~> header}}", 7), "header");
+  assert.equal(partialNameAt("{{~>header~}}", 6), "header");
+});
+
 test("state encode/decode round-trips", () => {
   const state = {
     tabs: [{ n: "main", s: "Hello {{name}}" }, { n: "card", s: "<div>{{name}}</div>" }],
