@@ -632,7 +632,8 @@
                 <option value="data">View Model</option>
               </select>
               <span class="field-label" id="out-lang-label" style="font-size:11px" hidden>Highlight</span>
-              <select id="out-lang-select" class="select" aria-label="Plain Text highlight language" title="Syntax highlighting for the Plain Text view" hidden></select>
+              <input id="out-lang-input" class="select" style="width:130px" list="out-lang-list" aria-label="Plain Text highlight language" title="Type to search ~140 languages" placeholder="Auto" autocomplete="off" hidden />
+              <datalist id="out-lang-list"></datalist>
               <span class="field-label" style="font-size:11px">Escape</span>
               <select id="escape-select" class="select" aria-label="Escape mode">
                 <option value="">(as compiled)</option>
@@ -693,12 +694,16 @@
         highlightActiveLineGutter
       } from "https://esm.sh/@codemirror/view@6.38.8/X-ZEBjb2RlbWlycm9yL3N0YXRlQDYuNS4y/es2022/view.mjs";
       import { defaultKeymap, history as cmHistory, historyKeymap, indentWithTab } from "https://esm.sh/@codemirror/commands@6.10.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
-      import { HighlightStyle, StreamLanguage, bracketMatching, syntaxHighlighting } from "https://esm.sh/@codemirror/language@6.11.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
+      import { HighlightStyle, bracketMatching, syntaxHighlighting } from "https://esm.sh/@codemirror/language@6.11.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
       import { tags as t } from "https://esm.sh/@lezer/highlight@1.2.3?target=es2022";
       import { lintGutter, linter, setDiagnosticsEffect } from "https://esm.sh/@codemirror/lint@6.8.5?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
       import { yaml } from "https://esm.sh/@codemirror/lang-yaml@6.1.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
       import { html } from "https://esm.sh/@codemirror/lang-html@6.4.11?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
       import { markdown } from "https://esm.sh/@codemirror/lang-markdown@6.3.4?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3,@codemirror/lang-html@6.4.11";
+      // The full CodeMirror language registry (~140 langs): metadata + a lazy
+      // load() per language. Dep-pinned so the lazily-imported grammars reuse this
+      // page's @codemirror/state·view·language instances (no duplicate-instance bug).
+      import { languages as cmLanguages } from "https://esm.sh/@codemirror/language-data@6.5.1?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
       import { load as loadYaml, dump as dumpYaml } from "./vendor/js-yaml.mjs";
       import { marked } from "./vendor/marked.mjs";
       import jsonata from "./vendor/jsonata.mjs";
@@ -1132,61 +1137,57 @@
         updateOutLang();
       }
 
-      // Output highlight languages. "auto" follows the example's output format;
-      // the rest are explicit picks. The programming-language grammars come from
-      // the CodeMirror legacy-modes collection, lazy-loaded (and cached) on first
-      // use so the playground stays light. (AsciiDoc has no CodeMirror grammar.)
-      const OUT_LANGS = [
-        ["auto", "Auto"], ["none", "Plain text"],
-        ["html", "HTML"], ["xml", "XML"], ["css", "CSS"], ["json", "JSON"],
-        ["yaml", "YAML"], ["markdown", "Markdown"],
-        ["javascript", "JavaScript"], ["typescript", "TypeScript"],
-        ["java", "Java"], ["cpp", "C / C++"], ["csharp", "C#"],
-        ["python", "Python"], ["rust", "Rust"], ["go", "Go"],
-        ["ruby", "Ruby"], ["shell", "Shell"], ["sql", "SQL"], ["lua", "Lua"],
-      ];
-      // key -> [legacy-modes module, export] for the lazy-loaded stream grammars.
-      const STREAM_MODES = {
-        xml: ["xml", "xml"], css: ["css", "css"], json: ["javascript", "json"],
-        javascript: ["javascript", "javascript"], typescript: ["javascript", "typescript"],
-        java: ["clike", "java"], cpp: ["clike", "cpp"], csharp: ["clike", "csharp"],
-        python: ["python", "python"], rust: ["rust", "rust"], go: ["go", "go"],
-        ruby: ["ruby", "ruby"], shell: ["shell", "shell"], sql: ["sql", "standardSQL"], lua: ["lua", "lua"],
-      };
-      let outLangChoice = "auto";
-      const langCache = new Map();
-      async function loadLang(key) {
-        if (langCache.has(key)) return langCache.get(key);
+      // Output highlight language. The choice is "Auto" (follow the example's
+      // output format), "Plain text", or any of the ~140 languages in the
+      // CodeMirror language registry (cmLanguages). Each registry entry lazy-loads
+      // its grammar via desc.load() on first use (cached here), so the playground
+      // stays light. (AsciiDoc has no CodeMirror grammar, so it is not listed.)
+      let outLangChoice = "Auto";
+      const langCache = new Map(); // language name -> resolved Extension
+
+      // Canonicalize a typed/picked value to "Auto", "Plain text", or a registry
+      // language name (case-insensitive, also matching aliases). null = unknown.
+      function normalizeLangChoice(v) {
+        const s = (v || "").trim().toLowerCase();
+        if (s === "" || s === "auto") return "Auto";
+        if (s === "plain text" || s === "none" || s === "plain") return "Plain text";
+        const byName = cmLanguages.find((l) => l.name.toLowerCase() === s);
+        if (byName) return byName.name;
+        const byAlias = cmLanguages.find((l) => l.alias.some((a) => a.toLowerCase() === s));
+        return byAlias ? byAlias.name : null;
+      }
+
+      async function resolveLangByName(name) {
+        if (name === "Plain text") return [];
+        if (langCache.has(name)) return langCache.get(name);
+        const desc = cmLanguages.find((l) => l.name === name);
+        if (!desc) return null;
         let ext;
-        if (key === "none") ext = [];
-        else if (key === "html") ext = html();
-        else if (key === "markdown") ext = markdown();
-        else if (key === "yaml") ext = [yaml(), yamlHighlighting];
-        else {
-          const [mod, exp] = STREAM_MODES[key] || STREAM_MODES.javascript;
-          try {
-            const m = await import(`https://esm.sh/@codemirror/legacy-modes@6.4.3/mode/${mod}?deps=@codemirror/language@6.11.3,@codemirror/state@6.5.2,@codemirror/view@6.38.8`);
-            ext = StreamLanguage.define(m[exp]);
-          } catch { ext = []; }
-        }
-        langCache.set(key, ext);
+        try { ext = await desc.load(); } catch { ext = []; }
+        langCache.set(name, ext);
         return ext;
       }
-      // Resolve the active output language (View Model is always YAML; Plain Text
-      // is the manual pick, or the example's output format when "auto") and apply
-      // it to the read-only editor's language compartment. Async: a grammar may
-      // be lazy-loaded, so the highlight appears as soon as it resolves.
+
+      // Resolve the active output language and apply it to the read-only editor's
+      // language compartment. View Model is always YAML; Plain Text uses the manual
+      // pick, or the example's output format when "Auto". The autoswitch cases use
+      // the statically-imported grammars (instant); manual picks may lazy-load, so
+      // the highlight appears as soon as the grammar resolves.
       async function updateOutLang() {
-        let key;
-        if (outputView === "data") key = "yaml";
-        else if (outputView !== "source") return;
-        else if (outLangChoice !== "auto") key = outLangChoice;
-        else {
-          const ex = examples[loadedExampleIdx];
-          key = ex ? ({ rendered: "html", markdown: "markdown", source: "none" }[ex.view] || "none") : "html";
+        if (outputView === "data") {
+          outputEditor.dispatch({ effects: outLangComp.reconfigure([yaml(), yamlHighlighting]) });
+          return;
         }
-        const ext = await loadLang(key);
-        outputEditor.dispatch({ effects: outLangComp.reconfigure(ext) });
+        if (outputView !== "source") return;
+        if (outLangChoice === "Auto") {
+          const ex = examples[loadedExampleIdx];
+          const kind = ex ? ex.view : "rendered";
+          const ext = kind === "markdown" ? markdown() : kind === "source" ? [] : html();
+          outputEditor.dispatch({ effects: outLangComp.reconfigure(ext) });
+          return;
+        }
+        const ext = await resolveLangByName(outLangChoice);
+        if (ext != null) outputEditor.dispatch({ effects: outLangComp.reconfigure(ext) });
       }
 
       // Swap the output editor's document and provenance in one programmatic
@@ -1391,7 +1392,7 @@
         byId("view-select").value = view;
         // The highlight picker only applies to Plain Text (View Model is YAML).
         const showLang = view === "source";
-        byId("out-lang-select").hidden = !showLang;
+        byId("out-lang-input").hidden = !showLang;
         byId("out-lang-label").hidden = !showLang;
         if (isText) { paintTextView(); outputEditor.requestMeasure(); } else renderPreview();
         qs(".output-body").dataset.empty =
@@ -1697,8 +1698,8 @@
         byId("escape-select").value = "";
         byId("example-select").value = String(idx);
         loadedExampleIdx = idx;
-        outLangChoice = "auto"; // each example highlights in its own output language
-        byId("out-lang-select").value = "auto";
+        outLangChoice = "Auto"; // each example highlights in its own output language
+        byId("out-lang-input").value = "Auto";
         setOutputView(validView(ex.view));
         showActiveTab(); run();
       }
@@ -2038,13 +2039,26 @@
 
       byId("view-select").addEventListener("change", (e) => { setOutputView(e.target.value); run(); });
 
-      // Populate the Plain Text highlight picker and apply manual choices.
-      for (const [value, label] of OUT_LANGS) {
-        const opt = document.createElement("option");
-        opt.value = value; opt.textContent = label;
-        byId("out-lang-select").append(opt);
+      // Fill the searchable highlight picker: Auto + Plain text, then every
+      // language in the CodeMirror registry (alphabetical) as <datalist> options.
+      {
+        const dl = byId("out-lang-list");
+        const names = ["Auto", "Plain text",
+          ...cmLanguages.map((l) => l.name).sort((a, b) => a.localeCompare(b))];
+        for (const name of names) {
+          const opt = document.createElement("option");
+          opt.value = name;
+          dl.append(opt);
+        }
+        const input = byId("out-lang-input");
+        input.value = "Auto";
+        // Commit on change/Enter: snap a typed value to a known language (or revert).
+        input.addEventListener("change", () => {
+          const norm = normalizeLangChoice(input.value);
+          if (norm) { outLangChoice = norm; input.value = norm; updateOutLang(); }
+          else { input.value = outLangChoice; } // unknown entry — restore the last valid pick
+        });
       }
-      byId("out-lang-select").addEventListener("change", (e) => { outLangChoice = e.target.value; updateOutLang(); });
 
       for (const b of document.querySelectorAll(".focus-toggle")) {
         b.addEventListener("click", () => toggleFocus(b.dataset.pane));
