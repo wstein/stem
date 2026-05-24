@@ -183,11 +183,6 @@
         display: flex; align-items: flex-end; padding: 0 4px; gap: 1px;
         overflow-x: auto; overflow-y: hidden; scrollbar-width: thin;
       }
-      .tabs-pinned {
-        flex: 0 0 auto; height: 100%; display: flex; align-items: flex-end;
-        border-left: 1px solid var(--border); background: var(--bg-2);
-        box-shadow: -6px 0 6px -4px rgba(24,24,27,.08); padding-right: 4px;
-      }
       .tabs::-webkit-scrollbar { height: 4px; }
       .tabs::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
 
@@ -209,14 +204,6 @@
         content: ""; width: 6px; height: 6px; border-radius: 50%;
         background: var(--accent); margin-right: 2px;
       }
-      .tab.is-data { background: var(--accent-softer); color: var(--accent-2); }
-      .tab.is-data::before {
-        content: ""; width: 6px; height: 6px; border-radius: 2px;
-        background: var(--tok-key); margin-right: 2px;
-      }
-      .tab.is-data.active { background: var(--bg-tab-active); color: var(--tok-key); }
-      .tab.is-data.active::after { background: var(--tok-key); }
-      .tab.is-data:hover { color: var(--tok-key); }
       .tab .close {
         width: 16px; height: 16px; display: grid; place-items: center;
         border-radius: 3px; color: var(--fg-faint); font-size: 12px; margin-left: 2px;
@@ -237,8 +224,29 @@
       }
 
       /* ── Editor panes (CodeMirror) ───────────────────────────────── */
-      .editor-pane { display: none; overflow: hidden; }
-      .editor-pane.is-active { display: block; flex: 1 1 auto; min-height: 0; }
+      /* Template + data editors shown together, perpendicular to the workspace:
+         stacked when the workspace is split (the default), side-by-side when the
+         workspace is stacked. A draggable .esplitter sits between them. */
+      .editors { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; min-width: 0; }
+      .editors > .editor-pane { flex: 1 1 0; }
+      .editor-cell { flex: 1 1 0; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+      .editor-cell > .editor-pane { flex: 1 1 auto; }
+      .cell-label {
+        flex: 0 0 auto; height: 24px; display: flex; align-items: center; gap: 6px;
+        padding: 0 12px; font: 11px/1 var(--font-mono); color: var(--tok-key);
+        background: var(--accent-softer); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      }
+      .cell-dot { width: 6px; height: 6px; border-radius: 2px; background: var(--tok-key); }
+      .workspace.stacked .editors { flex-direction: row; }
+      .editor-pane { display: block; overflow: hidden; min-width: 0; min-height: 0; }
+
+      .esplitter {
+        flex: 0 0 6px; background: var(--border); position: relative;
+        cursor: row-resize; transition: background 100ms ease;
+      }
+      .esplitter::after { content: ""; position: absolute; inset: -3px; }
+      .workspace.stacked .esplitter { cursor: col-resize; }
+      .esplitter:hover, .esplitter.dragging { background: var(--accent); }
 
       .editor-pane .cm-editor { height: 100%; font-size: 12.5px; }
       .editor-pane .cm-scroller { overflow: auto; }
@@ -508,11 +516,18 @@
 
           <div class="tabs-wrap">
             <div class="tabs" id="tmpl-tabs"></div>
-            <div class="tabs-pinned" id="tabs-pinned"></div>
           </div>
 
-          <div class="editor-pane is-active" id="template-editor-container"></div>
-          <div class="editor-pane" id="data-editor-container"></div>
+          <!-- Template + data shown together: side-by-side (split) or
+               stacked (template above data) per the workspace layout. -->
+          <div class="editors">
+            <div class="editor-pane" id="template-editor-container"></div>
+            <div class="esplitter" id="editor-splitter" title="Drag to resize · double-click to reset"></div>
+            <div class="editor-cell">
+              <div class="cell-label"><span class="cell-dot"></span>data.yaml</div>
+              <div class="editor-pane" id="data-editor-container"></div>
+            </div>
+          </div>
         </section>
 
         <div id="splitter-1" class="splitter" role="separator" aria-orientation="vertical"
@@ -697,6 +712,11 @@
         if (cur !== text) view.dispatch({ changes: { from: 0, to: cur.length, insert: text } });
       }
 
+      // Both editors are visible, so "active view" follows whichever has focus —
+      // it drives the status bar, copy, and save actions.
+      byId("template-editor-container").addEventListener("focusin", () => { activeView = "tmpl"; updateStatusMeta(); });
+      byId("data-editor-container").addEventListener("focusin", () => { activeView = "data"; updateStatusMeta(); });
+
       // ── Tabs ──────────────────────────────────────────────────────────
       function renderTabs() {
         const bar = byId("tmpl-tabs");
@@ -744,20 +764,14 @@
         add.className = "tab-add"; add.title = "add partial"; add.textContent = "＋ partial";
         add.addEventListener("click", addPartial);
         bar.append(add);
-
-        const dataTab = document.createElement("div");
-        dataTab.className = "tab is-data" + (activeView === "data" ? " active" : "");
-        dataTab.title = "data values for the render preview (YAML)";
-        dataTab.textContent = "data.yaml";
-        dataTab.addEventListener("click", selectDataTab);
-        byId("tabs-pinned").replaceChildren(dataTab);
       }
 
       function selectTemplateTab(i) {
         activeView = "tmpl"; activeTabIdx = i; syncEditor();
       }
       function selectDataTab() {
-        activeView = "data"; syncEditor();
+        // The data editor is always visible now; just move focus to it.
+        activeView = "data"; dataView.focus(); updateStatusMeta();
       }
       function addPartial() {
         let n = 1, name;
@@ -768,6 +782,7 @@
       }
       function removeTab(i) {
         if (i === 0) return;
+        if (!confirm(`Remove the "${tabs[i].name}" partial? This can't be undone.`)) return;
         if (activeTabIdx === i) activeTabIdx = i - 1;
         else if (activeTabIdx > i) activeTabIdx -= 1;
         tabs.splice(i, 1);
@@ -775,21 +790,11 @@
       }
 
       function syncEditor() {
-        const tmplPane = byId("template-editor-container");
-        const dataPane = byId("data-editor-container");
-
-        if (activeView === "tmpl") {
-          setEditorText(templateView, activeTab().source);
-          tmplPane.classList.add("is-active");
-          dataPane.classList.remove("is-active");
-          byId("sources-sub").textContent = activeTabIdx === 0
-            ? "entry template · compiled in-browser"
-            : `partial · referenced as {{> ${activeTab().name}}}`;
-        } else {
-          dataPane.classList.add("is-active");
-          tmplPane.classList.remove("is-active");
-          byId("sources-sub").textContent = "live YAML data used for the render preview";
-        }
+        // Both editors stay visible; the tabs drive the template editor.
+        setEditorText(templateView, activeTab().source);
+        byId("sources-sub").textContent = activeTabIdx === 0
+          ? "entry template · compiled in-browser"
+          : `partial · referenced as {{> ${activeTab().name}}}`;
 
         renderTabs();
         run();
@@ -833,7 +838,7 @@
         const compiled = renderer.compile(mainSource, partialsMap());
 
         if (compiled.error) {
-          if (activeView === "tmpl" && activeTabIdx === 0) {
+          if (activeTabIdx === 0) {
             const [from, to] = byteRangeToCharRange(mainSource, compiled.error.start, compiled.error.end);
             updateDiagnostics([{ from, to, severity: "error", message: compiled.error.message }]);
             const pos = charToLineColumn(mainSource, from);
@@ -914,47 +919,45 @@
       }
 
       // ── Splitter ──────────────────────────────────────────────────────
-      let splits = { w0: null, h0: null };
-      try { const r = localStorage.getItem(LS_SPLIT); if (r) splits = JSON.parse(r); } catch {}
+      let splits = { w0: null, h0: null, ew: null, eh: null };
+      try { const r = localStorage.getItem(LS_SPLIT); if (r) splits = { ...splits, ...JSON.parse(r) }; } catch {}
 
       function saveSplits() { try { localStorage.setItem(LS_SPLIT, JSON.stringify(splits)); } catch {} }
 
       function isStacked() { return qs(".workspace")?.classList.contains("stacked"); }
 
-      function applySplits() {
-        const ws = qs(".workspace");
-        if (!ws) return;
-        const stacked = isStacked();
-        const total = stacked ? ws.clientHeight : ws.clientWidth;
-        if (total <= 0) return;
-        const usable = total - 6;
-        const MIN = stacked ? 160 : 240;
-        const key = stacked ? "h0" : "w0";
-        let s = splits[key] ?? Math.round(usable * 0.55);
-        s = Math.max(MIN, Math.min(usable - MIN, s));
-        splits[key] = s;
-        const panes = document.querySelectorAll(".pane");
-        panes[0].style.flex = `0 0 ${s}px`;
-        panes[1].style.flex = "1 1 0";
-      }
-
-      function attachSplitter(el) {
+      // Generic two-child flex splitter. axisRow() reports whether the container
+      // currently lays its children in a row (resize width) or column (resize
+      // height) — so one helper drives both the workspace and the editors, whose
+      // orientations are perpendicular and flip with the layout.
+      function makeSplitter({ el, container, first, second, axisRow, keyRow, keyCol, min, ratio }) {
+        function size() {
+          if (!container) return;
+          const row = axisRow();
+          const total = row ? container.clientWidth : container.clientHeight;
+          if (total <= 0) return;
+          const usable = total - 6;
+          const key = row ? keyRow : keyCol;
+          let s = splits[key] ?? Math.round(usable * ratio);
+          s = Math.max(min, Math.min(usable - min, s));
+          splits[key] = s;
+          first.style.flex = `0 0 ${s}px`;
+          second.style.flex = "1 1 0";
+        }
         el.addEventListener("mousedown", (e) => {
           e.preventDefault();
           el.classList.add("dragging");
-          const stacked = isStacked();
-          document.body.classList.add(stacked ? "dragging-row" : "dragging-col");
-          const wsRect = qs(".workspace").getBoundingClientRect();
-          const key = stacked ? "h0" : "w0";
-          const startS = splits[key];
-          const startPos = stacked ? e.clientY : e.clientX;
-          const MIN = stacked ? 160 : 240;
-          const usable = (stacked ? wsRect.height : wsRect.width) - 6;
-
+          const row = axisRow();
+          document.body.classList.add(row ? "dragging-col" : "dragging-row");
+          const rect = container.getBoundingClientRect();
+          const key = row ? keyRow : keyCol;
+          const usable = (row ? rect.width : rect.height) - 6;
+          const startS = splits[key] ?? Math.round(usable * ratio);
+          const startPos = row ? e.clientX : e.clientY;
           const onMove = (ev) => {
-            const cur = stacked ? ev.clientY : ev.clientX;
-            splits[key] = Math.max(MIN, Math.min(usable - MIN, startS + (cur - startPos)));
-            applySplits();
+            const cur = row ? ev.clientX : ev.clientY;
+            splits[key] = Math.max(min, Math.min(usable - min, startS + (cur - startPos)));
+            size();
           };
           const onUp = () => {
             el.classList.remove("dragging");
@@ -967,10 +970,14 @@
           window.addEventListener("mouseup", onUp);
         });
         el.addEventListener("dblclick", () => {
-          splits = { w0: null, h0: null };
-          applySplits(); saveSplits();
+          splits[keyRow] = null; splits[keyCol] = null; size(); saveSplits();
         });
+        return size;
       }
+
+      let sizeWorkspace = () => {};
+      let sizeEditors = () => {};
+      function applySplits() { sizeWorkspace(); sizeEditors(); }
 
       // ── Focus mode ────────────────────────────────────────────────────
       function setFocus(mode) {
@@ -1067,7 +1074,7 @@
           { label: "View · Rendered", kind: "view", run: () => { setOutputView("rendered"); run(); } },
           { label: "View · Source",   kind: "view", run: () => { setOutputView("source"); run(); } },
           { label: "Reset layout", kind: "view",
-            run: () => { splits = { w0: null, h0: null }; applySplits(); saveSplits(); setFocus(null); } },
+            run: () => { splits = { w0: null, h0: null, ew: null, eh: null }; applySplits(); saveSplits(); setFocus(null); } },
           { label: "Copy share link", kind: "share", run: copyShareLink },
           ...["", "html", "xml", "json", "none"].map((m) => ({
             label: `Escape · ${m || "(as compiled)"}`, kind: "render",
@@ -1304,7 +1311,16 @@
 
       // ── Boot ──────────────────────────────────────────────────────────
       buildExampleSelect();
-      attachSplitter(byId("splitter-1"));
+      sizeWorkspace = makeSplitter({
+        el: byId("splitter-1"), container: qs(".workspace"),
+        first: document.querySelectorAll(".pane")[0], second: document.querySelectorAll(".pane")[1],
+        axisRow: () => !isStacked(), keyRow: "w0", keyCol: "h0", min: 240, ratio: 0.55,
+      });
+      sizeEditors = makeSplitter({
+        el: byId("editor-splitter"), container: qs(".editors"),
+        first: byId("template-editor-container"), second: qs(".editor-cell"),
+        axisRow: () => isStacked(), keyRow: "ew", keyCol: "eh", min: 120, ratio: 0.5,
+      });
       applyTweaks();
       setOutputView(outputView);
 
