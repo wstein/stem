@@ -3,11 +3,12 @@
 title: Stem by the numbers
 subtitle: One engine, two backends, byte-for-byte the same output.
 
-# Donut — share of render time by phase (%)
+# Donut — render time per phase (microseconds). The transform derives each
+# phase's share of the total; the data stays raw measurements.
 phases:
-  - { label: Parse, value: 18 }
-  - { label: Compile, value: 34 }
-  - { label: Render, value: 48 }
+  - { label: Parse, value: 210 }
+  - { label: Compile, value: 395 }
+  - { label: Render, value: 560 }
 
 # Bars — transformer stdlib, by capability group (count)
 groups:

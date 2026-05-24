@@ -22,6 +22,7 @@
     "segments": phases#$i.{
       "label": label,
       "value": value,
+      "pct": $round(value / $tot * 100),
       "color": $palette[($i * 2) % 5],
       "cx": 70, "cy": 70, "r": $r, "sw": 22,
       "dasharray": $round(value / $tot * $C, 2) & " " & $round($C, 2),

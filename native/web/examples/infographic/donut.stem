@@ -5,6 +5,6 @@
 {{/each}}    </g>
   </svg>
   <ul class="ig-legend">
-{{#each donut.segments}}    <li><span class="sw" style="background:{{color}}"></span>{{label}} · {{value}}%</li>
+{{#each donut.segments}}    <li><span class="sw" style="background:{{color}}"></span>{{label}} · {{pct}}%</li>
 {{/each}}  </ul>
 </div>
