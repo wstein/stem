@@ -516,9 +516,11 @@
       .tw-segmented { display: flex; flex: 1 1 100%; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
       .tw-segmented button {
         flex: 1 1 0; border: 0; background: var(--bg); padding: 8px 10px;
+        display: flex; align-items: center; justify-content: center; gap: 6px;
         font-size: 12px; font-weight: 500; color: var(--fg-secondary); cursor: pointer;
         transition: background 120ms ease, color 120ms ease;
       }
+      .tw-segmented button svg { width: 14px; height: 14px; flex: 0 0 auto; }
       .tw-segmented button + button { border-left: 1px solid var(--border); }
       .tw-segmented button:hover { background: var(--bg-1); }
       .tw-segmented button.on { background: var(--accent-soft); color: var(--accent-2); font-weight: 600; }
@@ -567,7 +569,7 @@
         <div class="topbar-group">
           <button id="share-btn" class="btn" title="Copy a link that restores this template and data">Copy link</button>
           <button id="cmd-btn" class="btn" title="Open command palette">Commands <span class="kbd-inline">⌘⇧P</span></button>
-          <button id="tweaks-btn" class="btn" title="Open Tweaks panel (theme, layout)">Tweaks</button>
+          <button id="tweaks-btn" class="btn" title="Appearance settings (theme, layout)">Appearance</button>
         </div>
         <div class="spacer"></div>
       </header>
@@ -1632,8 +1634,12 @@
           { value: "system", label: "System", swatch: ["#ffffff","#9e8dc4","#1e1338"] },
         ],
         layout: [
-          { value: "split",   label: "Split",   hint: "Sources ← → Output" },
-          { value: "stacked", label: "Stacked", hint: "Sources ↑ Output ↓" },
+          // Split: Sources (template above data) beside a full-height Output.
+          { value: "split", label: "Split", hint: "Sources ← → Output",
+            icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="1.5" y="2.5" width="5.5" height="5" rx="1"/><rect x="1.5" y="8.5" width="5.5" height="5" rx="1"/><rect x="9" y="2.5" width="5.5" height="11" rx="1"/></svg>' },
+          // Stacked: Sources (template beside data) above a full-width Output.
+          { value: "stacked", label: "Stacked", hint: "Sources ↑ Output ↓",
+            icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2.5" y="1.5" width="5" height="5.5" rx="1"/><rect x="8.5" y="1.5" width="5" height="5.5" rx="1"/><rect x="2.5" y="9" width="11" height="5.5" rx="1"/></svg>' },
         ],
       };
 
@@ -1664,6 +1670,14 @@
         return n;
       }
 
+      // Parse an inline SVG string into an element (a <template> gives it the
+      // correct SVG namespace, unlike document.createElement).
+      function icon(svg) {
+        const tpl = document.createElement("template");
+        tpl.innerHTML = svg.trim();
+        return tpl.content.firstChild;
+      }
+
       function twSection(title, hint, children) {
         return mkEl("div", { class: "tw-section" }, [
           mkEl("div", { class: "tw-section-head" }, [
@@ -1677,10 +1691,10 @@
       let tweaksPanel = null;
 
       function buildTweaksPanel() {
-        const panel = mkEl("div", { class: "tw-panel", role: "dialog", "aria-label": "Tweaks" });
+        const panel = mkEl("div", { class: "tw-panel", role: "dialog", "aria-label": "Appearance" });
 
         const header = mkEl("div", { class: "tw-header" }, [
-          mkEl("div", { class: "tw-title" }, [mkEl("span", { class: "tw-pill" }), "Tweaks"]),
+          mkEl("div", { class: "tw-title" }, [mkEl("span", { class: "tw-pill" }), "Appearance"]),
           mkEl("button", { class: "tw-close", title: "Close", onclick: hideTweaks }, "×"),
         ]);
         panel.append(header);
@@ -1703,7 +1717,7 @@
               mkEl("button", {
                 class: tweaks.layout === o.value ? "on" : "",
                 title: o.hint, onclick: () => setTweak("layout", o.value),
-              }, o.label)
+              }, [icon(o.icon), mkEl("span", {}, o.label)])
             )
           )
         ]));
