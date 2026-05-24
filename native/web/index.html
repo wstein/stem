@@ -265,6 +265,10 @@
       .cm-hb-partial { color: var(--tok-str); font-weight: 500; }
       .cm-hb-raw     { color: var(--tok-num); }
       .cm-hb-expr    { color: var(--tok-key); }
+      /* YAML scalar keywords (true/false/null/…) and numbers — the YAML grammar
+         leaves these as plain content, so they are highlighted via a decorator. */
+      .cm-yaml-kw    { color: var(--tok-tag); font-weight: 600; }
+      .cm-yaml-num   { color: var(--tok-num); }
 
       /* ── Output pane ─────────────────────────────────────────────── */
       .output-body {
@@ -692,6 +696,26 @@
         { decorations: (v) => v.decorations }
       );
 
+        // YAML scalar-value highlighting. The YAML grammar tags bare scalars as
+        // plain content, so booleans/null keywords and numbers get no color. This
+        // decorator highlights them when they sit in value position — after `key:`
+        // or a `-` sequence dash and spanning the rest of the line (an optional
+        // trailing comment aside) — so keys and string values are left untouched.
+        const yamlKwMark = Decoration.mark({ class: "cm-yaml-kw" });
+        const yamlNumMark = Decoration.mark({ class: "cm-yaml-num" });
+        const yamlDecorator = new MatchDecorator({
+          regexp: /(?<=:[^\S\n]+|^[^\S\n]*-[^\S\n]+)(?:true|false|null|True|False|Null|TRUE|FALSE|NULL|~|[-+]?\d[\d_]*\.?\d*(?:[eE][+-]?\d+)?)(?=[^\S\n]*(?:#.*)?$)/gm,
+          decoration: (match) => (/^[-+.\d]/.test(match[0]) ? yamlNumMark : yamlKwMark)
+        });
+
+        const yamlHighlighting = ViewPlugin.fromClass(
+          class {
+            constructor(view) { this.decorations = yamlDecorator.createDeco(view); }
+            update(update) { this.decorations = yamlDecorator.updateDeco(update, this.decorations); }
+          },
+          { decorations: (v) => v.decorations }
+        );
+
       // Make CM fill its container (height driven by flex parent)
       const fillTheme = EditorView.theme({
         "&": { height: "100%" },
@@ -730,6 +754,7 @@
           extensions: [
             ...sharedExts,
             yaml(),
+            yamlHighlighting,
             EditorView.updateListener.of((u) => {
               if (u.docChanged) debouncedRun();
               if (u.selectionSet) updateStatusMeta();
