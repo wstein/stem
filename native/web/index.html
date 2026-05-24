@@ -6,8 +6,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%237c3aed'/%3E%3Ctext x='50%25' y='57%25' font-size='34' text-anchor='middle' fill='white' font-family='sans-serif'%3ES%3C/text%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='10' fill='%237c4dff'/%3E%3Cpath d='M24 13 C19 13 18 15 18 20 L18 27 C18 30 16 32 13 32 C16 32 18 34 18 37 L18 44 C18 49 19 51 24 51' stroke='%23b59bff' stroke-width='3.2' stroke-linecap='round' fill='none'/%3E%3Cpath d='M40 13 C45 13 46 15 46 20 L46 27 C46 30 48 32 51 32 C48 32 46 34 46 37 L46 44 C46 49 45 51 40 51' stroke='%23b59bff' stroke-width='3.2' stroke-linecap='round' fill='none'/%3E%3Cline x1='32' y1='18' x2='32' y2='54' stroke='%2310b981' stroke-width='3' stroke-linecap='round'/%3E%3Cpath d='M32 32 C28 30 25 30 22 31' stroke='%2310b981' stroke-width='2.4' stroke-linecap='round' fill='none'/%3E%3Cpath d='M32 42 C36 40 39 40 42 41' stroke='%2310b981' stroke-width='2.4' stroke-linecap='round' fill='none'/%3E%3Ccircle cx='32' cy='18' r='2.8' fill='%2310b981'/%3E%3C%2Fsvg%3E"
     />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
     <title>Stem Playground — IDE</title>
     <style>
       /* ── Design tokens ───────────────────────────────────────────── */
@@ -31,23 +34,26 @@
         --border: #e4e4e7;
         --border-strong: #d4d4d8;
 
-        --accent: #7c3aed;
-        --accent-2: #6d28d9;
-        --accent-soft: #ede9fe;
-        --accent-softer: #f5f3ff;
+        /* Brand palette — Stem Identity v0.1 */
+        --accent: #7c4dff;        /* Elixir Purple · violet-6 */
+        --accent-2: #5a2ea6;      /* violet-5 */
+        --accent-soft: #e7defc;   /* violet-8 */
+        --accent-softer: #f0ebfe;
+        --stem-green: #10b981;    /* Growth Green · green-5 */
+        --stem-mint: #3ee0a3;     /* mint · green-6 */
 
         --danger: #b91c1c;
         --danger-faint: #fee2e2;
-        --success: #16a34a;
+        --success: #10b981;       /* Growth Green */
 
-        --tok-tag: #7c3aed;
+        --tok-tag: #7c4dff;       /* violet-6 */
         --tok-cmt: #94a3b8;
         --tok-key: #1d4ed8;
         --tok-str: #047857;
         --tok-num: #b45309;
 
-        --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-        --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+        --font-ui: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+        --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
 
         --topbar-h: 44px;
         --statusbar-h: 26px;
@@ -59,6 +65,7 @@
       }
 
       * { box-sizing: border-box; }
+      [hidden] { display: none !important; }
 
       html, body {
         margin: 0; padding: 0; height: 100%; overflow: hidden;
@@ -92,10 +99,7 @@
         font-weight: 600; font-size: 13px; letter-spacing: -.01em; padding-right: 8px;
       }
       .brand .mark {
-        width: 18px; height: 18px; border-radius: 5px;
-        background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
-        display: grid; place-items: center;
-        color: #fff; font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+        width: 22px; height: 22px; flex: 0 0 22px; display: block;
       }
       .topbar .divider { width: 1px; height: 18px; background: var(--border); }
       .topbar-group { display: flex; align-items: center; gap: 6px; }
@@ -225,26 +229,10 @@
       }
       .tab-add:hover { color: var(--accent); background: var(--bg-3); }
 
-      /* ── Rename bar ──────────────────────────────────────────────── */
-      .rename-bar[hidden] { display: none; }
-      .rename-bar {
-        flex: 0 0 32px; height: 32px;
-        display: flex; align-items: center; gap: 8px; padding: 0 12px;
-        border-bottom: 1px solid var(--border); background: var(--bg-1);
-        font-size: 12px; color: var(--fg-muted);
-      }
-      .rename-bar input {
-        width: 160px; height: 22px; padding: 0 6px;
-        border: 1px solid var(--border-strong); border-radius: 4px;
-        background: var(--bg); font: 12px/1 var(--font-mono); color: var(--fg);
-      }
-      .rename-bar input:focus {
-        outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
-      }
-      .rename-bar code {
-        font: 11px/1 var(--font-mono); background: var(--bg-2);
-        border: 1px solid var(--border); padding: 3px 6px;
-        border-radius: 4px; color: var(--accent-2);
+      /* ── Inline tab rename (active partial tab) ──────────────────── */
+      .tab .tab-edit {
+        border: 0; background: transparent; color: inherit;
+        font: inherit; padding: 0; margin: 0; outline: none; min-width: 3ch;
       }
 
       /* ── Editor panes (CodeMirror) ───────────────────────────────── */
@@ -353,7 +341,7 @@
       .workspace.focus-output .pane:not(.pane-output),
       .workspace.focus-output .splitter { display: none; }
       .workspace.focus-sources .pane-sources,
-      .workspace.focus-output .pane-output { flex: 1 1 100%; }
+      .workspace.focus-output .pane-output { flex: 1 1 100% !important; }
 
       .focus-toggle {
         width: 24px; height: 24px; border-radius: 4px;
@@ -366,26 +354,28 @@
 
       /* ── Themes ──────────────────────────────────────────────────── */
       body[data-theme="dim"] {
-        --bg: #efeae3; --bg-1: #f4f0e8; --bg-2: #e8e1d4; --bg-3: #ddd5c4;
-        --bg-toolbar: #f0ebe2; --bg-statusbar: #e8e3d8;
-        --bg-tab-active: #faf6ee; --bg-pane: #f8f3ea; --bg-gutter: #efe9dc;
+        --bg: #f4f1ea; --bg-1: #ebe6da; --bg-2: #e0d8c8; --bg-3: #d4caB6;
+        --bg-toolbar: #f4f1ea; --bg-statusbar: #ebe6da;
+        --bg-tab-active: #faf6ee; --bg-pane: #f8f4ec; --bg-gutter: #ede8dd;
         --fg: #2b2620; --fg-secondary: #524a3e; --fg-muted: #7c715f; --fg-faint: #a89c87;
-        --border: #d8d0bf; --border-strong: #c4ba9f;
+        --border: #cfc7b4; --border-strong: #bdb49e;
       }
       body[data-theme="dark"] {
-        --bg: #18181b; --bg-1: #1c1c1f; --bg-2: #27272a; --bg-3: #3f3f46;
-        --bg-toolbar: #1c1c1f; --bg-statusbar: #1a1a1d;
-        --bg-tab-active: #27272a; --bg-pane: #1f1f23; --bg-gutter: #1a1a1d;
-        --fg: #f4f4f5; --fg-secondary: #d4d4d8; --fg-muted: #a1a1aa; --fg-faint: #71717a;
-        --border: #2f2f33; --border-strong: #3f3f46;
-        --accent-soft: #3b1d75; --accent-softer: #1e1135;
-        --tok-tag: #c4b5fd; --tok-cmt: #71717a; --tok-key: #93c5fd;
-        --tok-str: #6ee7b7; --tok-num: #fbbf24;
+        --bg: #0c0612; --bg-1: #160a25; --bg-2: #231040; --bg-3: #3b1b6b;
+        --bg-toolbar: #160a25; --bg-statusbar: #0c0612;
+        --bg-tab-active: #231040; --bg-pane: #1a0d30; --bg-gutter: #110820;
+        --fg: #e7defc; --fg-secondary: #b59bff; --fg-muted: #7a8694; --fg-faint: #475260;
+        --border: #2a1855; --border-strong: #3b1b6b;
+        --accent: #7c4dff; --accent-2: #b59bff;
+        --accent-soft: #3b1b6b; --accent-softer: #231040;
+        --tok-tag: #b59bff; --tok-cmt: #475260; --tok-key: #93c5fd;
+        --tok-str: #3ee0a3; --tok-num: #fbbf24;
+        --success: #3ee0a3;
         --danger-faint: #3b0a0a;
       }
       body[data-theme="dark"] { background-color: var(--bg) !important; }
       body[data-theme="dim"]  { background-color: var(--bg-1) !important; }
-      body[data-theme="dark"] iframe { background: #0f0f12; }
+      body[data-theme="dark"] iframe { background: #0a0612; }
 
       /* ── Moods ───────────────────────────────────────────────────── */
       body[data-mood="terminal"] {
@@ -395,9 +385,9 @@
         --tok-tag: #10b981; --tok-key: #34d399;
         --topbar-h: 38px; --statusbar-h: 22px; --pane-header-h: 32px; --tabs-h: 32px; --radius: 3px;
       }
-      body[data-mood="terminal"] .brand .mark {
-        background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
-      }
+      body[data-mood="terminal"] .brand .mark { color: #10b981; }
+      body[data-mood="terminal"] .brand .mark .stem-line,
+      body[data-mood="terminal"] .brand .mark .stem-dot { stroke: #10b981; fill: #10b981; }
       body[data-mood="notebook"] {
         --accent: #d97706; --accent-2: #b45309;
         --accent-soft: rgba(217,119,6,.16); --accent-softer: rgba(217,119,6,.06);
@@ -449,7 +439,7 @@
       }
       .tw-pill {
         width: 8px; height: 8px; border-radius: 2px;
-        background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
+        background: linear-gradient(135deg, #7c4dff 0%, #10b981 100%);
       }
       .tw-close {
         margin-left: auto; width: 22px; height: 22px; border: 0;
@@ -516,7 +506,16 @@
       <!-- ── Top bar ──────────────────────────────────────────────── -->
       <header class="topbar">
         <div class="brand">
-          <div class="mark" aria-hidden="true">S</div>
+          <svg class="mark" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+            <path d="M18 10 C14 10 13 12 13 16 L13 21 C13 23 12 24 10 24 C12 24 13 25 13 27 L13 32 C13 36 14 38 18 38"
+                  stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M30 10 C34 10 35 12 35 16 L35 21 C35 23 36 24 38 24 C36 24 35 25 35 27 L35 32 C35 36 34 38 30 38"
+                  stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+            <path class="stem-line" d="M24 14 L24 40" stroke="var(--stem-green)" stroke-width="2.4" stroke-linecap="round"/>
+            <path class="stem-line" d="M24 24 C21 22 19 22 17 23" stroke="var(--stem-green)" stroke-width="2" stroke-linecap="round"/>
+            <path class="stem-line" d="M24 30 C27 28 29 28 31 29" stroke="var(--stem-green)" stroke-width="2" stroke-linecap="round"/>
+            <circle class="stem-dot" cx="24" cy="14" r="2" fill="var(--stem-green)"/>
+          </svg>
           <span>Stem Playground</span>
         </div>
         <div class="divider"></div>
@@ -553,13 +552,6 @@
           <div class="tabs-wrap">
             <div class="tabs" id="tmpl-tabs"></div>
             <div class="tabs-pinned" id="tabs-pinned"></div>
-          </div>
-
-          <div id="rename-bar" class="rename-bar" hidden>
-            <label for="partial-name">Partial name</label>
-            <input id="partial-name" spellcheck="false" />
-            <span>referenced as</span>
-            <code id="partial-ref"></code>
           </div>
 
           <div class="editor-pane is-active" id="template-editor-container"></div>
@@ -759,7 +751,29 @@
           t.className = "tab" + (isActive ? " active" : "") + (i === 0 ? " is-main" : "");
           t.title = i === 0 ? "entry template" : `partial · {{> ${tab.name}}}`;
           t.addEventListener("click", () => selectTemplateTab(i));
-          t.append(document.createTextNode(i === 0 ? "main" : (tab.name || "(unnamed)")));
+
+          if (i !== 0 && isActive) {
+            // Active partial: rename it inline, right on the tab.
+            const input = document.createElement("input");
+            input.className = "tab-edit";
+            input.value = tab.name;
+            input.spellcheck = false;
+            input.size = Math.max(tab.name.length, 4);
+            input.setAttribute("aria-label", "partial name");
+            input.title = `referenced as {{> ${tab.name}}}`;
+            input.addEventListener("click", (e) => e.stopPropagation());
+            input.addEventListener("input", () => {
+              tab.name = input.value;
+              input.size = Math.max(input.value.length, 4);
+              input.title = `referenced as {{> ${input.value}}}`;
+              byId("sources-sub").textContent = `partial · referenced as {{> ${input.value}}}`;
+              debouncedRun();
+            });
+            t.append(input);
+          } else {
+            t.append(document.createTextNode(i === 0 ? "main" : (tab.name || "(unnamed)")));
+          }
+
           if (i !== 0) {
             const x = document.createElement("span");
             x.className = "close"; x.title = "remove partial"; x.textContent = "×";
@@ -806,24 +820,17 @@
       function syncEditor() {
         const tmplPane = byId("template-editor-container");
         const dataPane = byId("data-editor-container");
-        const renameBar = byId("rename-bar");
 
         if (activeView === "tmpl") {
           setEditorText(templateView, activeTab().source);
           tmplPane.classList.add("is-active");
           dataPane.classList.remove("is-active");
-          renameBar.hidden = activeTabIdx === 0;
-          if (activeTabIdx !== 0) {
-            byId("partial-name").value = activeTab().name;
-            byId("partial-ref").textContent = `{{> ${activeTab().name}}}`;
-          }
           byId("sources-sub").textContent = activeTabIdx === 0
             ? "entry template · compiled in-browser"
             : `partial · referenced as {{> ${activeTab().name}}}`;
         } else {
           dataPane.classList.add("is-active");
           tmplPane.classList.remove("is-active");
-          renameBar.hidden = true;
           byId("sources-sub").textContent = "live YAML data used for the render preview";
         }
 
@@ -1182,12 +1189,12 @@
         theme: [
           { value: "light", label: "Light", swatch: ["#ffffff","#f4f4f5","#18181b"] },
           { value: "dim",   label: "Dim",   swatch: ["#f4f1ec","#e8e3da","#2b2620"] },
-          { value: "dark",  label: "Dark",  swatch: ["#18181b","#27272a","#f4f4f5"] },
+          { value: "dark",  label: "Dark",  swatch: ["#0c0612","#231040","#e7defc"] },
         ],
         mood: [
-          { value: "workshop", label: "Workshop", desc: "Clean IDE · violet · sans + mono",       accent: "#7c3aed" },
-          { value: "terminal", label: "Terminal", desc: "Monospaced everything · phosphor green",  accent: "#10b981" },
-          { value: "notebook", label: "Notebook", desc: "Serif headings · warm paper · amber",     accent: "#d97706" },
+          { value: "workshop", label: "Workshop", desc: "Elixir Purple · IBM Plex · Growth Green", accent: "#7c4dff" },
+          { value: "terminal", label: "Terminal", desc: "Monospaced everything · phosphor green",   accent: "#10b981" },
+          { value: "notebook", label: "Notebook", desc: "Serif headings · warm paper · amber",      accent: "#d97706" },
         ],
         layout: [
           { value: "split",   label: "Split",   hint: "Sources ← → Output" },
@@ -1343,13 +1350,6 @@
       for (const b of document.querySelectorAll(".focus-toggle")) {
         b.addEventListener("click", () => toggleFocus(b.dataset.pane));
       }
-
-      byId("partial-name").addEventListener("input", (e) => {
-        if (activeView !== "tmpl" || activeTabIdx === 0) return;
-        activeTab().name = e.target.value;
-        byId("partial-ref").textContent = `{{> ${activeTab().name}}}`;
-        renderTabs(); debouncedRun();
-      });
 
       window.addEventListener("keydown", (e) => {
         const mod = e.metaKey || e.ctrlKey;
