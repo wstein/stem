@@ -51,6 +51,11 @@ Playground workflow highlights:
   on narrow screens.
 - Inline compile diagnostics in the template editor gutter, plus a status lane
   with line/column locations.
+- A capability-group selector (Strings / Collections / Predicates checkboxes;
+  Minimum is always on) in the output header. Unchecking a group makes the
+  engine refuse a template that uses one of its transformers, surfacing the
+  group-naming message in the status bar — the secure-by-default model, made
+  interactive. The selection persists in the shareable URL state.
 - Output as "Plain Text" (the output as text, mapped to its source), "HTML
   Preview" (output HTML in a locked-down iframe), or "Markdown Preview" (the
   output interpreted as Markdown in the same iframe). In the Plain Text view the

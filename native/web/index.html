@@ -642,6 +642,18 @@
                 <option value="json">json</option>
                 <option value="none">none</option>
               </select>
+              <!-- Capability groups the engine loads for rendering. Minimum is
+                   always on; the rest are opt-in. A template that uses a
+                   transformer from an unchecked group is refused, surfacing the
+                   engine's group-naming message in the status bar — the
+                   secure-by-default model, made interactive. -->
+              <span class="field-label" style="font-size:11px" title="Transformer capability groups (Minimum is always on)">Groups</span>
+              <span id="caps-select" role="group" aria-label="Capability groups" style="display:inline-flex;gap:8px;align-items:center;font-size:11px">
+                <label title="Always on"><input type="checkbox" checked disabled> minimum</label>
+                <label><input type="checkbox" class="cap" value="strings" checked> strings</label>
+                <label><input type="checkbox" class="cap" value="collections" checked> collections</label>
+                <label><input type="checkbox" class="cap" value="predicates" checked> predicates</label>
+              </span>
             </div>
             <div class="pane-actions">
               <button class="focus-toggle" data-pane="output" title="Focus this pane (Esc to exit)">
@@ -726,6 +738,9 @@
       let activeView   = "tmpl";      // "tmpl" | "data"
       let outputView   = "rendered";  // "rendered" | "source"
       let escapeMode   = "";
+      // Opt-in capability groups loaded for rendering (Minimum is always on).
+      const DEFAULT_GROUPS = ["strings", "collections", "predicates"];
+      let groups       = [...DEFAULT_GROUPS];
       let focusMode    = null;
       let templateDiagnostics = [];
       let yamlSrc      = "";
@@ -1310,7 +1325,7 @@
 
         try {
           const program = applyEscape(compiled.program, escapeMode);
-          const { output, segments } = renderer.render(program, data, { map: true });
+          const { output, segments } = renderer.render(program, data, { map: true, transformers: groups });
           // The engine reports a feature it can't render by returning a
           // `stem_native error: …` string rather than throwing — surface that in
           // the status bar instead of presenting it as if it were the output.
@@ -1696,6 +1711,8 @@
         showDataTab();
         escapeMode = "";
         byId("escape-select").value = "";
+        groups = [...DEFAULT_GROUPS]; // examples assume the full trusted set
+        syncCapsUI();
         byId("example-select").value = String(idx);
         loadedExampleIdx = idx;
         outLangChoice = "Auto"; // each example highlights in its own output language
@@ -1719,9 +1736,17 @@
           d: yamlSrc,
           t: transformSrc,
           e: escapeMode, v: outputView,
+          g: groups, // loaded capability groups
           av: activeView, ai: activeTabIdx,
           x: loadedExampleIdx, // which example (or -1 for an edited "custom" state)
         };
+      }
+
+      // Reflect the `groups` state into the capability checkboxes.
+      function syncCapsUI() {
+        document.querySelectorAll("#caps-select .cap").forEach((box) => {
+          box.checked = groups.includes(box.value);
+        });
       }
 
       function saveHash() {
@@ -1753,6 +1778,8 @@
           showDataTab();
           escapeMode = s.e ?? "";
           byId("escape-select").value = escapeMode;
+          groups = Array.isArray(s.g) ? s.g : [...DEFAULT_GROUPS];
+          syncCapsUI();
           loadedExampleIdx = -1;
           byId("example-select").value = "-1";
           setOutputView(validView(s.v));
@@ -2035,6 +2062,15 @@
 
       byId("escape-select").addEventListener("change", (e) => {
         escapeMode = e.target.value; run(); updateStatusMeta();
+      });
+
+      // Toggling a capability group rebuilds the loaded set and re-renders;
+      // markCustom() so the change is reflected in the dropdown and URL state.
+      byId("caps-select").addEventListener("change", () => {
+        groups = [...document.querySelectorAll("#caps-select .cap")]
+          .filter((box) => box.checked)
+          .map((box) => box.value);
+        markCustom(); run();
       });
 
       byId("view-select").addEventListener("change", (e) => { setOutputView(e.target.value); run(); });
