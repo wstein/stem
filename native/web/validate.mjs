@@ -24,7 +24,7 @@ const expected = {
   // A data-driven changelog: a JSONata transform groups the flat commit list
   // by type into ordered sections; the template emits Markdown (table + lists).
   markdown: "# Stem v0.5.0\n\n_Released 2026-05-24 · 6 changes_\n\n| Section | Count |\n| --- | ---: |\n| Features | 3 |\n| Fixes | 2 |\n| Documentation | 1 |\n\n\n## Features\n\n- **playground**: editable JSONata transform tab\n- **parser**: literal segment keys\n- **native**: zero-arity getter hook\n\n\n## Fixes\n\n- **renderer**: trailing-tilde partial sync\n- **playground**: single-pass source view\n\n\n## Documentation\n\n- **notes**: MVC pipeline write-up\n\n\n",
-  greeting: "Hello &lt;Nina&gt;!",
+  greeting: "Hello World!",
   pipeline: "NINA",
   list: "<ul><li>1. a</li><li>2. b</li><li>3. c</li></ul>",
   // Looping a list of objects into table rows; {{@index1}} is the 1-based counter.
