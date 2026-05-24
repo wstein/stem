@@ -185,6 +185,12 @@ node native/web/playground_utils.test.mjs
 python3 -m http.server   # then open http://localhost:8000/native/web/
 ```
 
+When deploying the page, the host must serve `.mjs` files with a JavaScript MIME
+type (`text/javascript`) — browsers refuse to evaluate ES modules sent as
+`application/octet-stream`. The bundled `python3 -m http.server` already does
+this; some static hosts need an explicit `.mjs -> text/javascript` mapping (e.g.
+a `Content-Type` header rule or `_headers`/`netlify.toml` entry).
+
 The host writes the request JSON into wasm memory via `stem_alloc`, calls
 `stem_render(ptr, len)` (returns a packed `out_ptr<<32 | out_len`), reads the
 UTF-8 output, and frees both buffers with `stem_dealloc`. See `web/stem.mjs`.
