@@ -59,7 +59,7 @@
         --topbar-h: 44px;
         --statusbar-h: 26px;
         --pane-header-h: 38px;
-        --tabs-h: 36px;
+        --tabs-h: 30px;
         --radius: 6px;
 
         --shadow-pop: 0 12px 32px -8px rgba(24,24,27,.18), 0 0 0 1px rgba(24,24,27,.06);
@@ -1200,14 +1200,22 @@
 
       (() => {
         const pre = byId("output-source");
+        // Debounce hover so sweeping the pointer across many runs only shows the
+        // tooltip + link-highlight for the run the pointer settles on. The timer
+        // is cancelled the moment the pointer leaves a run, so leaving never
+        // shows a stale tooltip.
+        let hoverTimer = null;
+        const cancelHover = () => { if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; } };
         pre.addEventListener("mouseover", (e) => {
           const seg = e.target.closest?.(".seg");
-          if (seg) { showSegTip(seg); linkHover(seg); }
+          if (!seg) return;
+          cancelHover();
+          hoverTimer = setTimeout(() => { hoverTimer = null; showSegTip(seg); linkHover(seg); }, 55);
         });
         pre.addEventListener("mouseout", (e) => {
-          if (e.target.closest?.(".seg")) { hideSegTip(); clearLink(); }
+          if (e.target.closest?.(".seg")) { cancelHover(); hideSegTip(); clearLink(); }
         });
-        pre.addEventListener("scroll", () => { hideSegTip(); clearLink(); });
+        pre.addEventListener("scroll", () => { cancelHover(); hideSegTip(); clearLink(); });
         pre.addEventListener("click", (e) => {
           const seg = e.target.closest?.(".seg");
           if (!seg) return;
