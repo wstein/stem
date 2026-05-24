@@ -3,9 +3,12 @@
 (
   $palette := ["#c4b5fd", "#a98bff", "#8b6dff", "#7c4dff", "#5a2ea6"];
 
-  /* Bars: width scaled to the largest value. */
+  /* Bars: largest first, ties broken alphabetically (^ is JSONata's order-by;
+     > = descending). Sorting lives here in the Controller, so the bar order
+     tracks the data instead of however the rows happen to be written. Width
+     scales to the max value; color follows the sorted rank. */
   $bmax := $max(groups.value);
-  $bars := groups#$i.{
+  $bars := (groups^(>value, label))#$i.{
     "label": label,
     "value": value,
     "w": $round(value / $bmax * 240, 1),
