@@ -655,6 +655,7 @@
                 <button data-view="source">Plain Text</button>
                 <button data-view="rendered" class="on">HTML Preview</button>
                 <button data-view="markdown">Markdown Preview</button>
+                <button data-view="data" title="The data the template renders — after the JSONata transform — as YAML">View Model</button>
               </div>
               <span class="field-label" style="font-size:11px">Escape</span>
               <select id="escape-select" class="select" aria-label="Escape mode">
@@ -724,7 +725,7 @@
       import { lintGutter, linter, setDiagnosticsEffect } from "https://esm.sh/@codemirror/lint@6.8.5?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
       import { yaml } from "https://esm.sh/@codemirror/lang-yaml@6.1.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
       import { html } from "https://esm.sh/@codemirror/lang-html@6.4.11?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
-      import { load as loadYaml } from "./vendor/js-yaml.mjs";
+      import { load as loadYaml, dump as dumpYaml } from "./vendor/js-yaml.mjs";
       import { marked } from "./vendor/marked.mjs";
       import jsonata from "./vendor/jsonata.mjs";
 
@@ -1072,12 +1073,39 @@
       }
 
       let lastOutput = "";
+      let lastSegments = [];
+      let lastData = null; // the post-transform data the template rendered (View Model view)
 
       function setOutput(str, segments = []) {
         lastOutput = str;
-        renderSourceView(str, segments);
+        lastSegments = segments;
+        paintTextView();
         renderPreview();
-        qs(".output-body").dataset.empty = str ? "false" : "true";
+        const hasText = outputView === "data" ? lastData != null : !!str;
+        qs(".output-body").dataset.empty = hasText ? "false" : "true";
+      }
+
+      // Paint whichever text view is active in #output-text: the "View Model"
+      // view shows the rendered data as YAML; the "Plain Text" view shows the
+      // output with click-to-source provenance.
+      function paintTextView() {
+        if (outputView === "data") renderDataView(lastData);
+        else renderSourceView(lastOutput, lastSegments);
+      }
+
+      // Serialize the view-model (data after the transform) as YAML. Plain text,
+      // no provenance spans — this view is about the engine's input, not output.
+      function renderDataView(data) {
+        const pre = byId("output-source");
+        let text = "";
+        if (data != null) {
+          try { text = dumpYaml(data, { indent: 2, lineWidth: -1, noRefs: true }); }
+          catch { text = String(data); }
+        }
+        pre.textContent = text;
+        const lines = text ? text.split("\n").length : 0;
+        byId("output-gutter").textContent =
+          Array.from({ length: lines }, (_, i) => i + 1).join("\n");
       }
 
       // Fill the iframe for the current iframe view: raw output HTML for
@@ -1159,6 +1187,7 @@
         // run() is synchronous, so once it returns the output and its segments
         // match the current sources again — clear the stale-offset guard.
         renderPending = false;
+        lastData = null; // reset; reassigned once data is parsed + transformed below
         const dataSource = yamlSrc; // the YAML tab's source (editor may show the transform)
         const mainSource = tabs[0].source;
         // Compile with span provenance so the rendered output can be mapped back
@@ -1196,10 +1225,12 @@
           try {
             data = jsonata(transformSrc).evaluate(data);
           } catch (err) {
+            lastData = null;
             setError("transform error: " + (err.message || err.code || "invalid JSONata"));
             setOutput(""); saveHash(); return;
           }
         }
+        lastData = data; // expose the view-model to the "View Model" output view
 
         try {
           const program = applyEscape(compiled.program, escapeMode);
@@ -1272,17 +1303,21 @@
       // ── Output view ───────────────────────────────────────────────────
       // Valid output views; anything else (e.g. an old share link) falls back to
       // the iframe Preview.
-      const validView = (v) => (["source", "rendered", "markdown"].includes(v) ? v : "rendered");
+      const validView = (v) => (["source", "rendered", "markdown", "data"].includes(v) ? v : "rendered");
 
       function setOutputView(view) {
         outputView = view;
-        const isText = view === "source"; // "rendered" and "markdown" use the iframe
+        // "source" (provenance) and "data" (view-model YAML) use the text pane;
+        // "rendered" and "markdown" use the iframe.
+        const isText = view === "source" || view === "data";
         byId("output-text").hidden = !isText;
         byId("output-preview").hidden = isText;
         hideSegTip(); clearLink();
         for (const b of document.querySelectorAll(".segmented button"))
           b.classList.toggle("on", b.dataset.view === view);
-        if (!isText) renderPreview(); // refresh the iframe for the selected view
+        if (isText) paintTextView(); else renderPreview();
+        qs(".output-body").dataset.empty =
+          (view === "data" ? lastData != null : !!lastOutput) ? "false" : "true";
         caretLinkKey = null; syncOutputToCaret();
       }
 
@@ -1665,6 +1700,7 @@
           { label: "View · Plain Text",       kind: "view", run: () => { setOutputView("source"); run(); } },
           { label: "View · HTML Preview",     kind: "view", run: () => { setOutputView("rendered"); run(); } },
           { label: "View · Markdown Preview", kind: "view", run: () => { setOutputView("markdown"); run(); } },
+          { label: "View · View Model",       kind: "view", run: () => { setOutputView("data"); run(); } },
           { label: "Reset layout", kind: "view",
             run: () => { splits = { w0: null, h0: null, ew: null, eh: null }; applySplits(); saveSplits(); setFocus(null); } },
           { label: "Copy share link", kind: "share", run: copyShareLink },
