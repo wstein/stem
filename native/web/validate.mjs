@@ -26,7 +26,7 @@ const expected = {
   markdown: "# Stem v0.5.0\n\n_Released 2026-05-24 · 6 changes_\n\n| Section | Count |\n| --- | ---: |\n| Features | 3 |\n| Fixes | 2 |\n| Documentation | 1 |\n\n\n## Features\n\n- **playground**: editable JSONata transform tab\n- **parser**: literal segment keys\n- **native**: zero-arity getter hook\n\n\n## Fixes\n\n- **renderer**: trailing-tilde partial sync\n- **playground**: single-pass source view\n\n\n## Documentation\n\n- **notes**: MVC pipeline write-up\n\n\n",
   greeting: "Hello World!",
   pipeline: "NINA",
-  list: "<ul><li>1. a</li><li>2. b</li><li>3. c</li></ul>",
+  list: "<ul><li>1. first</li><li>2. second</li><li>3. third</li></ul>",
   // Looping a list of objects into table rows; {{@index1}} is the 1-based counter.
   table: "<table>\n  <thead>\n    <tr><th>#</th><th>Language</th><th>Paradigm</th><th>First release</th></tr>\n  </thead>\n  <tbody>\n    <tr><td>1</td><td>Elixir</td><td>Functional</td><td>2011</td></tr>\n    <tr><td>2</td><td>Rust</td><td>Systems</td><td>2010</td></tr>\n    <tr><td>3</td><td>Python</td><td>Scripting</td><td>1991</td></tr>\n  </tbody>\n</table>\n",
   // Interpolation + a loop straight into Markdown (no transform).
