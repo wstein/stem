@@ -303,42 +303,26 @@
         background: var(--bg-pane); overflow: hidden;
       }
       .output-body iframe { width: 100%; height: 100%; border: 0; background: var(--bg); display: block; }
-      .src-view {
-        position: absolute; inset: 0; display: flex; overflow: auto;
-        background: var(--bg-1);
-      }
-      .src-view > pre { margin: 0; color: var(--fg); font: 12.5px/1.55 var(--font-mono); }
-      #output-source {
-        flex: 1 1 auto; min-width: 0; padding: 12px 14px;
-        white-space: pre-wrap; word-break: break-word;
-      }
-      .src-gutter {
-        flex: 0 0 auto; padding: 12px 8px 12px 12px;
-        position: sticky; left: 0; z-index: 1;
-        background: var(--bg-gutter); color: var(--fg-faint);
-        text-align: right; white-space: pre; user-select: none;
-        border-right: 1px solid var(--border);
-      }
-      /* Without line numbers: hide the gutter and let the output wrap. With them:
-         show the gutter and stop wrapping so its rows align 1:1 with the lines. */
-      body:not(.show-line-numbers) .src-gutter { display: none; }
-      body.show-line-numbers #output-source { white-space: pre; word-break: normal; }
+      /* The Plain Text + View Model outputs share one read-only CodeMirror editor
+         (syntax-highlighted, language auto-switched). It overlays the iframe area. */
+      .src-view { position: absolute; inset: 0; background: var(--bg-1); }
+      #output-text .cm-editor { height: 100%; }
       .output-body[data-empty="true"]::after {
         content: "no output"; position: absolute; inset: 0;
         display: grid; place-items: center;
         color: var(--fg-faint); font-size: 12px; pointer-events: none;
       }
 
-      /* Source view: each run of output is a segment tracing back to the file
-         (and, for expressions, the tag) that produced it. Hover to highlight +
-         tooltip; click to jump to the source. */
-      .output-body pre .seg { border-radius: 2px; cursor: pointer; }
-      .output-body pre .seg.seg-expr {
+      /* Plain Text view: each run of output is a segment (a CM mark decoration)
+         tracing back to the file (and, for expressions, the tag) that produced it.
+         Hover to highlight + tooltip; click (or Enter on the cursor) to jump. */
+      #output-text .seg { border-radius: 2px; cursor: pointer; }
+      #output-text .seg-expr {
         font-weight: 700; color: var(--tok-key);
         box-shadow: inset 0 -1px 0 var(--accent-soft);
       }
-      .output-body pre .seg:hover,
-      .output-body pre .seg.seg-linked {
+      #output-text .seg:hover,
+      #output-text .cm-out-linked {
         background: var(--accent-soft);
         box-shadow: inset 0 0 0 1px var(--accent);
       }
@@ -677,10 +661,7 @@
 
           <div class="output-body" data-empty="true">
             <iframe id="output-preview" sandbox="allow-same-origin" title="Rendered output"></iframe>
-            <div class="src-view" id="output-text" hidden>
-              <pre class="src-gutter" id="output-gutter" aria-hidden="true"></pre>
-              <pre id="output-source"></pre>
-            </div>
+            <div class="src-view" id="output-text" hidden></div>
           </div>
           <div id="seg-tip" class="seg-tip" role="tooltip" hidden></div>
         </section>
@@ -725,6 +706,7 @@
       import { lintGutter, linter, setDiagnosticsEffect } from "https://esm.sh/@codemirror/lint@6.8.5?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
       import { yaml } from "https://esm.sh/@codemirror/lang-yaml@6.1.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
       import { html } from "https://esm.sh/@codemirror/lang-html@6.4.11?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
+      import { markdown } from "https://esm.sh/@codemirror/lang-markdown@6.3.4?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3,@codemirror/lang-html@6.4.11";
       import { load as loadYaml, dump as dumpYaml } from "./vendor/js-yaml.mjs";
       import { marked } from "./vendor/marked.mjs";
       import jsonata from "./vendor/jsonata.mjs";
@@ -908,6 +890,54 @@
         })
       });
 
+      // ── Output editor (read-only CodeMirror) ──────────────────────────
+      // The Plain Text + View Model views share one read-only editor: syntax
+      // highlighting (language auto-switched per view/example) plus two decoration
+      // layers — provenance (.seg marks tracing output->source) and the caret link
+      // (.cm-out-linked, the run(s) the template caret produced).
+      const outLangComp = new Compartment();
+      const setProvenance = StateEffect.define();
+      const provenanceField = StateField.define({
+        create() { return Decoration.none; },
+        update(deco, tr) {
+          deco = deco.map(tr.changes);
+          for (const e of tr.effects) if (e.is(setProvenance)) deco = e.value;
+          return deco;
+        },
+        provide: (f) => EditorView.decorations.from(f),
+      });
+      const outLinkMark = Decoration.mark({ class: "cm-out-linked" });
+      const setOutLink = StateEffect.define();
+      const outLinkField = StateField.define({
+        create() { return Decoration.none; },
+        update(deco, tr) {
+          deco = deco.map(tr.changes);
+          for (const e of tr.effects) if (e.is(setOutLink)) deco = e.value;
+          return deco;
+        },
+        provide: (f) => EditorView.decorations.from(f),
+      });
+
+      const outputEditor = new EditorView({
+        parent: byId("output-text"),
+        state: EditorState.create({
+          doc: "",
+          extensions: [
+            lineNumberComp.of(lineNumbers()),
+            syntaxHighlighting(themeHighlight),
+            outLangComp.of([]),
+            provenanceField,
+            outLinkField,
+            fillTheme,
+            EditorState.readOnly.of(true),
+            EditorView.editable.of(false),
+            // Enter jumps from the cursor's run to its source (keyboard parity with
+            // click); arrows/Home/End navigate via the default keymap.
+            keymap.of([{ key: "Enter", run: jumpToSourceAtCursor }, ...defaultKeymap]),
+          ],
+        }),
+      });
+
       // Marks editor doc swaps we make ourselves (tab switch, example load, hash
       // restore) so the update listeners can tell them apart from user typing and
       // skip the recompile those programmatic swaps don't warrant.
@@ -1078,6 +1108,7 @@
       let lastOutput = "";
       let lastSegments = [];
       let lastData = null; // the post-transform data the template rendered (View Model view)
+      let lastSegViews = []; // [{from,to,file,kind,start,end}] — segment char ranges in the output editor
 
       function setOutput(str, segments = []) {
         lastOutput = str;
@@ -1088,27 +1119,86 @@
         qs(".output-body").dataset.empty = hasText ? "false" : "true";
       }
 
-      // Paint whichever text view is active in #output-text: the "View Model"
-      // view shows the rendered data as YAML; the "Plain Text" view shows the
-      // output with click-to-source provenance.
+      // Paint the read-only output editor for the active text view. The "View
+      // Model" view shows the view-model as highlighted YAML (no provenance); the
+      // "Plain Text" view shows the output, highlighted in the example's output
+      // language, with the source-map provenance as decorations.
       function paintTextView() {
-        if (outputView === "data") renderDataView(lastData);
-        else renderSourceView(lastOutput, lastSegments);
+        if (outputView === "data") {
+          let text = "";
+          if (lastData != null) {
+            try { text = dumpYaml(lastData, { indent: 2, lineWidth: -1, noRefs: true }); }
+            catch { text = String(lastData); }
+          }
+          lastSegViews = [];
+          setOutputDoc(text, [yaml(), yamlHighlighting], Decoration.none);
+        } else {
+          const { segViews, deco } = buildProvenance(lastOutput, lastSegments);
+          lastSegViews = segViews;
+          setOutputDoc(lastOutput, outLanguageFor(), deco);
+        }
       }
 
-      // Serialize the view-model (data after the transform) as YAML. Plain text,
-      // no provenance spans — this view is about the engine's input, not output.
-      function renderDataView(data) {
-        const pre = byId("output-source");
-        let text = "";
-        if (data != null) {
-          try { text = dumpYaml(data, { indent: 2, lineWidth: -1, noRefs: true }); }
-          catch { text = String(data); }
+      // Language for the Plain Text view = the loaded example's output format
+      // (rendered->HTML, markdown->Markdown, plain source->none). Custom/edited
+      // state has no example, so default to HTML (the common template output).
+      function outLanguageFor() {
+        const ex = examples[loadedExampleIdx];
+        const kind = ex ? ex.view : "rendered";
+        if (kind === "markdown") return [markdown()];
+        if (kind === "source") return [];
+        return [html()];
+      }
+
+      // Swap the output editor's document, language, and provenance in one
+      // programmatic transaction (and clear any stale caret-link highlight).
+      function setOutputDoc(text, langExts, provenanceDeco) {
+        const cur = outputEditor.state.doc.toString();
+        outputEditor.dispatch({
+          changes: cur === text ? undefined : { from: 0, to: cur.length, insert: text },
+          effects: [
+            outLangComp.reconfigure(langExts),
+            setProvenance.of(provenanceDeco),
+            setOutLink.of(Decoration.none),
+          ],
+        });
+        caretLinkKey = null;
+      }
+
+      // Map the renderer's byte-offset segments to output character ranges in one
+      // forward pass (monotonic cursor; UTF-8 widths computed arithmetically), and
+      // build the provenance mark decorations. Each mark carries its index in
+      // lastSegViews via data-i so hover/click can recover the segment.
+      function buildProvenance(output, segments) {
+        const segViews = [];
+        if (!segments.length) return { segViews, deco: Decoration.none };
+        let ci = 0, bytes = 0;
+        const charAt = (targetByte) => {
+          while (bytes < targetByte && ci < output.length) {
+            const cp = output.codePointAt(ci);
+            bytes += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+            ci += cp > 0xffff ? 2 : 1;
+          }
+          return ci;
+        };
+        const ranges = [];
+        for (const seg of segments) {
+          const from = charAt(seg.out);
+          if (from >= output.length) continue; // nothing to mark at/after EOF
+          let to = Math.max(from + 1, charAt(seg.out + seg.len));
+          if (to > output.length) to = output.length;
+          const i = segViews.length;
+          segViews.push({
+            from, to, file: seg.file, kind: seg.kind,
+            start: typeof seg.start === "number" ? seg.start : null,
+            end: typeof seg.end === "number" ? seg.end : null,
+          });
+          ranges.push(Decoration.mark({
+            class: "seg" + (seg.kind === "emit" ? " seg-expr" : ""),
+            attributes: { "data-i": String(i) },
+          }).range(from, to));
         }
-        pre.textContent = text;
-        const lines = text ? text.split("\n").length : 0;
-        byId("output-gutter").textContent =
-          Array.from({ length: lines }, (_, i) => i + 1).join("\n");
+        return { segViews, deco: Decoration.set(ranges, true) };
       }
 
       // Fill the iframe for the current iframe view: raw output HTML for
@@ -1127,63 +1217,6 @@
       function fileSource(file) {
         const i = tabIndexByFile(file);
         return i >= 0 ? tabs[i].source : "";
-      }
-
-      // Build the Source view as a run of segment spans, each tracing a slice of
-      // the output back to the template/partial (and, for expressions, the tag)
-      // that produced it. Segment offsets are output BYTE offsets, so they are
-      // converted to JS char offsets to slice the output string. Text nodes are
-      // built via the DOM (never innerHTML) so output content cannot inject HTML.
-      function renderSourceView(output, segments) {
-        const pre = byId("output-source");
-        pre.textContent = "";
-        // Gutter numbers track the output's logical lines (they line up only when
-        // the text isn't wrapping, i.e. when line numbers are on — see the CSS).
-        const lines = output ? output.split("\n").length : 0;
-        byId("output-gutter").textContent =
-          Array.from({ length: lines }, (_, i) => i + 1).join("\n");
-        if (!segments.length) { pre.textContent = output; return; }
-
-        // Map byte offsets to char indices in ONE forward pass. Segments tile the
-        // output in order, so a monotonic cursor never rewinds; UTF-8 byte lengths
-        // are computed arithmetically. (Calling byteToChar per segment rescanned
-        // the whole output each time — O(segments × output) — and was the source
-        // of multi-second renders on large outputs.)
-        let ci = 0, bytes = 0;
-        const charAt = (targetByte) => {
-          while (bytes < targetByte && ci < output.length) {
-            const cp = output.codePointAt(ci);
-            bytes += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
-            ci += cp > 0xffff ? 2 : 1;
-          }
-          return ci;
-        };
-
-        const frag = document.createDocumentFragment();
-        let cursor = 0; // chars already appended
-        for (const seg of segments) {
-          const from = charAt(seg.out);
-          const to = Math.max(from + 1, charAt(seg.out + seg.len));
-          if (from > cursor) frag.appendChild(document.createTextNode(output.slice(cursor, from)));
-          const span = document.createElement("span");
-          span.className = "seg" + (seg.kind === "emit" ? " seg-expr" : "");
-          span.dataset.file = seg.file;
-          span.dataset.kind = seg.kind;
-          if (typeof seg.start === "number") {
-            span.dataset.start = String(seg.start);
-            span.dataset.end = String(seg.end);
-          }
-          // Keyboard-navigable (roving tabindex): one run is the tab stop, arrows
-          // move between them, Enter jumps to source — see the keydown handler.
-          span.tabIndex = -1;
-          span.setAttribute("role", "button");
-          span.textContent = output.slice(from, to);
-          frag.appendChild(span);
-          cursor = to;
-        }
-        if (cursor < output.length) frag.appendChild(document.createTextNode(output.slice(cursor)));
-        pre.appendChild(frag);
-        pre.querySelector(".seg")?.setAttribute("tabindex", "0"); // first run is the tab stop
       }
 
       function run() {
@@ -1318,7 +1351,7 @@
         hideSegTip(); clearLink();
         for (const b of document.querySelectorAll(".segmented button"))
           b.classList.toggle("on", b.dataset.view === view);
-        if (isText) paintTextView(); else renderPreview();
+        if (isText) { paintTextView(); outputEditor.requestMeasure(); } else renderPreview();
         qs(".output-body").dataset.empty =
           (view === "data" ? lastData != null : !!lastOutput) ? "false" : "true";
         caretLinkKey = null; syncOutputToCaret();
@@ -1335,9 +1368,9 @@
         segTip.append(hint);
       }
 
-      function showSegTip(seg) {
-        const file = seg.dataset.file;
-        const isExpr = seg.dataset.kind === "emit";
+      function showSegTip(sv, anchorEl) {
+        const file = sv.file;
+        const isExpr = sv.kind === "emit";
         segTip.textContent = "";
 
         // "expression from <file> template" / "literal from <file> partial".
@@ -1353,9 +1386,9 @@
 
         // For expressions, show the originating tag (literals just echo the
         // output, so a snippet would be redundant).
-        if (isExpr && seg.dataset.start !== undefined) {
+        if (isExpr && sv.start !== null) {
           const src = fileSource(file);
-          const [s, e] = byteRangeToCharRange(src, Number(seg.dataset.start), Number(seg.dataset.end));
+          const [s, e] = byteRangeToCharRange(src, sv.start, sv.end);
           const tag = src.slice(s, e).trim();
           if (tag) {
             const code = document.createElement("code");
@@ -1368,7 +1401,7 @@
 
         // Position above the segment, flipping below / clamping to the viewport.
         segTip.hidden = false;
-        const r = seg.getBoundingClientRect();
+        const r = anchorEl.getBoundingClientRect();
         const t = segTip.getBoundingClientRect();
         let top = r.top - t.height - 6;
         if (top < 4) top = r.bottom + 6;
@@ -1393,10 +1426,10 @@
       // If the run's source file is the one shown in the template editor,
       // highlight its span there (no caret move); otherwise tint that file's tab.
       // Suppressed mid-edit (renderPending), when the segment offsets are stale.
-      function linkHover(seg) {
-        if (renderPending || seg.dataset.start === undefined) return;
-        const file = seg.dataset.file;
-        const start = Number(seg.dataset.start), end = Number(seg.dataset.end);
+      function linkHover(sv) {
+        if (renderPending || sv.start === null) return;
+        const file = sv.file;
+        const start = sv.start, end = sv.end;
         const idx = tabIndexByFile(file);
         const active = idx === activeTabIdx;
 
@@ -1424,19 +1457,17 @@
       }
 
       // Reverse direction: the template caret highlights the output run(s) it
-      // produced. The output spans already carry their source file + byte span
-      // (data-*), so a caret byte offset matches a run when the file agrees and
-      // start <= byte < end.
+      // produced, as a `.cm-out-linked` decoration over their output ranges. A
+      // caret byte offset matches a run when the file agrees and start <= byte < end.
       let caretLinkKey = null; // dirty-check: `${file}:${byteOffset}`
 
-      function clearOutputLink() {
-        for (const el of byId("output-source").querySelectorAll(".seg.seg-linked"))
-          el.classList.remove("seg-linked");
-      }
-
       function syncOutputToCaret() {
-        // Suppressed mid-render (offsets stale) and when the text view is hidden.
-        if (renderPending || outputView !== "source") { clearOutputLink(); caretLinkKey = null; return; }
+        // Suppressed mid-render (offsets stale) and when the Plain Text view is hidden.
+        if (renderPending || outputView !== "source") {
+          outputEditor.dispatch({ effects: setOutLink.of(Decoration.none) });
+          caretLinkKey = null;
+          return;
+        }
         const file = activeTabIdx === 0 ? "main" : activeTab().name;
         const src = templateView.state.doc.toString();
         const caretChar = templateView.state.selection.main.head;
@@ -1449,14 +1480,14 @@
         const key = partial ? `>${partial}` : `${file}:${byte}`;
         if (key === caretLinkKey) return;
         caretLinkKey = key;
-        clearOutputLink();
-        for (const el of byId("output-source").querySelectorAll(".seg")) {
+        const ranges = [];
+        for (const sv of lastSegViews) {
           const hit = partial
-            ? el.dataset.file === partial
-            : (el.dataset.file === file && el.dataset.start !== undefined &&
-               Number(el.dataset.start) <= byte && byte < Number(el.dataset.end));
-          if (hit) el.classList.add("seg-linked");
+            ? sv.file === partial
+            : (sv.file === file && sv.start !== null && sv.start <= byte && byte < sv.end);
+          if (hit) ranges.push(outLinkMark.range(sv.from, sv.to));
         }
+        outputEditor.dispatch({ effects: setOutLink.of(Decoration.set(ranges, true)) });
       }
 
       // Jump from a rendered run to the file/tag that produced it: open the file's
@@ -1474,65 +1505,42 @@
         hideSegTip();
       }
 
+      // Keyboard parity: Enter on the output editor jumps from the run under the
+      // cursor to its source (arrows/Home/End navigate via the default keymap).
+      function jumpToSourceAtCursor(view) {
+        if (outputView !== "source" || !lastSegViews.length) return false;
+        const pos = view.state.selection.main.head;
+        const sv = lastSegViews.find((s) => pos >= s.from && pos < s.to)
+          || lastSegViews.find((s) => pos === s.to);
+        if (!sv) return false;
+        openSourceLocation(sv.file, sv.start, sv.end);
+        return true;
+      }
+
+      // Hover/click on the output editor's runs. The provenance marks render as
+      // `.seg` spans carrying data-i (index into lastSegViews); event delegation
+      // on the stable contentDOM survives CM's viewport re-rendering.
       (() => {
-        const pre = byId("output-source");
+        const content = outputEditor.contentDOM;
+        const svOf = (el) => { const s = el?.closest?.(".seg"); return s ? lastSegViews[Number(s.dataset.i)] : null; };
         // Debounce hover so sweeping the pointer across many runs only shows the
-        // tooltip + link-highlight for the run the pointer settles on. The timer
-        // is cancelled the moment the pointer leaves a run, so leaving never
-        // shows a stale tooltip.
+        // tooltip + link-highlight for the run the pointer settles on.
         let hoverTimer = null;
         const cancelHover = () => { if (hoverTimer) { clearTimeout(hoverTimer); hoverTimer = null; } };
-        pre.addEventListener("mouseover", (e) => {
-          const seg = e.target.closest?.(".seg");
-          if (!seg) return;
+        content.addEventListener("mouseover", (e) => {
+          const el = e.target.closest?.(".seg");
+          const sv = svOf(el);
+          if (!sv) return;
           cancelHover();
-          hoverTimer = setTimeout(() => { hoverTimer = null; showSegTip(seg); linkHover(seg); }, 55);
+          hoverTimer = setTimeout(() => { hoverTimer = null; showSegTip(sv, el); linkHover(sv); }, 55);
         });
-        pre.addEventListener("mouseout", (e) => {
+        content.addEventListener("mouseout", (e) => {
           if (e.target.closest?.(".seg")) { cancelHover(); hideSegTip(); clearLink(); }
         });
-        // The scroll container is the .src-view wrapper (gutter + source).
-        byId("output-text").addEventListener("scroll", () => { cancelHover(); hideSegTip(); clearLink(); });
-
-        const activate = (seg) => openSourceLocation(
-          seg.dataset.file,
-          seg.dataset.start !== undefined ? Number(seg.dataset.start) : null,
-          seg.dataset.end !== undefined ? Number(seg.dataset.end) : null,
-        );
-        pre.addEventListener("click", (e) => {
-          const seg = e.target.closest?.(".seg");
-          if (seg) activate(seg);
-        });
-
-        // Keyboard parity: arrows move a roving tab stop between runs, Enter/Space
-        // jumps to source. Focus mirrors hover (tooltip + link-highlight).
-        const segsOf = () => [...pre.querySelectorAll(".seg")];
-        const focusSeg = (segs, idx) => {
-          if (!segs.length) return;
-          const i = Math.max(0, Math.min(idx, segs.length - 1));
-          for (const s of segs) s.tabIndex = -1;
-          segs[i].tabIndex = 0;
-          segs[i].focus();
-        };
-        pre.addEventListener("keydown", (e) => {
-          const seg = e.target.closest?.(".seg");
-          if (!seg) return;
-          const segs = segsOf();
-          const i = segs.indexOf(seg);
-          if (e.key === "ArrowRight" || e.key === "ArrowDown") { e.preventDefault(); focusSeg(segs, i + 1); }
-          else if (e.key === "ArrowLeft" || e.key === "ArrowUp") { e.preventDefault(); focusSeg(segs, i - 1); }
-          else if (e.key === "Home") { e.preventDefault(); focusSeg(segs, 0); }
-          else if (e.key === "End") { e.preventDefault(); focusSeg(segs, segs.length - 1); }
-          else if (e.key === "Enter" || e.key === " ") { e.preventDefault(); activate(seg); }
-        });
-        pre.addEventListener("focusin", (e) => {
-          const seg = e.target.closest?.(".seg");
-          if (!seg) return;
-          for (const s of segsOf()) s.tabIndex = s === seg ? 0 : -1; // roving tab stop
-          showSegTip(seg); linkHover(seg);
-        });
-        pre.addEventListener("focusout", (e) => {
-          if (!pre.contains(e.relatedTarget)) { hideSegTip(); clearLink(); }
+        outputEditor.scrollDOM.addEventListener("scroll", () => { cancelHover(); hideSegTip(); clearLink(); });
+        content.addEventListener("click", (e) => {
+          const sv = svOf(e.target);
+          if (sv) openSourceLocation(sv.file, sv.start, sv.end);
         });
       })();
 
@@ -1843,7 +1851,7 @@
         document.body.dataset.theme = tweaks.theme;
         document.body.classList.toggle("show-line-numbers", tweaks.lineNumbers);
         const lineNumberExt = tweaks.lineNumbers ? lineNumbers() : [];
-        for (const view of [templateView, dataView])
+        for (const view of [templateView, dataView, outputEditor])
           view.dispatch({ effects: lineNumberComp.reconfigure(lineNumberExt) });
         qs(".workspace")?.classList.toggle("stacked", tweaks.layout === "stacked");
         window.dispatchEvent(new Event("resize"));
