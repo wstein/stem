@@ -303,6 +303,11 @@
         display: block; margin-top: 3px; font: 11px/1.4 var(--font-mono);
         color: var(--fg-secondary); word-break: break-all;
       }
+      .seg-tip .seg-tip-hint {
+        display: flex; align-items: center; gap: 4px; margin-top: 5px;
+        padding-top: 4px; border-top: 1px solid var(--border);
+        color: var(--fg-faint); font-size: 10.5px;
+      }
       .seg-tip[hidden] { display: none; }
 
       /* ── Status bar ──────────────────────────────────────────────── */
@@ -987,6 +992,13 @@
       const segTip = byId("seg-tip");
       function hideSegTip() { segTip.hidden = true; }
 
+          function maybeAppendHint() {
+            const hint = document.createElement("div");
+            hint.className = "seg-tip-hint";
+            hint.textContent = "click to jump to source";
+            segTip.append(hint);
+          }
+
       function showSegTip(seg) {
         const file = seg.dataset.file;
         const isExpr = seg.dataset.kind === "emit";
@@ -1013,6 +1025,8 @@
             segTip.append(code);
           }
         }
+
+        maybeAppendHint();
 
         // Position above the segment, flipping below / clamping to the viewport.
         segTip.hidden = false;
