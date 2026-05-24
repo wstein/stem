@@ -305,6 +305,15 @@
         background: var(--accent-soft);
         box-shadow: inset 0 0 0 1px var(--accent);
       }
+      /* The editor/tab side of the link: hovering an output run highlights its
+         source span in the editor (if shown) or tints its tab (if not). Visually
+         kin to .seg:hover, distinct from the text selection and lint marks. */
+      .cm-link-highlight {
+        background: var(--accent-soft);
+        box-shadow: inset 0 0 0 1px var(--accent);
+        border-radius: 2px;
+      }
+      .tab.tab-linked { box-shadow: inset 0 -2px 0 var(--accent); }
       .seg-tip {
         position: fixed; z-index: 60; max-width: 340px; padding: 6px 9px;
         border-radius: 7px; background: var(--bg-pane); color: var(--fg);
@@ -636,7 +645,7 @@
         decodeState,
         encodeState
       } from "./playground_utils.mjs";
-      import { EditorState, Annotation } from "https://esm.sh/@codemirror/state@6.5.2/es2022/state.mjs";
+      import { EditorState, Annotation, StateField, StateEffect } from "https://esm.sh/@codemirror/state@6.5.2/es2022/state.mjs";
       import {
         Decoration,
         EditorView,
@@ -729,6 +738,29 @@
           { decorations: (v) => v.decorations }
         );
 
+      // Link highlight: a single transient decoration over the source span of
+      // the output run currently hovered. It is a decoration (not a selection),
+      // so the caret never moves — hovering only highlights; clicking moves the
+      // caret. Lives on the template editor only (the data editor hosts no
+      // provenance). `setLinkHighlight.of({from,to})` sets it; `.of(null)` clears.
+      const linkMark = Decoration.mark({ class: "cm-link-highlight" });
+      const setLinkHighlight = StateEffect.define();
+      const linkHighlightField = StateField.define({
+        create() { return Decoration.none; },
+        update(deco, tr) {
+          deco = deco.map(tr.changes);
+          for (const e of tr.effects) {
+            if (e.is(setLinkHighlight)) {
+              deco = e.value
+                ? Decoration.set([linkMark.range(e.value.from, e.value.to)])
+                : Decoration.none;
+            }
+          }
+          return deco;
+        },
+        provide: (f) => EditorView.decorations.from(f),
+      });
+
       // Make CM fill its container (height driven by flex parent)
       const fillTheme = EditorView.theme({
         "&": { height: "100%" },
@@ -750,12 +782,13 @@
             ...sharedExts,
             html(),
             handlebarsHighlighting,
+            linkHighlightField,
             lintGutter(),
             linter(() => templateDiagnostics),
             EditorView.updateListener.of((u) => {
               if (u.docChanged && !isProgrammatic(u)) {
                 activeTab().source = u.state.doc.toString();
-                debouncedRun();
+                scheduleRun();
               }
               if (u.selectionSet) updateStatusMeta();
             })
@@ -772,7 +805,7 @@
             yaml(),
             yamlHighlighting,
             EditorView.updateListener.of((u) => {
-              if (u.docChanged && !isProgrammatic(u)) debouncedRun();
+              if (u.docChanged && !isProgrammatic(u)) scheduleRun();
               if (u.selectionSet) updateStatusMeta();
             })
           ]
@@ -827,7 +860,7 @@
               input.size = Math.max(input.value.length, 4);
               input.title = `referenced as {{> ${input.value}}}`;
               byId("sources-sub").textContent = `partial · referenced as {{> ${input.value}}}`;
-              debouncedRun();
+              scheduleRun();
             });
             t.append(input);
           } else {
@@ -955,6 +988,9 @@
       }
 
       function run() {
+        // run() is synchronous, so once it returns the output and its segments
+        // match the current sources again — clear the stale-offset guard.
+        renderPending = false;
         const dataSource = dataView.state.doc.toString();
         const mainSource = tabs[0].source;
         // Compile with span provenance so the rendered output can be mapped back
@@ -999,6 +1035,12 @@
 
       const debouncedRun = debounce(run, 100);
 
+      // True between a source edit and the debounced render that follows it: in
+      // that window the output segments still carry the pre-edit byte offsets, so
+      // the hover link-highlight is suppressed to avoid pointing at stale source.
+      let renderPending = false;
+      function scheduleRun() { renderPending = true; debouncedRun(); }
+
       function updateDiagnostics(diags) {
         templateDiagnostics = diags;
         templateView.dispatch({ effects: setDiagnosticsEffect.of(diags) });
@@ -1039,7 +1081,7 @@
         const rendered = view !== "source";
         byId("output-preview").hidden = !rendered;
         byId("output-source").hidden = rendered;
-        hideSegTip();
+        hideSegTip(); clearLink();
         for (const b of document.querySelectorAll(".segmented button"))
           b.classList.toggle("on", b.dataset.view === view);
       }
@@ -1095,11 +1137,58 @@
         segTip.style.left = `${Math.max(4, left)}px`;
       }
 
+      // Mirror an output-run hover into the source. `linkState` (the run's
+      // "file:start:end") dirty-checks the editor/tab mutation so a sweep across
+      // many segments doesn't thrash; `linkedTabEl` tracks any tinted tab.
+      let linkState = null;
+      let linkedTabEl = null;
+
+      function clearLink() {
+        if (linkState === null && !linkedTabEl) return;
+        linkState = null;
+        if (linkedTabEl) { linkedTabEl.classList.remove("tab-linked"); linkedTabEl = null; }
+        templateView.dispatch({ effects: setLinkHighlight.of(null) });
+      }
+
+      // If the run's source file is the one shown in the template editor,
+      // highlight its span there (no caret move); otherwise tint that file's tab.
+      // Suppressed mid-edit (renderPending), when the segment offsets are stale.
+      function linkHover(seg) {
+        if (renderPending || seg.dataset.start === undefined) return;
+        const file = seg.dataset.file;
+        const start = Number(seg.dataset.start), end = Number(seg.dataset.end);
+        const idx = tabIndexByFile(file);
+        const active = idx === activeTabIdx;
+
+        // Refine the tooltip hint every hover (the tooltip is rebuilt each time).
+        const hint = segTip.querySelector(".seg-tip-hint");
+        if (hint) {
+          hint.textContent = active ? "click to place the cursor"
+            : idx >= 0 ? `click to open the ${file} tab`
+            : "click to jump to source";
+        }
+
+        const key = `${file}:${start}:${end}`;
+        if (key === linkState) return; // highlight already applied — skip the work
+        linkState = key;
+        if (linkedTabEl) { linkedTabEl.classList.remove("tab-linked"); linkedTabEl = null; }
+
+        if (active) {
+          const [from, to] = byteRangeToCharRange(tabs[idx].source, start, end);
+          templateView.dispatch({ effects: setLinkHighlight.of({ from, to }) });
+        } else {
+          templateView.dispatch({ effects: setLinkHighlight.of(null) });
+          const tabEl = idx >= 0 ? byId("tmpl-tabs").children[idx] : null;
+          if (tabEl) { tabEl.classList.add("tab-linked"); linkedTabEl = tabEl; }
+        }
+      }
+
       // Jump from a rendered run to the file/tag that produced it: open the file's
       // tab and, for an expression, select its source span in the editor.
       function openSourceLocation(file, start, end) {
         const idx = tabIndexByFile(file);
         if (idx < 0) return;
+        clearLink();
         selectTemplateTab(idx);
         templateView.focus();
         if (start !== null) {
@@ -1113,12 +1202,12 @@
         const pre = byId("output-source");
         pre.addEventListener("mouseover", (e) => {
           const seg = e.target.closest?.(".seg");
-          if (seg) showSegTip(seg);
+          if (seg) { showSegTip(seg); linkHover(seg); }
         });
         pre.addEventListener("mouseout", (e) => {
-          if (e.target.closest?.(".seg")) hideSegTip();
+          if (e.target.closest?.(".seg")) { hideSegTip(); clearLink(); }
         });
-        pre.addEventListener("scroll", hideSegTip);
+        pre.addEventListener("scroll", () => { hideSegTip(); clearLink(); });
         pre.addEventListener("click", (e) => {
           const seg = e.target.closest?.(".seg");
           if (!seg) return;
