@@ -354,8 +354,9 @@
       .focus-toggle svg { width: 13px; height: 13px; }
 
       /* ── Themes ──────────────────────────────────────────────────── */
-      body[data-theme="dim"] {
-        /* Dim — mid-dark violet; lighter sibling of Dark */
+      /* Dark — mid-dark violet. Used by the explicit Dark theme, and by
+         System when the OS prefers a dark color scheme. Light is :root. */
+      body[data-theme="dark"] {
         --bg: #1e1338; --bg-1: #251740; --bg-2: #2f1d52; --bg-3: #3b2568;
         --bg-toolbar: #1e1338; --bg-statusbar: #180f2e;
         --bg-tab-active: #2f1d52; --bg-pane: #231545; --bg-gutter: #1a1030;
@@ -366,65 +367,25 @@
         --tok-str: #3ee0a3; --tok-num: #fbbf24;
         --success: #3ee0a3;
         --danger-faint: #3b0a0a;
+        background-color: var(--bg) !important;
       }
-      body[data-theme="dim"] iframe { background: #1a1030; }
-      body[data-theme="dark"] {
-        --bg: #0c0612; --bg-1: #160a25; --bg-2: #231040; --bg-3: #3b1b6b;
-        --bg-toolbar: #160a25; --bg-statusbar: #0c0612;
-        --bg-tab-active: #231040; --bg-pane: #1a0d30; --bg-gutter: #110820;
-        --fg: #e7defc; --fg-secondary: #b59bff; --fg-muted: #7a8694; --fg-faint: #475260;
-        --border: #2a1855; --border-strong: #3b1b6b;
-        --accent: #7c4dff; --accent-2: #b59bff;
-        --accent-soft: #3b1b6b; --accent-softer: #231040;
-        --tok-tag: #b59bff; --tok-cmt: #475260; --tok-key: #93c5fd;
-        --tok-str: #3ee0a3; --tok-num: #fbbf24;
-        --success: #3ee0a3;
-        --danger-faint: #3b0a0a;
-      }
-      body[data-theme="dark"] { background-color: var(--bg) !important; }
-      body[data-theme="dim"]  { background-color: var(--bg) !important; }
-      body[data-theme="dark"] iframe { background: #0a0612; }
+      body[data-theme="dark"] iframe { background: #1a1030; }
 
-      /* ── Moods ───────────────────────────────────────────────────── */
-      body[data-mood="terminal"] {
-        --font-ui: var(--font-mono);
-        --accent: #10b981; --accent-2: #047857;
-        --accent-soft: rgba(16,185,129,.18); --accent-softer: rgba(16,185,129,.08);
-        --tok-tag: #10b981; --tok-key: #34d399;
-        --topbar-h: 38px; --statusbar-h: 22px; --pane-header-h: 32px; --tabs-h: 32px; --radius: 3px;
-      }
-      body[data-mood="terminal"] .brand .mark { color: #10b981; }
-      body[data-mood="terminal"] .brand .mark .stem-line,
-      body[data-mood="terminal"] .brand .mark .stem-dot { stroke: #10b981; fill: #10b981; }
-      body[data-mood="notebook"] {
-        --accent: #d97706; --accent-2: #b45309;
-        --accent-soft: rgba(217,119,6,.16); --accent-softer: rgba(217,119,6,.06);
-        --tok-tag: #b45309; --tok-key: #92400e;
-        --topbar-h: 52px; --statusbar-h: 28px; --pane-header-h: 44px; --tabs-h: 38px;
-      }
-      body[data-mood="notebook"] .brand {
-        font-family: "Charter","Iowan Old Style","Palatino","Georgia",serif;
-        font-style: italic; font-size: 15px;
-      }
-      body[data-mood="notebook"] .brand .mark {
-        background: linear-gradient(135deg, #d97706 0%, #fbbf24 100%);
-        font-family: inherit; font-style: italic;
-      }
-      body[data-mood="notebook"] .pane-title h2 {
-        font-family: "Charter","Iowan Old Style","Palatino","Georgia",serif;
-        font-style: italic; font-weight: 600; letter-spacing: 0; text-transform: none; font-size: 15px;
-      }
-      body[data-mood="notebook"] .tab {
-        font-family: "Charter","Iowan Old Style","Palatino","Georgia",serif;
-        font-style: italic; font-size: 13px;
-      }
-      body[data-mood="notebook"][data-theme="light"] {
-        /* Notebook+light: override back to warm paper since violet-kissed doesn't suit serif editorial */
-        --bg: #fef9ef; --bg-1: #faf5e9; --bg-2: #f1ebd9; --bg-3: #e8e1d0;
-        --bg-toolbar: #faf5e9; --bg-statusbar: #f1ebd9;
-        --bg-tab-active: #fef9ef; --bg-pane: #fefaef; --bg-gutter: #f5efde;
-        --fg: #2b2620; --fg-secondary: #524a3e; --fg-muted: #7c715f; --fg-faint: #a89c87;
-        --border: #cfc7b4; --border-strong: #bdb49e;
+      @media (prefers-color-scheme: dark) {
+        body[data-theme="system"] {
+          --bg: #1e1338; --bg-1: #251740; --bg-2: #2f1d52; --bg-3: #3b2568;
+          --bg-toolbar: #1e1338; --bg-statusbar: #180f2e;
+          --bg-tab-active: #2f1d52; --bg-pane: #231545; --bg-gutter: #1a1030;
+          --fg: #e7defc; --fg-secondary: #b59bff; --fg-muted: #8065c4; --fg-faint: #4e3880;
+          --border: #3b1b6b; --border-strong: #5a2ea6;
+          --accent-soft: #3b1b6b; --accent-softer: #251740;
+          --tok-tag: #b59bff; --tok-cmt: #5a4490; --tok-key: #93c5fd;
+          --tok-str: #3ee0a3; --tok-num: #fbbf24;
+          --success: #3ee0a3;
+          --danger-faint: #3b0a0a;
+          background-color: var(--bg) !important;
+        }
+        body[data-theme="system"] iframe { background: #1a1030; }
       }
 
       /* ── Stacked layout ──────────────────────────────────────────── */
@@ -482,22 +443,6 @@
       }
       .tw-swatch-label { font-size: 11px; font-weight: 600; color: var(--fg-secondary); }
       .tw-swatch.on .tw-swatch-label { color: var(--accent-2); }
-      .tw-card {
-        flex: 1 1 100%; display: flex; align-items: center; gap: 10px;
-        padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
-        background: var(--bg); cursor: pointer; text-align: left;
-        transition: border-color 120ms ease, background 120ms ease;
-      }
-      .tw-card:hover { background: var(--bg-1); }
-      .tw-card.on { border-color: var(--accent); background: var(--accent-softer); }
-      .tw-card-dot { width: 14px; height: 14px; border-radius: 50%; flex: 0 0 14px; }
-      .tw-card-body { display: flex; flex-direction: column; min-width: 0; }
-      .tw-card-label { font-size: 13px; font-weight: 600; color: var(--fg); }
-      .tw-card[data-mood="terminal"] .tw-card-label { font-family: var(--font-mono); }
-      .tw-card[data-mood="notebook"] .tw-card-label {
-        font-family: "Charter","Iowan Old Style","Palatino","Georgia",serif; font-style: italic;
-      }
-      .tw-card-desc { font-size: 11px; color: var(--fg-muted); margin-top: 1px; }
       .tw-segmented { display: flex; flex: 1 1 100%; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
       .tw-segmented button {
         flex: 1 1 0; border: 0; background: var(--bg); padding: 8px 10px;
@@ -538,7 +483,7 @@
         <div class="topbar-group">
           <button id="share-btn" class="btn" title="Copy a link that restores this template and data">Copy link</button>
           <button id="cmd-btn" class="btn" title="Open command palette">Commands <span class="kbd-inline">⌘⇧P</span></button>
-          <button id="tweaks-btn" class="btn" title="Open Tweaks panel (theme, mood, layout)">Tweaks</button>
+          <button id="tweaks-btn" class="btn" title="Open Tweaks panel (theme, layout)">Tweaks</button>
         </div>
         <div class="spacer"></div>
       </header>
@@ -1199,14 +1144,9 @@
       // ── Tweaks panel ──────────────────────────────────────────────────
       const TWEAK_OPTS = {
         theme: [
-          { value: "light", label: "Light", swatch: ["#ffffff","#f4f4f5","#18181b"] },
-          { value: "dim",   label: "Dim",   swatch: ["#1e1338","#2f1d52","#b59bff"] },
-          { value: "dark",  label: "Dark",  swatch: ["#0c0612","#231040","#e7defc"] },
-        ],
-        mood: [
-          { value: "workshop", label: "Workshop", desc: "Elixir Purple · IBM Plex · Growth Green", accent: "#7c4dff" },
-          { value: "terminal", label: "Terminal", desc: "Monospaced everything · phosphor green",   accent: "#10b981" },
-          { value: "notebook", label: "Notebook", desc: "Serif headings · warm paper · amber",      accent: "#d97706" },
+          { value: "light",  label: "Light",  swatch: ["#ffffff","#f2effc","#7c4dff"] },
+          { value: "dark",   label: "Dark",   swatch: ["#1e1338","#2f1d52","#b59bff"] },
+          { value: "system", label: "System", swatch: ["#ffffff","#9e8dc4","#1e1338"] },
         ],
         layout: [
           { value: "split",   label: "Split",   hint: "Sources ← → Output" },
@@ -1214,12 +1154,15 @@
         ],
       };
 
-      let tweaks = { theme: "light", mood: "workshop", layout: "split" };
+      let tweaks = { theme: "system", layout: "split" };
       try { const r = localStorage.getItem(LS_TWEAKS); if (r) tweaks = { ...tweaks, ...JSON.parse(r) }; } catch {}
+      // Migrate older saved state: the former "dim" theme is now "dark", moods are gone.
+      if (tweaks.theme === "dim") tweaks.theme = "dark";
+      if (!["light", "dark", "system"].includes(tweaks.theme)) tweaks.theme = "system";
+      delete tweaks.mood;
 
       function applyTweaks() {
         document.body.dataset.theme = tweaks.theme;
-        document.body.dataset.mood  = tweaks.mood;
         qs(".workspace")?.classList.toggle("stacked", tweaks.layout === "stacked");
         window.dispatchEvent(new Event("resize"));
       }
@@ -1267,21 +1210,6 @@
             }, [
               mkEl("span", { class: "tw-swatch-grid", style: `--c1:${o.swatch[0]};--c2:${o.swatch[1]};--c3:${o.swatch[2]};` }),
               mkEl("span", { class: "tw-swatch-label" }, o.label),
-            ])
-          )
-        ));
-
-        panel.append(twSection("Mood", "Resets type, accent, density.",
-          TWEAK_OPTS.mood.map((o) =>
-            mkEl("button", {
-              class: "tw-card" + (tweaks.mood === o.value ? " on" : ""),
-              "data-mood": o.value, onclick: () => setTweak("mood", o.value),
-            }, [
-              mkEl("span", { class: "tw-card-dot", style: `background:${o.accent};` }),
-              mkEl("span", { class: "tw-card-body" }, [
-                mkEl("span", { class: "tw-card-label" }, o.label),
-                mkEl("span", { class: "tw-card-desc" }, o.desc),
-              ]),
             ])
           )
         ));
@@ -1383,6 +1311,7 @@
       if (!restoreHash()) await loadExample(3); // default: HTML cards
       applySplits();
       updateStatusMeta();
+      showTweaks(); // open the Tweaks panel on first load
     </script>
   </body>
 </html>
