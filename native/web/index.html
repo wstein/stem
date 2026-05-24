@@ -246,6 +246,19 @@
         padding: 0 12px; font: 11px/1 var(--font-mono); color: var(--tok-key);
         background: var(--accent-softer); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
       }
+      .data-tabs {
+        flex: 0 0 auto; height: 24px; display: flex;
+        background: var(--accent-softer); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+      }
+      .data-tab {
+        height: 100%; display: inline-flex; align-items: center; gap: 6px;
+        padding: 0 12px; border: 0; border-right: 1px solid var(--border);
+        background: transparent; color: var(--fg-faint);
+        font: 11px/1 var(--font-mono); cursor: pointer;
+      }
+      .data-tab:hover { color: var(--fg-secondary); }
+      .data-tab.active { color: var(--tok-key); background: var(--bg-pane); }
+      .data-tab .yaml-ver { margin-left: 0; }
       .cell-dot { width: 6px; height: 6px; border-radius: 2px; background: var(--tok-key); }
       .yaml-ver {
         margin-left: auto; color: var(--fg-faint);
@@ -617,7 +630,7 @@
             <div class="editor-pane" id="template-editor-container"></div>
             <div class="esplitter" id="editor-splitter" title="Drag to resize · double-click to reset"></div>
             <div class="editor-cell">
-              <div class="cell-label"><span class="cell-dot"></span>data.yaml<span class="yaml-ver">YAML 1.2</span></div>
+              <div class="data-tabs" id="data-tabs"></div>
               <div class="editor-pane" id="data-editor-container"></div>
             </div>
           </div>
@@ -734,9 +747,11 @@
       let escapeMode   = "";
       let focusMode    = null;
       let templateDiagnostics = [];
-      // Optional   tran           pplied to the parsed data bef          ndering
+      let yamlSrc      = "";
+      // Optional transform applied to the parsed data before rendering
       // (the data->view-model "Controller"). Empty string = pass data through.
       let transformSrc = "";
+      let dataTab      = "data";    // "data" | "transform"
 
       const activeTab = () => tabs[activeTabIdx];
 
@@ -840,6 +855,9 @@
       // The line-number gutter lives in a compartment so the Appearance toggle
       // can switch it on/off live (applyTweaks reconfigures both editors).
       const lineNumberComp = new Compartment();
+      // The data pane hosts two tabs (YAML data + JSONata transform); its language
+      // support lives in a compartment so showDataTab can swap it live.
+      const dataLangComp = new Compartment();
       const sharedExts = [
         lineNumberComp.of(lineNumbers()), highlightActiveLineGutter(), highlightActiveLine(),
         bracketMatching(), syntaxHighlighting(themeHighlight),
@@ -875,10 +893,13 @@
           doc: "",
           extensions: [
             ...sharedExts,
-            yaml(),
-            yamlHighlighting,
+            dataLangComp.of([yaml(), yamlHighlighting]),
             EditorView.updateListener.of((u) => {
-              if (u.docChanged && !isProgrammatic(u)) scheduleRun();
+              if (u.docChanged && !isProgrammatic(u)) {
+                if (dataTab === "transform") transformSrc = u.state.doc.toString();
+                else yamlSrc = u.state.doc.toString();
+                scheduleRun();
+              }
               if (u.selectionSet) updateStatusMeta();
             })
           ]
@@ -958,9 +979,42 @@
       function selectTemplateTab(i) {
         activeView = "tmpl"; activeTabIdx = i; showActiveTab();
       }
-      function selectDataTab() {
-        // The data editor is always visible now; just move focus to it.
-        activeView = "data"; dataView.focus(); updateStatusMeta();
+      function selectDataTab(name = "data") {
+        dataTab = name === "transform" ? "transform" : "data";
+        activeView = "data";
+        showDataTab();
+        dataView.focus();
+        updateStatusMeta();
+      }
+
+      // Render the data-pane tab bar (data.yaml | transform), highlighting active.
+      function renderDataTabs() {
+        const bar = byId("data-tabs");
+        bar.innerHTML = "";
+        const mk = (name, label, badge) => {
+          const b = document.createElement("button");
+          b.className = "data-tab" + (dataTab === name ? " active" : "");
+          const dot = document.createElement("span"); dot.className = "cell-dot";
+          b.append(dot, label);
+          if (badge) {
+            const v = document.createElement("span"); v.className = "yaml-ver"; v.textContent = badge;
+            b.append(v);
+          }
+          b.addEventListener("click", () => selectDataTab(name));
+          bar.append(b);
+        };
+        mk("data", "data.yaml", "YAML 1.2");
+        mk("transform", "transform · JSONata");
+      }
+
+      // Show the active data tab's source in the editor — YAML highlighting for
+      // data, plain for the transform. Programmatic, so it doesn't recompile.
+      function showDataTab() {
+        setEditorText(dataView, dataTab === "transform" ? transformSrc : yamlSrc);
+        dataView.dispatch({
+          effects: dataLangComp.reconfigure(dataTab === "transform" ? [] : [yaml(), yamlHighlighting]),
+        });
+        renderDataTabs();
       }
       function addPartial() {
         let n = 1, name;
@@ -1059,10 +1113,27 @@
           Array.from({ length: lines }, (_, i) => i + 1).join("\n");
         if (!segments.length) { pre.textContent = output; return; }
 
+        // Map byte offsets to char indices in ONE forward pass. Segments tile the
+        // output in order, so a monotonic cursor never rewinds; UTF-8 byte lengths
+        // are computed arithmetically. (Calling byteToChar per segment rescanned
+        // the whole output each time — O(segments × output) — and was the source
+        // of multi-second renders on large outputs.)
+        let ci = 0, bytes = 0;
+        const charAt = (targetByte) => {
+          while (bytes < targetByte && ci < output.length) {
+            const cp = output.codePointAt(ci);
+            bytes += cp < 0x80 ? 1 : cp < 0x800 ? 2 : cp < 0x10000 ? 3 : 4;
+            ci += cp > 0xffff ? 2 : 1;
+          }
+          return ci;
+        };
+
+        const frag = document.createDocumentFragment();
         let cursor = 0; // chars already appended
         for (const seg of segments) {
-          const [from, to] = byteRangeToCharRange(output, seg.out, seg.out + seg.len);
-          if (from > cursor) pre.appendChild(document.createTextNode(output.slice(cursor, from)));
+          const from = charAt(seg.out);
+          const to = Math.max(from + 1, charAt(seg.out + seg.len));
+          if (from > cursor) frag.appendChild(document.createTextNode(output.slice(cursor, from)));
           const span = document.createElement("span");
           span.className = "seg" + (seg.kind === "emit" ? " seg-expr" : "");
           span.dataset.file = seg.file;
@@ -1076,10 +1147,11 @@
           span.tabIndex = -1;
           span.setAttribute("role", "button");
           span.textContent = output.slice(from, to);
-          pre.appendChild(span);
+          frag.appendChild(span);
           cursor = to;
         }
-        if (cursor < output.length) pre.appendChild(document.createTextNode(output.slice(cursor)));
+        if (cursor < output.length) frag.appendChild(document.createTextNode(output.slice(cursor)));
+        pre.appendChild(frag);
         pre.querySelector(".seg")?.setAttribute("tabindex", "0"); // first run is the tab stop
       }
 
@@ -1087,7 +1159,7 @@
         // run() is synchronous, so once it returns the output and its segments
         // match the current sources again — clear the stale-offset guard.
         renderPending = false;
-        const dataSource = dataView.state.doc.toString();
+        const dataSource = yamlSrc; // the YAML tab's source (editor may show the transform)
         const mainSource = tabs[0].source;
         // Compile with span provenance so the rendered output can be mapped back
         // to its source files/tags in the Source view.
@@ -1187,8 +1259,11 @@
         const sel  = view.state.selection.main;
         const line = view.state.doc.lineAt(sel.head);
         const col  = sel.head - line.from + 1;
-        const fileName = activeView === "data" ? "data.yaml" : activeTab().name;
-        const lang = activeView === "data" ? "YAML" : "Handlebars";
+        const onTransform = activeView === "data" && dataTab === "transform";
+        const fileName = activeView !== "data" ? activeTab().name
+          : onTransform ? "transform" : "data.yaml";
+        const lang = activeView !== "data" ? "Handlebars"
+          : onTransform ? "JSONata" : "YAML";
         byId("status-meta").innerHTML =
           `<b>${escapeHtml(fileName)} · Ln ${line.number}, Col ${col}</b>` +
           `  ·  ${lang}  ·  UTF-8  ·  Escape: <b>${escapeMode || "as compiled"}</b>`;
@@ -1523,11 +1598,13 @@
         tabs = [{ name: "main", source: mainSrc }];
         ex.partials.forEach((name, i) => tabs.push({ name, source: partialSrcs[i] }));
         activeTabIdx = 0; activeView = "tmpl";
-        // Examples ship their data as YAML, so load it into the editor verbatim.
-        setEditorText(dataView, dataText);
+        // Examples ship their data as YAML; an optional transform is the Controller.
+        yamlSrc = dataText;
         transformSrc = ex.transform
           ? await fetch(dir + ex.transform).then((r) => r.text())
           : "";
+        dataTab = "data";
+        showDataTab();
         escapeMode = "";
         byId("escape-select").value = "";
         byId("example-select").value = String(idx);
@@ -1539,7 +1616,7 @@
       function snapshotState() {
         return {
           tabs: tabs.map((t) => ({ n: t.name, s: t.source })),
-          d: dataView.state.doc.toString(),
+          d: yamlSrc,
           t: transformSrc,
           e: escapeMode, v: outputView,
           av: activeView, ai: activeTabIdx,
@@ -1559,8 +1636,10 @@
             : [{ name: "main", source: "" }];
           activeTabIdx = Math.max(0, Math.min(tabs.length - 1, s.ai ?? 0));
           activeView = s.av === "data" ? "data" : "tmpl";
-          setEditorText(dataView, s.d ?? "");
+          yamlSrc = s.d ?? "";
           transformSrc = s.t ?? "";
+          dataTab = "data";
+          showDataTab();
           escapeMode = s.e ?? "";
           byId("escape-select").value = escapeMode;
           byId("example-select").value = "-1";
@@ -1577,7 +1656,8 @@
             label: `Load example · ${ex.label}`, kind: "example",
             run: () => loadExample(i),
           })),
-          { label: "Open data.yaml",     kind: "sources", run: selectDataTab },
+          { label: "Open data.yaml",     kind: "sources", run: () => selectDataTab("data") },
+          { label: "Open transform",     kind: "sources", run: () => selectDataTab("transform") },
           { label: "Open main template", kind: "sources", run: () => selectTemplateTab(0) },
           { label: "Add partial",        kind: "sources", run: addPartial },
           { label: "Toggle focus · Sources", kind: "view", run: () => toggleFocus("sources") },
@@ -1877,6 +1957,7 @@
       });
       applyTweaks();
       setOutputView(outputView);
+      renderDataTabs(); // paint the data-pane tabs before the async example load
 
       if (!restoreHash()) await loadExample(3); // default: HTML cards
       applySplits();
