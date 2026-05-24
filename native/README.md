@@ -32,11 +32,11 @@ the host, escaping done natively.
 - `web/` — the browser demo: `stem.mjs` (glue), `index.html` (live page),
   `examples.json` (a small manifest indexing the examples), `examples/<id>/`
   (each example as individual files: `main.stem`, one `.stem` per partial, and
-  `data.yaml`), `vendor/js-yaml.mjs` (the YAML parser, vendored once and used by
-  both the browser page and the Node validator so they parse YAML identically
-  with no install or network), `playground_utils.mjs` (shared browser
-  utilities), and `validate.mjs` (a browserless check of the no-WASI module +
-  glue that loads those same files). The page is a lightweight IDE-style, multi-tab editor built
+  `data.yaml`), `vendor/` (vendored ESM bundles: `js-yaml.mjs`, used by both the
+  browser page and the Node validator so they parse YAML identically with no
+  install or network, and `marked.mjs` for the Markdown output view),
+  `playground_utils.mjs` (shared browser utilities), and `validate.mjs` (a
+  browserless check of the no-WASI module + glue that loads those same files). The page is a lightweight IDE-style, multi-tab editor built
   with CodeMirror 6: the first tab is the rendered entry template and the rest
   are partials, pulled in with `{{> name}}` and compiled fully in the browser.
   `compile(source, partials)` sends `{ "compile": source, "partials": {name:
@@ -49,11 +49,12 @@ Playground workflow highlights:
   on narrow screens.
 - Inline compile diagnostics in the template editor gutter, plus a status lane
   with line/column locations.
-- Output as "Rendered" (text, mapped to its source) or "Preview" (locked-down
-  iframe). In the Rendered view the source link is bidirectional: hovering a run
-  names its source file/tag and highlights the originating span in the editor
-  (or tints its tab), clicking jumps the caret there, and moving the editor
-  caret highlights the output run(s) it produced.
+- Output as "Rendered" (text, mapped to its source), "Preview" (output HTML in a
+  locked-down iframe), or "Markdown" (the output interpreted as Markdown in the
+  same iframe). In the Rendered view the source link is bidirectional: hovering
+  a run names its source file/tag and highlights the originating span in the
+  editor (or tints its tab), clicking jumps the caret there, and moving the
+  editor caret highlights the output run(s) it produced.
 - Command palette and shortcuts:
   - `Cmd/Ctrl+Shift+P` opens the palette.
   - `Cmd/Ctrl+Enter` renders immediately.

@@ -599,6 +599,7 @@
               <div class="segmented" role="tablist">
                 <button data-view="source">Rendered</button>
                 <button data-view="rendered" class="on">Preview</button>
+                <button data-view="markdown">Markdown</button>
               </div>
               <span class="field-label" style="font-size:11px">Escape</span>
               <select id="escape-select" class="select" aria-label="Escape mode">
@@ -664,6 +665,7 @@
       import { yaml } from "https://esm.sh/@codemirror/lang-yaml@6.1.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
       import { html } from "https://esm.sh/@codemirror/lang-html@6.4.11?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
       import { load as loadYaml } from "./vendor/js-yaml.mjs";
+      import { marked } from "./vendor/marked.mjs";
 
       // ── Bootstrap ─────────────────────────────────────────────────────
       const WASM = "../stem_native/target/wasm32-unknown-unknown/release/stem_native.wasm";
@@ -946,10 +948,22 @@
         );
       }
 
+      let lastOutput = "";
+
       function setOutput(str, segments = []) {
-        byId("output-preview").srcdoc = previewDoc(str);
+        lastOutput = str;
         renderSourceView(str, segments);
+        renderPreview();
         qs(".output-body").dataset.empty = str ? "false" : "true";
+      }
+
+      // Fill the iframe for the current iframe view: raw output HTML for
+      // "Preview", or the output interpreted as Markdown for "Markdown". Both
+      // render in the same sandboxed iframe (no scripts; CSP default-src 'none'),
+      // so the Markdown view shares Preview's trust boundary.
+      function renderPreview() {
+        const body = outputView === "markdown" ? marked.parse(lastOutput) : lastOutput;
+        byId("output-preview").srcdoc = previewDoc(body);
       }
 
       // The file behind a segment ("main" is tab 0; partials are the rest).
@@ -1082,14 +1096,19 @@
       }
 
       // ── Output view ───────────────────────────────────────────────────
+      // Valid output views; anything else (e.g. an old share link) falls back to
+      // the iframe Preview.
+      const validView = (v) => (["source", "rendered", "markdown"].includes(v) ? v : "rendered");
+
       function setOutputView(view) {
         outputView = view;
-        const rendered = view !== "source";
-        byId("output-preview").hidden = !rendered;
-        byId("output-source").hidden = rendered;
+        const isText = view === "source"; // "rendered" and "markdown" use the iframe
+        byId("output-source").hidden = !isText;
+        byId("output-preview").hidden = isText;
         hideSegTip(); clearLink();
         for (const b of document.querySelectorAll(".segmented button"))
           b.classList.toggle("on", b.dataset.view === view);
+        if (!isText) renderPreview(); // refresh the iframe for the selected view
         caretLinkKey = null; syncOutputToCaret();
       }
 
@@ -1111,7 +1130,9 @@
 
         // "expression from <file> template" / "literal from <file> partial".
         const head = document.createElement("div");
-        head.append(document.createTextNode((isExpr ? "expression" : "literal") + " from "));
+        const kindEl = document.createElement("b");
+        kindEl.textContent = isExpr ? "expression" : "literal";
+        head.append(kindEl, document.createTextNode(" from "));
         const fileEl = document.createElement("span");
         fileEl.className = "seg-tip-file";
         fileEl.textContent = file;
@@ -1365,7 +1386,7 @@
         escapeMode = "";
         byId("escape-select").value = "";
         byId("example-select").value = String(idx);
-        setOutputView(ex.view === "source" ? "source" : "rendered");
+        setOutputView(validView(ex.view));
         showActiveTab(); run();
       }
 
@@ -1396,7 +1417,7 @@
           escapeMode = s.e ?? "";
           byId("escape-select").value = escapeMode;
           byId("example-select").value = "-1";
-          setOutputView(s.v === "source" ? "source" : "rendered");
+          setOutputView(validView(s.v));
           showActiveTab(); run();
           return true;
         } catch { return false; }
@@ -1415,6 +1436,7 @@
           { label: "Toggle focus · Sources", kind: "view", run: () => toggleFocus("sources") },
           { label: "Toggle focus · Output",  kind: "view", run: () => toggleFocus("output") },
           { label: "View · Preview",  kind: "view", run: () => { setOutputView("rendered"); run(); } },
+          { label: "View · Markdown", kind: "view", run: () => { setOutputView("markdown"); run(); } },
           { label: "View · Rendered", kind: "view", run: () => { setOutputView("source"); run(); } },
           { label: "Reset layout", kind: "view",
             run: () => { splits = { w0: null, h0: null, ew: null, eh: null }; applySplits(); saveSplits(); setFocus(null); } },
