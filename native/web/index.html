@@ -1510,20 +1510,34 @@
         input.type = "text"; input.placeholder = "Type a command…"; input.spellcheck = false;
         const list = document.createElement("ul");
 
+        // Rebuild the list only when the filter changes. Hover and arrow keys
+        // just move the highlight (see highlight()) — rebuilding here would
+        // replace the <li> mid-click and swallow the click.
         function renderList() {
           list.innerHTML = "";
           filtered.forEach((cmd, i) => {
             const li = document.createElement("li");
             li.className = i === sel ? "sel" : "";
-            li.addEventListener("click", () => { cmd.run(); close(); });
-            li.addEventListener("mouseenter", () => { sel = i; renderList(); });
             const kind = document.createElement("span");
             kind.className = "pkind"; kind.textContent = cmd.kind;
             li.append(kind, cmd.label);
             list.append(li);
           });
         }
+        function highlight() {
+          [...list.children].forEach((li, i) => li.classList.toggle("sel", i === sel));
+        }
         function close() { paletteOpen = false; back.remove(); }
+
+        // Delegate on the stable <ul> so clicks land regardless of hover redraws.
+        list.addEventListener("mousemove", (e) => {
+          const i = [...list.children].indexOf(e.target.closest("li"));
+          if (i >= 0 && i !== sel) { sel = i; highlight(); }
+        });
+        list.addEventListener("click", (e) => {
+          const i = [...list.children].indexOf(e.target.closest("li"));
+          if (filtered[i]) { filtered[i].run(); close(); }
+        });
 
         input.addEventListener("input", () => {
           const q = input.value.toLowerCase().trim();
@@ -1531,8 +1545,8 @@
           sel = 0; renderList();
         });
         input.addEventListener("keydown", (e) => {
-          if (e.key === "ArrowDown") { sel = Math.min(filtered.length - 1, sel + 1); renderList(); e.preventDefault(); }
-          else if (e.key === "ArrowUp") { sel = Math.max(0, sel - 1); renderList(); e.preventDefault(); }
+          if (e.key === "ArrowDown") { sel = Math.min(filtered.length - 1, sel + 1); highlight(); e.preventDefault(); }
+          else if (e.key === "ArrowUp") { sel = Math.max(0, sel - 1); highlight(); e.preventDefault(); }
           else if (e.key === "Enter") { if (filtered[sel]) { filtered[sel].run(); close(); } }
           else if (e.key === "Escape") close();
         });
