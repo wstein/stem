@@ -23,4 +23,4 @@ repomix-output.xml
 tmp/
 
 ### Rust native PoC build artifacts ###
-native/stem_native/target/
+target/
