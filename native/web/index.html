@@ -636,7 +636,7 @@
         decodeState,
         encodeState
       } from "./playground_utils.mjs";
-      import { EditorState } from "https://esm.sh/@codemirror/state@6.5.2/es2022/state.mjs";
+      import { EditorState, Annotation } from "https://esm.sh/@codemirror/state@6.5.2/es2022/state.mjs";
       import {
         Decoration,
         EditorView,
@@ -753,7 +753,10 @@
             lintGutter(),
             linter(() => templateDiagnostics),
             EditorView.updateListener.of((u) => {
-              if (u.docChanged) { activeTab().source = u.state.doc.toString(); debouncedRun(); }
+              if (u.docChanged && !isProgrammatic(u)) {
+                activeTab().source = u.state.doc.toString();
+                debouncedRun();
+              }
               if (u.selectionSet) updateStatusMeta();
             })
           ]
@@ -769,16 +772,27 @@
             yaml(),
             yamlHighlighting,
             EditorView.updateListener.of((u) => {
-              if (u.docChanged) debouncedRun();
+              if (u.docChanged && !isProgrammatic(u)) debouncedRun();
               if (u.selectionSet) updateStatusMeta();
             })
           ]
         })
       });
 
+      // Marks editor doc swaps we make ourselves (tab switch, example load, hash
+      // restore) so the update listeners can tell them apart from user typing and
+      // skip the recompile those programmatic swaps don't warrant.
+      const programmatic = Annotation.define();
+      const isProgrammatic = (u) => u.transactions.some((tr) => tr.annotation(programmatic));
+
       function setEditorText(view, text) {
         const cur = view.state.doc.toString();
-        if (cur !== text) view.dispatch({ changes: { from: 0, to: cur.length, insert: text } });
+        if (cur !== text) {
+          view.dispatch({
+            changes: { from: 0, to: cur.length, insert: text },
+            annotations: programmatic.of(true),
+          });
+        }
       }
 
       // Both editors are visible, so "active view" follows whichever has focus —
@@ -836,7 +850,7 @@
       }
 
       function selectTemplateTab(i) {
-        activeView = "tmpl"; activeTabIdx = i; syncEditor();
+        activeView = "tmpl"; activeTabIdx = i; showActiveTab();
       }
       function selectDataTab() {
         // The data editor is always visible now; just move focus to it.
@@ -847,7 +861,7 @@
         do { name = "partial" + n++; } while (tabs.some((t) => t.name === name));
         tabs.push({ name, source: "" });
         activeView = "tmpl"; activeTabIdx = tabs.length - 1;
-        syncEditor();
+        showActiveTab(); run(); // the partial set changed, so re-render
       }
       function removeTab(i) {
         if (i === 0) return;
@@ -855,18 +869,19 @@
         if (activeTabIdx === i) activeTabIdx = i - 1;
         else if (activeTabIdx > i) activeTabIdx -= 1;
         tabs.splice(i, 1);
-        syncEditor();
+        showActiveTab(); run(); // the partial set changed, so re-render
       }
 
-      function syncEditor() {
-        // Both editors stay visible; the tabs drive the template editor.
-        setEditorText(templateView, activeTab().source);
+      // Display the active tab in the template editor. Switching which source is
+      // shown does not change the compiled program, so this never recompiles or
+      // rebuilds the output — only callers that change the sources call run().
+      function showActiveTab() {
+        setEditorText(templateView, activeTab().source); // programmatic → no auto-run
         byId("sources-sub").textContent = activeTabIdx === 0
           ? "entry template · compiled in-browser"
           : `partial · referenced as {{> ${activeTab().name}}}`;
 
         renderTabs();
-        run();
         updateStatusMeta();
       }
 
@@ -1219,7 +1234,7 @@
         byId("escape-select").value = "";
         byId("example-select").value = String(idx);
         setOutputView(ex.view === "source" ? "source" : "rendered");
-        syncEditor();
+        showActiveTab(); run();
       }
 
       // ── URL state ─────────────────────────────────────────────────────
@@ -1250,7 +1265,7 @@
           byId("escape-select").value = escapeMode;
           byId("example-select").value = "-1";
           setOutputView(s.v === "source" ? "source" : "rendered");
-          syncEditor();
+          showActiveTab(); run();
           return true;
         } catch { return false; }
       }
