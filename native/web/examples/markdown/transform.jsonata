@@ -1,0 +1,32 @@
+/* Controller: a flat commit list -> ordered changelog sections. JSONata groups
+   by conventional-commit type, keeps a fixed section order, drops empty groups,
+   and counts each group. The template (View) only renders Markdown. */
+(
+  $titles := {
+    "feat": "Features",
+    "fix": "Fixes",
+    "perf": "Performance",
+    "docs": "Documentation",
+    "chore": "Chores"
+  };
+  $order := ["feat", "fix", "perf", "docs", "chore"];
+
+  $sections := $order.(
+    $t := $;
+    /* [ ] forces an array even when a type has a single commit. */
+    $items := [ $$.commits[type = $t].{ "scope": scope, "desc": desc } ];
+    $count($items) > 0 ? {
+      "title": $lookup($titles, $t),
+      "count": $count($items),
+      "items": $items
+    }
+  );
+
+  {
+    "project": project,
+    "version": version,
+    "date": date,
+    "total": $count(commits),
+    "sections": $sections
+  }
+)

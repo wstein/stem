@@ -1959,7 +1959,12 @@
       setOutputView(outputView);
       renderDataTabs(); // paint the data-pane tabs before the async example load
 
-      if (!restoreHash()) await loadExample(3); // default: HTML cards
+      // Default load is keyed by id, not array position, so reordering the
+      // examples.json catalog (e.g. simple -> advanced) never breaks it.
+      if (!restoreHash()) {
+        const def = examples.findIndex((e) => e.id === "html-cards");
+        await loadExample(def < 0 ? 0 : def);
+      }
       applySplits();
       updateStatusMeta();
       showTweaks(); // open the Tweaks panel on first load

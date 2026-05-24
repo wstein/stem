@@ -3,14 +3,6 @@
   { "id": "pipeline", "label": "Pipeline", "view": "source", "main": "main.stem", "partials": [], "data": "data.yaml" },
   { "id": "list", "label": "List", "view": "rendered", "main": "main.stem", "partials": [], "data": "data.yaml" },
   {
-    "id": "html-cards",
-    "label": "HTML cards",
-    "view": "rendered",
-    "main": "main.stem",
-    "partials": ["styles", "header", "card", "avatar", "lead_badge", "identity", "name", "role"],
-    "data": "data.yaml"
-  },
-  {
     "id": "partials",
     "label": "Partials",
     "view": "rendered",
@@ -25,6 +17,23 @@
     "main": "main.stem",
     "partials": ["row"],
     "data": "data.yaml"
+  },
+  {
+    "id": "html-cards",
+    "label": "HTML cards",
+    "view": "rendered",
+    "main": "main.stem",
+    "partials": ["styles", "header", "card", "avatar", "lead_badge", "identity", "name", "role"],
+    "data": "data.yaml"
+  },
+  {
+    "id": "markdown",
+    "label": "Markdown changelog",
+    "view": "markdown",
+    "main": "main.stem",
+    "partials": [],
+    "data": "data.yaml",
+    "transform": "transform.jsonata"
   },
   {
     "id": "infographic",

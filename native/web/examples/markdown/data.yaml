@@ -1,0 +1,12 @@
+# Raw release data — the Model. The transform (Controller) groups the flat
+# commit list by type and counts each group; the template renders Markdown.
+project: Stem
+version: 0.5.0
+date: "2026-05-24"
+commits:
+  - { type: feat, scope: playground, desc: editable JSONata transform tab }
+  - { type: feat, scope: parser, desc: literal segment keys }
+  - { type: feat, scope: native, desc: zero-arity getter hook }
+  - { type: fix, scope: renderer, desc: trailing-tilde partial sync }
+  - { type: fix, scope: playground, desc: single-pass source view }
+  - { type: docs, scope: notes, desc: MVC pipeline write-up }
