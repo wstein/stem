@@ -13,3 +13,4 @@ path = "src/lib.rs"
 [dependencies]
 stem_native = { path = "../stem_native" }
 serde_json = "1"
+jsonata-core = { version = "2.1.4", default-features = false }

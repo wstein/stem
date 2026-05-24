@@ -7,6 +7,7 @@ transformers (the host hook).
 ```sh
 cargo run --example compile_time     # template baked in at compile time
 cargo run --example dynamic_eval     # template + data supplied at runtime
+cargo run --example jsonata_pipeline # JSONata preprocessing -> Stem rendering
 cargo test                           # unit tests for the shared glue
 ```
 
@@ -21,6 +22,13 @@ cargo test                           # unit tests for the shared glue
   assembled (or read from `argv`) at runtime, compiled to bytecode once, then
   evaluated against each data record. Optionally takes a template string and a
   JSON-array data file as arguments.
+- [`examples/jsonata_pipeline.rs`](examples/jsonata_pipeline.rs) — a two-stage
+  pipeline: [`jsonata-core`](https://crates.io/crates/jsonata-core) preprocesses
+  raw orders into a view model (group, sum, rank), then Stem renders a report.
+  This keeps the template logic-less — aggregation lives in the declarative
+  transform, presentation in capability-gated transformers — mirroring the
+  playground's Transform tab. (The `jsonata-core` dependency builds without its
+  `simd` default feature for portability.)
 
 ## Transformers
 

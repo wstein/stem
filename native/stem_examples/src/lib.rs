@@ -14,6 +14,7 @@
 //     embedder can add (or override) names. The pipeline value arrives as the
 //     first positional argument, mirroring the BEAM `transformers:` binding.
 
+use jsonata_core::{evaluator::Evaluator, parser, value::JValue};
 use serde_json::{json, Value};
 use stem_native::{handle_with_host, Host, TransformerCall};
 
@@ -92,6 +93,23 @@ pub fn render_template(source: &str, data: Value) -> Result<String, String> {
     Ok(render(&compile(source)?, data))
 }
 
+/// Evaluate a JSONata expression against JSON `data`, returning JSON — the
+/// data-preprocessing stage of the `jsonata_pipeline` example. `JValue` is
+/// jsonata-core's value type; it is serde-(de)serializable, so it bridges to
+/// `serde_json::Value` cleanly.
+pub fn jsonata(expr: &str, data: &Value) -> Result<Value, String> {
+    let ast = parser::parse(expr).map_err(|err| format!("jsonata parse error: {err:?}"))?;
+    let input: JValue = serde_json::from_value(data.clone())
+        .map_err(|err| format!("jsonata input error: {err}"))?;
+    let output = Evaluator::new()
+        .evaluate(&ast, &input)
+        .map_err(|err| format!("jsonata eval error: {err:?}"))?;
+    let encoded = output
+        .to_json_string()
+        .map_err(|err| format!("jsonata output error: {err}"))?;
+    serde_json::from_str(&encoded).map_err(|err| format!("jsonata decode error: {err}"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -139,5 +157,23 @@ mod tests {
     #[test]
     fn compile_error_is_reported_not_panicked() {
         assert!(compile("{{ unterminated").is_err());
+    }
+
+    #[test]
+    fn jsonata_preprocesses_into_a_view_model() {
+        let data = json!({
+            "orders": [
+                { "product": "widget", "qty": 3, "price": 10 },
+                { "product": "widget", "qty": 2, "price": 10 },
+                { "product": "gadget", "qty": 1, "price": 50 }
+            ]
+        });
+        let model = jsonata(
+            r#"{ "total": $sum(orders.(qty * price)), "products": $keys(orders{product: $sum(qty)}) }"#,
+            &data,
+        )
+        .unwrap();
+        assert_eq!(model["total"], json!(100));
+        assert_eq!(model["products"], json!(["widget", "gadget"]));
     }
 }
