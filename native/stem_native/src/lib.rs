@@ -300,7 +300,7 @@ fn parse_partials(value: Option<&Value>) -> compile::Partials {
 // input-triggered abort (a DoS in the browser/WASM build) into a message.
 fn refuse_unsupported(input: &Input) -> Option<String> {
     unsupported_feature(&input.program.instructions)
-        .map(|feature| format!("stem_native error: unsupported {feature} in this native PoC"))
+        .map(|feature| format!("stem_native error: unsupported {feature}"))
 }
 
 fn root_ctx(data: &Value, resolve: GetterResolver) -> Ctx {
