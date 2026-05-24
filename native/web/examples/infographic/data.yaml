@@ -10,12 +10,14 @@ phases:
   - { label: Compile, value: 395 }
   - { label: Render, value: 560 }
 
-# Bars — transformer stdlib, by capability group (count)
+# Bars — transformer stdlib, registered names per capability group. Counts come
+# straight from lib/stem/transformers/<group>.ex (39 names across 5 groups).
 groups:
-  - { label: Strings, value: 42 }
-  - { label: Collections, value: 33 }
-  - { label: Predicates, value: 15 }
-  - { label: Minimum, value: 10 }
+  - { label: Strings, value: 13 }
+  - { label: Collections, value: 13 }
+  - { label: Minimum, value: 8 }
+  - { label: Predicates, value: 3 }
+  - { label: I18n, value: 2 }
 
 # Waffle — line coverage (%)
 coverage: 98
