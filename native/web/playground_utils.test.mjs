@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import {
   byteToChar,
   byteRangeToCharRange,
+  charToByte,
   charToLineColumn,
   decodeState,
   encodeState
@@ -18,6 +19,19 @@ test("byteToChar maps UTF-8 byte offsets to JS character indices", () => {
   assert.equal(byteToChar(source, 2), 1);
   assert.equal(byteToChar(source, 5), 3);
   assert.equal(byteToChar(source, 6), 4);
+});
+
+test("charToByte maps JS character indices to UTF-8 byte offsets", () => {
+  const source = "A😀B";
+
+  assert.equal(charToByte(source, 0), 0);
+  assert.equal(charToByte(source, 1), 1); // after "A"
+  assert.equal(charToByte(source, 3), 5); // after "A😀" (😀 is 4 bytes)
+  assert.equal(charToByte(source, 4), 6); // after "A😀B"
+  // Inverts byteToChar on character boundaries.
+  for (const byte of [0, 1, 5, 6]) {
+    assert.equal(charToByte(source, byteToChar(source, byte)), byte);
+  }
 });
 
 test("byteRangeToCharRange returns a safe non-empty range", () => {

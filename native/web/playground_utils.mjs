@@ -33,6 +33,13 @@ export function byteToChar(source, byteOffset) {
   return source.length;
 }
 
+// Inverse of byteToChar: the UTF-8 byte offset of a JS string index, so a
+// CodeMirror caret position can be compared against Rust byte spans.
+export function charToByte(source, charIndex) {
+  const index = Math.max(0, Math.min(charIndex, source.length));
+  return encoder.encode(source.slice(0, index)).length;
+}
+
 export function byteRangeToCharRange(source, startByte, endByte) {
   const from = byteToChar(source, startByte);
   const to = byteToChar(source, endByte);

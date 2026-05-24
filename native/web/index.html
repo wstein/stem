@@ -301,7 +301,8 @@
         font-weight: 700; color: var(--tok-key);
         box-shadow: inset 0 -1px 0 var(--accent-soft);
       }
-      .output-body pre .seg:hover {
+      .output-body pre .seg:hover,
+      .output-body pre .seg.seg-linked {
         background: var(--accent-soft);
         box-shadow: inset 0 0 0 1px var(--accent);
       }
@@ -640,6 +641,7 @@
       import { createRenderer } from "./stem.mjs";
       import {
         byteRangeToCharRange,
+        charToByte,
         charToLineColumn,
         debounce,
         decodeState,
@@ -790,7 +792,7 @@
                 activeTab().source = u.state.doc.toString();
                 scheduleRun();
               }
-              if (u.selectionSet) updateStatusMeta();
+              if (u.selectionSet) { updateStatusMeta(); syncOutputToCaret(); }
             })
           ]
         })
@@ -916,6 +918,7 @@
 
         renderTabs();
         updateStatusMeta();
+        caretLinkKey = null; syncOutputToCaret();
       }
 
       // ── Compile + render ──────────────────────────────────────────────
@@ -1031,6 +1034,9 @@
           setOutput("");
         }
         saveHash();
+        // Re-apply the caret→output highlight against the freshly rendered runs.
+        caretLinkKey = null;
+        syncOutputToCaret();
       }
 
       const debouncedRun = debounce(run, 100);
@@ -1084,6 +1090,7 @@
         hideSegTip(); clearLink();
         for (const b of document.querySelectorAll(".segmented button"))
           b.classList.toggle("on", b.dataset.view === view);
+        caretLinkKey = null; syncOutputToCaret();
       }
 
       // ── Source-map interactions (Source view) ─────────────────────────
@@ -1180,6 +1187,34 @@
           templateView.dispatch({ effects: setLinkHighlight.of(null) });
           const tabEl = idx >= 0 ? byId("tmpl-tabs").children[idx] : null;
           if (tabEl) { tabEl.classList.add("tab-linked"); linkedTabEl = tabEl; }
+        }
+      }
+
+      // Reverse direction: the template caret highlights the output run(s) it
+      // produced. The output spans already carry their source file + byte span
+      // (data-*), so a caret byte offset matches a run when the file agrees and
+      // start <= byte < end.
+      let caretLinkKey = null; // dirty-check: `${file}:${byteOffset}`
+
+      function clearOutputLink() {
+        for (const el of byId("output-source").querySelectorAll(".seg.seg-linked"))
+          el.classList.remove("seg-linked");
+      }
+
+      function syncOutputToCaret() {
+        // Suppressed mid-render (offsets stale) and when the text view is hidden.
+        if (renderPending || outputView !== "source") { clearOutputLink(); caretLinkKey = null; return; }
+        const file = activeTabIdx === 0 ? "main" : activeTab().name;
+        const byte = charToByte(templateView.state.doc.toString(), templateView.state.selection.main.head);
+        const key = `${file}:${byte}`;
+        if (key === caretLinkKey) return;
+        caretLinkKey = key;
+        clearOutputLink();
+        for (const el of byId("output-source").querySelectorAll(".seg")) {
+          if (el.dataset.file === file && el.dataset.start !== undefined &&
+              Number(el.dataset.start) <= byte && byte < Number(el.dataset.end)) {
+            el.classList.add("seg-linked");
+          }
         }
       }
 
