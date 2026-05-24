@@ -597,9 +597,9 @@
                    visually in the iframe. Labels read "Rendered" / "Preview";
                    the data-view keys are kept stable (used by examples + state). -->
               <div class="segmented" role="tablist">
-                <button data-view="source">Rendered</button>
-                <button data-view="rendered" class="on">Preview</button>
-                <button data-view="markdown">Markdown</button>
+                <button data-view="source">Plain Text</button>
+                <button data-view="rendered" class="on">HTML Preview</button>
+                <button data-view="markdown">Markdown Preview</button>
               </div>
               <span class="field-label" style="font-size:11px">Escape</span>
               <select id="escape-select" class="select" aria-label="Escape mode">
@@ -1435,9 +1435,9 @@
           { label: "Add partial",        kind: "sources", run: addPartial },
           { label: "Toggle focus · Sources", kind: "view", run: () => toggleFocus("sources") },
           { label: "Toggle focus · Output",  kind: "view", run: () => toggleFocus("output") },
-          { label: "View · Preview",  kind: "view", run: () => { setOutputView("rendered"); run(); } },
-          { label: "View · Markdown", kind: "view", run: () => { setOutputView("markdown"); run(); } },
-          { label: "View · Rendered", kind: "view", run: () => { setOutputView("source"); run(); } },
+          { label: "View · Plain Text",       kind: "view", run: () => { setOutputView("source"); run(); } },
+          { label: "View · HTML Preview",     kind: "view", run: () => { setOutputView("rendered"); run(); } },
+          { label: "View · Markdown Preview", kind: "view", run: () => { setOutputView("markdown"); run(); } },
           { label: "Reset layout", kind: "view",
             run: () => { splits = { w0: null, h0: null, ew: null, eh: null }; applySplits(); saveSplits(); setFocus(null); } },
           { label: "Copy share link", kind: "share", run: copyShareLink },

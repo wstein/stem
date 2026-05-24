@@ -49,12 +49,13 @@ Playground workflow highlights:
   on narrow screens.
 - Inline compile diagnostics in the template editor gutter, plus a status lane
   with line/column locations.
-- Output as "Rendered" (text, mapped to its source), "Preview" (output HTML in a
-  locked-down iframe), or "Markdown" (the output interpreted as Markdown in the
-  same iframe). In the Rendered view the source link is bidirectional: hovering
-  a run names its source file/tag and highlights the originating span in the
-  editor (or tints its tab), clicking jumps the caret there, and moving the
-  editor caret highlights the output run(s) it produced.
+- Output as "Plain Text" (the output as text, mapped to its source), "HTML
+  Preview" (output HTML in a locked-down iframe), or "Markdown Preview" (the
+  output interpreted as Markdown in the same iframe). In the Plain Text view the
+  source link is bidirectional: hovering a run names its source file/tag and
+  highlights the originating span in the editor (or tints its tab), clicking
+  jumps the caret there, and moving the editor caret highlights the output
+  run(s) it produced.
 - Command palette and shortcuts:
   - `Cmd/Ctrl+Shift+P` opens the palette.
   - `Cmd/Ctrl+Enter` renders immediately.
