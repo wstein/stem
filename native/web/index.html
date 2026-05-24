@@ -290,11 +290,26 @@
         background: var(--bg-pane); overflow: hidden;
       }
       .output-body iframe { width: 100%; height: 100%; border: 0; background: var(--bg); display: block; }
-      .output-body pre {
-        margin: 0; padding: 12px 14px; width: 100%; height: 100%; overflow: auto;
-        background: var(--bg-1); color: var(--fg);
-        font: 12.5px/1.55 var(--font-mono); white-space: pre-wrap; word-break: break-word;
+      .src-view {
+        position: absolute; inset: 0; display: flex; overflow: auto;
+        background: var(--bg-1);
       }
+      .src-view > pre { margin: 0; color: var(--fg); font: 12.5px/1.55 var(--font-mono); }
+      #output-source {
+        flex: 1 1 auto; min-width: 0; padding: 12px 14px;
+        white-space: pre-wrap; word-break: break-word;
+      }
+      .src-gutter {
+        flex: 0 0 auto; padding: 12px 8px 12px 12px;
+        position: sticky; left: 0; z-index: 1;
+        background: var(--bg-gutter); color: var(--fg-faint);
+        text-align: right; white-space: pre; user-select: none;
+        border-right: 1px solid var(--border);
+      }
+      /* Without line numbers: hide the gutter and let the output wrap. With them:
+         show the gutter and stop wrapping so its rows align 1:1 with the lines. */
+      body:not(.show-line-numbers) .src-gutter { display: none; }
+      body.show-line-numbers #output-source { white-space: pre; word-break: normal; }
       .output-body[data-empty="true"]::after {
         content: "no output"; position: absolute; inset: 0;
         display: grid; place-items: center;
@@ -648,7 +663,10 @@
 
           <div class="output-body" data-empty="true">
             <iframe id="output-preview" sandbox="allow-same-origin" title="Rendered output"></iframe>
-            <pre id="output-source" hidden></pre>
+            <div class="src-view" id="output-text" hidden>
+              <pre class="src-gutter" id="output-gutter" aria-hidden="true"></pre>
+              <pre id="output-source"></pre>
+            </div>
           </div>
           <div id="seg-tip" class="seg-tip" role="tooltip" hidden></div>
         </section>
@@ -676,7 +694,7 @@
         encodeState,
         partialNameAt
       } from "./playground_utils.mjs";
-      import { EditorState, Annotation, StateField, StateEffect } from "https://esm.sh/@codemirror/state@6.5.2/es2022/state.mjs";
+      import { EditorState, Annotation, StateField, StateEffect, Compartment } from "https://esm.sh/@codemirror/state@6.5.2/es2022/state.mjs";
       import {
         Decoration,
         EditorView,
@@ -815,8 +833,11 @@
         { tag: t.invalid, color: "var(--danger)" },
       ]);
 
+      // The line-number gutter lives in a compartment so the Appearance toggle
+      // can switch it on/off live (applyTweaks reconfigures both editors).
+      const lineNumberComp = new Compartment();
       const sharedExts = [
-        lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(),
+        lineNumberComp.of(lineNumbers()), highlightActiveLineGutter(), highlightActiveLine(),
         bracketMatching(), syntaxHighlighting(themeHighlight),
         cmHistory(), keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         fillTheme,
@@ -1027,6 +1048,11 @@
       function renderSourceView(output, segments) {
         const pre = byId("output-source");
         pre.textContent = "";
+        // Gutter numbers track the output's logical lines (they line up only when
+        // the text isn't wrapping, i.e. when line numbers are on — see the CSS).
+        const lines = output ? output.split("\n").length : 0;
+        byId("output-gutter").textContent =
+          Array.from({ length: lines }, (_, i) => i + 1).join("\n");
         if (!segments.length) { pre.textContent = output; return; }
 
         let cursor = 0; // chars already appended
@@ -1160,7 +1186,7 @@
       function setOutputView(view) {
         outputView = view;
         const isText = view === "source"; // "rendered" and "markdown" use the iframe
-        byId("output-source").hidden = !isText;
+        byId("output-text").hidden = !isText;
         byId("output-preview").hidden = isText;
         hideSegTip(); clearLink();
         for (const b of document.querySelectorAll(".segmented button"))
@@ -1336,7 +1362,8 @@
         pre.addEventListener("mouseout", (e) => {
           if (e.target.closest?.(".seg")) { cancelHover(); hideSegTip(); clearLink(); }
         });
-        pre.addEventListener("scroll", () => { cancelHover(); hideSegTip(); clearLink(); });
+        // The scroll container is the .src-view wrapper (gutter + source).
+        byId("output-text").addEventListener("scroll", () => { cancelHover(); hideSegTip(); clearLink(); });
 
         const activate = (seg) => openSourceLocation(
           seg.dataset.file,
@@ -1643,15 +1670,20 @@
         ],
       };
 
-      let tweaks = { theme: "system", layout: "split" };
+      let tweaks = { theme: "system", layout: "split", lineNumbers: true };
       try { const r = localStorage.getItem(LS_TWEAKS); if (r) tweaks = { ...tweaks, ...JSON.parse(r) }; } catch {}
       // Migrate older saved state: the former "dim" theme is now "dark", moods are gone.
       if (tweaks.theme === "dim") tweaks.theme = "dark";
       if (!["light", "dark", "system"].includes(tweaks.theme)) tweaks.theme = "system";
+      tweaks.lineNumbers = tweaks.lineNumbers !== false; // default on
       delete tweaks.mood;
 
       function applyTweaks() {
         document.body.dataset.theme = tweaks.theme;
+        document.body.classList.toggle("show-line-numbers", tweaks.lineNumbers);
+        const lineNumberExt = tweaks.lineNumbers ? lineNumbers() : [];
+        for (const view of [templateView, dataView])
+          view.dispatch({ effects: lineNumberComp.reconfigure(lineNumberExt) });
         qs(".workspace")?.classList.toggle("stacked", tweaks.layout === "stacked");
         window.dispatchEvent(new Event("resize"));
       }
@@ -1718,6 +1750,17 @@
                 class: tweaks.layout === o.value ? "on" : "",
                 title: o.hint, onclick: () => setTweak("layout", o.value),
               }, [icon(o.icon), mkEl("span", {}, o.label)])
+            )
+          )
+        ]));
+
+        panel.append(twSection("Line numbers", null, [
+          mkEl("div", { class: "tw-segmented" },
+            [{ on: true, label: "On" }, { on: false, label: "Off" }].map((o) =>
+              mkEl("button", {
+                class: tweaks.lineNumbers === o.on ? "on" : "",
+                onclick: () => setTweak("lineNumbers", o.on),
+              }, o.label)
             )
           )
         ]));
