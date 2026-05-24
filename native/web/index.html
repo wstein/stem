@@ -287,7 +287,10 @@
          (and, for expressions, the tag) that produced it. Hover to highlight +
          tooltip; click to jump to the source. */
       .output-body pre .seg { border-radius: 2px; cursor: pointer; }
-      .output-body pre .seg.seg-expr { box-shadow: inset 0 -1px 0 var(--accent-soft); }
+      .output-body pre .seg.seg-expr {
+        font-weight: 700; color: var(--tok-key);
+        box-shadow: inset 0 -1px 0 var(--accent-soft);
+      }
       .output-body pre .seg:hover {
         background: var(--accent-soft);
         box-shadow: inset 0 0 0 1px var(--accent);
@@ -992,12 +995,12 @@
       const segTip = byId("seg-tip");
       function hideSegTip() { segTip.hidden = true; }
 
-          function maybeAppendHint() {
-            const hint = document.createElement("div");
-            hint.className = "seg-tip-hint";
-            hint.textContent = "click to jump to source";
-            segTip.append(hint);
-          }
+      function appendHint() {
+        const hint = document.createElement("div");
+        hint.className = "seg-tip-hint";
+        hint.textContent = "click to jump to source";
+        segTip.append(hint);
+      }
 
       function showSegTip(seg) {
         const file = seg.dataset.file;
@@ -1026,7 +1029,7 @@
           }
         }
 
-        maybeAppendHint();
+        appendHint();
 
         // Position above the segment, flipping below / clamping to the viewport.
         segTip.hidden = false;
