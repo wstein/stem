@@ -415,35 +415,39 @@
       /* Dark — mid-dark violet. Used by the explicit Dark theme, and by
          System when the OS prefers a dark color scheme. Light is :root. */
       body[data-theme="dark"] {
-        --bg: #1e1338; --bg-1: #251740; --bg-2: #2f1d52; --bg-3: #3b2568;
-        --bg-toolbar: #1e1338; --bg-statusbar: #180f2e;
-        --bg-tab-active: #2f1d52; --bg-pane: #231545; --bg-gutter: #1a1030;
-        --fg: #e7defc; --fg-secondary: #b59bff; --fg-muted: #8065c4; --fg-faint: #4e3880;
-        --border: #3b1b6b; --border-strong: #5a2ea6;
-        --accent-soft: #3b1b6b; --accent-softer: #251740;
-        --tok-tag: #b59bff; --tok-cmt: #5a4490; --tok-key: #93c5fd;
-        --tok-str: #3ee0a3; --tok-num: #fbbf24;
-        --success: #3ee0a3;
-        --danger-faint: #3b0a0a;
+        --bg: #16141d; --bg-1: #1b1925; --bg-2: #232030; --bg-3: #2c2940;
+        --bg-toolbar: #16141d; --bg-statusbar: #121019;
+        --bg-tab-active: #232030; --bg-pane: #1b1925; --bg-gutter: #16141d;
+        --fg: #ece9f5; --fg-secondary: #c5bedd; --fg-muted: #968fb0; --fg-faint: #6f6987;
+        --border: #2c2940; --border-strong: #423c5c;
+        --accent: #9b7dff; --accent-2: #bca6ff;
+        --accent-soft: #2e2747; --accent-softer: #221d36;
+        --tok-tag: #c4b5fd; --tok-cmt: #76708e; --tok-key: #93c5fd;
+        --tok-str: #86efac; --tok-num: #fbbf24;
+        --success: #4ade80;
+        --danger: #f87171; --danger-faint: #3a1414;
+        --shadow-pop: 0 12px 32px -8px rgba(0,0,0,.5), 0 0 0 1px rgba(0,0,0,.4);
         background-color: var(--bg) !important;
       }
-      body[data-theme="dark"] iframe { background: #1a1030; }
+      body[data-theme="dark"] iframe { background: #16141d; }
 
       @media (prefers-color-scheme: dark) {
         body[data-theme="system"] {
-          --bg: #1e1338; --bg-1: #251740; --bg-2: #2f1d52; --bg-3: #3b2568;
-          --bg-toolbar: #1e1338; --bg-statusbar: #180f2e;
-          --bg-tab-active: #2f1d52; --bg-pane: #231545; --bg-gutter: #1a1030;
-          --fg: #e7defc; --fg-secondary: #b59bff; --fg-muted: #8065c4; --fg-faint: #4e3880;
-          --border: #3b1b6b; --border-strong: #5a2ea6;
-          --accent-soft: #3b1b6b; --accent-softer: #251740;
-          --tok-tag: #b59bff; --tok-cmt: #5a4490; --tok-key: #93c5fd;
-          --tok-str: #3ee0a3; --tok-num: #fbbf24;
-          --success: #3ee0a3;
-          --danger-faint: #3b0a0a;
+          --bg: #16141d; --bg-1: #1b1925; --bg-2: #232030; --bg-3: #2c2940;
+          --bg-toolbar: #16141d; --bg-statusbar: #121019;
+          --bg-tab-active: #232030; --bg-pane: #1b1925; --bg-gutter: #16141d;
+          --fg: #ece9f5; --fg-secondary: #c5bedd; --fg-muted: #968fb0; --fg-faint: #6f6987;
+          --border: #2c2940; --border-strong: #423c5c;
+          --accent: #9b7dff; --accent-2: #bca6ff;
+          --accent-soft: #2e2747; --accent-softer: #221d36;
+          --tok-tag: #c4b5fd; --tok-cmt: #76708e; --tok-key: #93c5fd;
+          --tok-str: #86efac; --tok-num: #fbbf24;
+          --success: #4ade80;
+          --danger: #f87171; --danger-faint: #3a1414;
+          --shadow-pop: 0 12px 32px -8px rgba(0,0,0,.5), 0 0 0 1px rgba(0,0,0,.4);
           background-color: var(--bg) !important;
         }
-        body[data-theme="system"] iframe { background: #1a1030; }
+        body[data-theme="system"] iframe { background: #16141d; }
       }
 
       /* ── Stacked layout ──────────────────────────────────────────── */
@@ -660,7 +664,8 @@
         highlightActiveLineGutter
       } from "https://esm.sh/@codemirror/view@6.38.8/X-ZEBjb2RlbWlycm9yL3N0YXRlQDYuNS4y/es2022/view.mjs";
       import { defaultKeymap, history as cmHistory, historyKeymap, indentWithTab } from "https://esm.sh/@codemirror/commands@6.10.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
-      import { defaultHighlightStyle, bracketMatching, syntaxHighlighting } from "https://esm.sh/@codemirror/language@6.11.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
+      import { HighlightStyle, bracketMatching, syntaxHighlighting } from "https://esm.sh/@codemirror/language@6.11.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
+      import { tags as t } from "https://esm.sh/@lezer/highlight@1.2.3?target=es2022";
       import { lintGutter, linter, setDiagnosticsEffect } from "https://esm.sh/@codemirror/lint@6.8.5?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
       import { yaml } from "https://esm.sh/@codemirror/lang-yaml@6.1.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
       import { html } from "https://esm.sh/@codemirror/lang-html@6.4.11?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
@@ -771,9 +776,24 @@
         ".cm-scroller": { overflow: "auto" }
       });
 
+      // Theme-aware syntax colors. CodeMirror's defaultHighlightStyle is tuned
+      // for light backgrounds and is unreadable on the dark theme, so map the
+      // grammar tags to the per-theme --tok-* variables instead. The tags come
+      // from the same @lezer/highlight build the language packages use, so the
+      // styleTags they declare resolve to these rules in both light and dark.
+      const themeHighlight = HighlightStyle.define([
+        { tag: t.comment, color: "var(--tok-cmt)", fontStyle: "italic" },
+        { tag: [t.tagName, t.keyword, t.typeName, t.labelName], color: "var(--tok-tag)" },
+        { tag: [t.attributeName, t.propertyName, t.definition(t.propertyName)], color: "var(--tok-key)" },
+        { tag: [t.string, t.attributeValue, t.special(t.string)], color: "var(--tok-str)" },
+        { tag: [t.number, t.bool, t.null, t.atom], color: "var(--tok-num)" },
+        { tag: [t.angleBracket, t.punctuation, t.separator, t.meta], color: "var(--fg-muted)" },
+        { tag: t.invalid, color: "var(--danger)" },
+      ]);
+
       const sharedExts = [
         lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(),
-        bracketMatching(), syntaxHighlighting(defaultHighlightStyle),
+        bracketMatching(), syntaxHighlighting(themeHighlight),
         cmHistory(), keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
         fillTheme,
       ];
