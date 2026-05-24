@@ -160,6 +160,8 @@
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
       }
       .pane-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+      .pane-controls { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
+      .pane-header .divider { width: 1px; height: 16px; background: var(--border); flex: 0 0 auto; }
 
       .segmented {
         display: inline-flex; border: 1px solid var(--border-strong);
@@ -574,7 +576,16 @@
               <h2>Output</h2>
               <span class="sub">rendered in a locked-down iframe</span>
             </div>
-            <div class="pane-actions">
+            <div class="divider"></div>
+            <div class="pane-controls">
+              <!-- The "source" view shows the rendered output as text (with
+                   click-to-source provenance); the "rendered" view shows it
+                   visually in the iframe. Labels read "Rendered" / "Preview";
+                   the data-view keys are kept stable (used by examples + state). -->
+              <div class="segmented" role="tablist">
+                <button data-view="source">Rendered</button>
+                <button data-view="rendered" class="on">Preview</button>
+              </div>
               <span class="field-label" style="font-size:11px">Escape</span>
               <select id="escape-select" class="select" aria-label="Escape mode">
                 <option value="">(as compiled)</option>
@@ -583,10 +594,8 @@
                 <option value="json">json</option>
                 <option value="none">none</option>
               </select>
-              <div class="segmented" role="tablist">
-                <button data-view="rendered" class="on">Rendered</button>
-                <button data-view="source">Source</button>
-              </div>
+            </div>
+            <div class="pane-actions">
               <button class="focus-toggle" data-pane="output" title="Focus this pane (Esc to exit)">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
                   <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/>
@@ -1253,8 +1262,8 @@
           { label: "Add partial",        kind: "sources", run: addPartial },
           { label: "Toggle focus · Sources", kind: "view", run: () => toggleFocus("sources") },
           { label: "Toggle focus · Output",  kind: "view", run: () => toggleFocus("output") },
-          { label: "View · Rendered", kind: "view", run: () => { setOutputView("rendered"); run(); } },
-          { label: "View · Source",   kind: "view", run: () => { setOutputView("source"); run(); } },
+          { label: "View · Preview",  kind: "view", run: () => { setOutputView("rendered"); run(); } },
+          { label: "View · Rendered", kind: "view", run: () => { setOutputView("source"); run(); } },
           { label: "Reset layout", kind: "view",
             run: () => { splits = { w0: null, h0: null, ew: null, eh: null }; applySplits(); saveSplits(); setFocus(null); } },
           { label: "Copy share link", kind: "share", run: copyShareLink },
