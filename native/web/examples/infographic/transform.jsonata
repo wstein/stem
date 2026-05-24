@@ -16,13 +16,16 @@
   };
 
   /* Donut via stroke-dasharray: each phase is an arc length of the circumference,
-     offset by the cumulative length of the phases before it. */
+     offset by the cumulative length of the phases before it. Phases are ordered
+     alphabetically by label (^ is JSONata's order-by); the cumulative offsets
+     are built from that same order so the ring stays seamless. */
   $r := 52;
   $C := 2 * 3.1415927 * $r;
   $tot := $sum(phases.value);
-  $cum := $reduce(phases.value, function($a, $v){ $append($a, $a[-1] + $v) }, [0]);
+  $pord := phases^(label);
+  $cum := $reduce($pord.value, function($a, $v){ $append($a, $a[-1] + $v) }, [0]);
   $donut := {
-    "segments": phases#$i.{
+    "segments": $pord#$i.{
       "label": label,
       "value": value,
       "pct": $round(value / $tot * 100),
