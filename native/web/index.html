@@ -743,6 +743,7 @@
       // ── State ─────────────────────────────────────────────────────────
       let tabs        = [{ name: "main", source: "" }];
       let activeTabIdx = 0;
+      let loadedExampleIdx = -1;      // which example is loaded (-1 = custom/edited)
       let activeView   = "tmpl";      // "tmpl" | "data"
       let outputView   = "rendered";  // "rendered" | "source"
       let escapeMode   = "";
@@ -1022,6 +1023,7 @@
         do { name = "partial" + n++; } while (tabs.some((t) => t.name === name));
         tabs.push({ name, source: "" });
         activeView = "tmpl"; activeTabIdx = tabs.length - 1;
+        markCustom();
         showActiveTab(); run(); // the partial set changed, so re-render
       }
       function removeTab(i) {
@@ -1030,6 +1032,7 @@
         if (activeTabIdx === i) activeTabIdx = i - 1;
         else if (activeTabIdx > i) activeTabIdx -= 1;
         tabs.splice(i, 1);
+        markCustom();
         showActiveTab(); run(); // the partial set changed, so re-render
       }
 
@@ -1261,7 +1264,7 @@
       // that window the output segments still carry the pre-edit byte offsets, so
       // the hover link-highlight is suppressed to avoid pointing at stale source.
       let renderPending = false;
-      function scheduleRun() { renderPending = true; debouncedRun(); }
+      function scheduleRun() { markCustom(); renderPending = true; debouncedRun(); }
 
       function updateDiagnostics(diags) {
         templateDiagnostics = diags;
@@ -1643,8 +1646,17 @@
         escapeMode = "";
         byId("escape-select").value = "";
         byId("example-select").value = String(idx);
+        loadedExampleIdx = idx;
         setOutputView(validView(ex.view));
         showActiveTab(); run();
+      }
+
+      // Once the user edits anything, the state no longer matches a shipped
+      // example: flag it custom so the dropdown and the URL state reflect that.
+      function markCustom() {
+        if (loadedExampleIdx === -1) return;
+        loadedExampleIdx = -1;
+        byId("example-select").value = "-1";
       }
 
       // ── URL state ─────────────────────────────────────────────────────
@@ -1655,6 +1667,7 @@
           t: transformSrc,
           e: escapeMode, v: outputView,
           av: activeView, ai: activeTabIdx,
+          x: loadedExampleIdx, // which example (or -1 for an edited "custom" state)
         };
       }
 
@@ -1662,10 +1675,20 @@
         try { history.replaceState(null, "", "#" + encodeState(snapshotState())); } catch {}
       }
 
-      function restoreHash() {
+      async function restoreHash() {
         if (!location.hash.length) return false;
         try {
           const s = decodeState(location.hash.slice(1));
+          // Hashes written before example tracking carry no `x`: treat them as
+          // "no state" so a stale browsing snapshot doesn't pin the page to it.
+          if (s.x === undefined) return false;
+          // A clean example reference: reload it fresh so it reflects the current
+          // example files and selects the dropdown (not a stale embedded copy).
+          if (Number.isInteger(s.x) && s.x >= 0 && examples[s.x]) {
+            await loadExample(s.x);
+            return true;
+          }
+          // Otherwise it is a genuine custom edit (x === -1): restore verbatim.
           tabs = Array.isArray(s.tabs) && s.tabs.length
             ? s.tabs.map((t, i) => ({ name: i === 0 ? "main" : (t.n ?? "partial"), source: t.s ?? "" }))
             : [{ name: "main", source: "" }];
@@ -1677,6 +1700,7 @@
           showDataTab();
           escapeMode = s.e ?? "";
           byId("escape-select").value = escapeMode;
+          loadedExampleIdx = -1;
           byId("example-select").value = "-1";
           setOutputView(validView(s.v));
           showActiveTab(); run();
@@ -1997,8 +2021,8 @@
 
       // Default load is keyed by id, not array position, so reordering the
       // examples.json catalog (e.g. simple -> advanced) never breaks it.
-      if (!restoreHash()) {
-        const def = examples.findIndex((e) => e.id === "html-cards");
+      if (!(await restoreHash())) {
+        const def = examples.findIndex((e) => e.id === "greeting");
         await loadExample(def < 0 ? 0 : def);
       }
       applySplits();
