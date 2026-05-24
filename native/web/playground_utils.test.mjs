@@ -8,7 +8,8 @@ import {
   charToByte,
   charToLineColumn,
   decodeState,
-  encodeState
+  encodeState,
+  partialNameAt
 } from "./playground_utils.mjs";
 
 test("byteToChar maps UTF-8 byte offsets to JS character indices", () => {
@@ -52,6 +53,18 @@ test("charToLineColumn reports 1-based line and column", () => {
   assert.deepEqual(charToLineColumn(source, 0), { line: 1, column: 1 });
   assert.deepEqual(charToLineColumn(source, 3), { line: 2, column: 1 });
   assert.deepEqual(charToLineColumn(source, 7), { line: 3, column: 2 });
+});
+
+test("partialNameAt finds the partial under the caret", () => {
+  const src = "a {{> card}} b\n{{> row x=1}}";
+  //          0         1         2
+  //          0123456789012345678901234567
+  assert.equal(partialNameAt(src, 0), null);    // on "a"
+  assert.equal(partialNameAt(src, 2), "card");  // at the opening "{"
+  assert.equal(partialNameAt(src, 5), "card");  // inside the name
+  assert.equal(partialNameAt(src, 11), "card"); // on the closing "}"
+  assert.equal(partialNameAt(src, 12), null);   // the space after "}}"
+  assert.equal(partialNameAt(src, 20), "row");  // inside {{> row x=1}}
 });
 
 test("state encode/decode round-trips", () => {

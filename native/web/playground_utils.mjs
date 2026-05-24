@@ -46,6 +46,18 @@ export function byteRangeToCharRange(source, startByte, endByte) {
   return [from, Math.max(from + 1, to)];
 }
 
+// The partial name if `charIndex` sits inside a `{{> name ...}}` tag, else null.
+// A partial tag expands inline and produces no output run of its own, so the
+// playground uses this to map a caret on the tag to that partial's output.
+export function partialNameAt(source, charIndex) {
+  const re = /\{\{~?\s*>\s*([^\s}]+)[^}]*\}\}/g;
+  let m;
+  while ((m = re.exec(source)) !== null) {
+    if (charIndex >= m.index && charIndex < m.index + m[0].length) return m[1];
+  }
+  return null;
+}
+
 export function charToLineColumn(source, charIndex) {
   const index = Math.max(0, Math.min(charIndex, source.length));
   const upToIndex = source.slice(0, index);
