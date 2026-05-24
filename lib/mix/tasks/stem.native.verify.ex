@@ -40,7 +40,10 @@ defmodule Mix.Tasks.Stem.Native.Verify do
     corpus = Stem.Conformance.corpus()
 
     requests =
-      Enum.map(corpus, &Engine.request(&1.template, &1.data, Map.get(&1, :escape, :html)))
+      Enum.map(corpus, fn vector ->
+        groups = Enum.map(vector.transformers, &Atom.to_string/1)
+        Engine.request(vector.template, vector.data, Map.get(vector, :escape, :html), groups)
+      end)
 
     actuals = Engine.render_batch(engine, requests)
 

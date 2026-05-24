@@ -3,7 +3,9 @@
 // PoC native renderer for Stem portable bytecode (`stem-bc/v1`).
 //
 // `handle/1` takes a JSON request — `{"program": <Stem.Bytecode.to_wire/1>,
-// "data": <assigns>}`, or `{"batch": [...]}` — and returns the rendered output.
+// "data": <assigns>, "transformers": [<group names>]}`, or `{"batch": [...]}` —
+// and returns the rendered output. The optional `transformers` list names the
+// enabled capability groups (Minimum is always on); it defaults to Minimum-only.
 // The `stem_native` bin wraps it for WASI stdin/stdout; the C-ABI exports
 // (`stem_alloc`/`stem_dealloc`/`stem_render`) expose it to a browser via
 // `wasm32-unknown-unknown` with no WASI.
@@ -23,6 +25,14 @@ mod compile;
 struct Input {
     program: Program,
     data: Value,
+    // Capability groups the caller has loaded, by name ("strings",
+    // "collections", "predicates", "i18n", or the "standard" bundle). Mirrors
+    // the BEAM `transformers:` binding: the Minimum group is always on, and a
+    // transformer from any other group is refused unless its group is listed.
+    // Absent on the parity wire and from the C ABI, where it defaults to
+    // Minimum-only (secure by default).
+    #[serde(default)]
+    transformers: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -296,11 +306,14 @@ fn parse_partials(value: Option<&Value>) -> compile::Partials {
 }
 
 // The first construct in the program this core cannot render with byte-parity,
-// as a recoverable error string. Refusing — never panicking — turns an
-// input-triggered abort (a DoS in the browser/WASM build) into a message.
+// or the first transformer call outside the caller's enabled capability groups,
+// as a recoverable error string. Refusing up front — never panicking, never
+// emitting partial output — turns an input-triggered abort (a DoS in the
+// browser/WASM build) into a message and mirrors the BEAM, which raises before
+// rendering when a template reaches an unloaded transformer.
 fn refuse_unsupported(input: &Input) -> Option<String> {
-    unsupported_feature(&input.program.instructions)
-        .map(|feature| format!("stem_native error: unsupported {feature}"))
+    let groups = parse_groups(&input.transformers);
+    check_instrs(&input.program.instructions, groups)
 }
 
 fn root_ctx(data: &Value, resolve: GetterResolver) -> Ctx {
@@ -337,65 +350,99 @@ fn render_input_mapped(input: &Input, resolve: GetterResolver) -> String {
 // Escape modes the native renderer implements with byte-parity to the BEAM.
 const SUPPORTED_ESCAPES: &[&str] = &["none", "html", "xml", "json"];
 
-// Transformers the native `call` dispatcher implements with byte-parity. Kept
-// in sync with the match arms in `call`; a name outside this set is refused
-// rather than panicked on.
-const SUPPORTED_TRANSFORMERS: &[&str] = &[
-    "upcase",
-    "downcase",
-    "trim",
-    "capitalize",
-    "replace",
-    "truncate",
-    "starts_with",
-    "ends_with",
-    "reverse",
-    "take",
-    "drop",
-    "slice",
-    "first",
-    "default",
-    "join",
-    "lookup",
-    "escape_html",
-    "escape_json",
-    "map",
-    "filter",
-    "sort",
-    "sort_by",
-    "group_by",
-    "compact",
-    "uniq",
-    "flatten",
-    "contains",
-    "empty?",
-    "present?",
-];
+// ── Capability groups (mirror Stem.Transformers.groups/0) ───────────────────
+//
+// Minimum is the always-on floor; Strings, Collections, Predicates, and I18n
+// are opt-in via the request "transformers" list. A built-in transformer is
+// callable only when one of the groups that provide it is enabled, so an
+// untrusted template can never reach a more powerful transformer than the
+// caller loaded — the same secure-by-default model as the BEAM dispatcher.
+const GROUP_MINIMUM: u8 = 1 << 0;
+const GROUP_STRINGS: u8 = 1 << 1;
+const GROUP_COLLECTIONS: u8 = 1 << 2;
+const GROUP_PREDICATES: u8 = 1 << 3;
+const GROUP_I18N: u8 = 1 << 4;
 
-// Walks a program for the first construct the native core cannot render with
-// byte-parity, returning a human description (no source span: the render input
-// carries the compiled program, not the original template).
-fn unsupported_feature(instrs: &[Instr]) -> Option<String> {
-    instrs.iter().find_map(instr_unsupported)
+// Resolve the enabled-group set from the request's group names. Minimum is
+// always included; unknown names are ignored. "standard" is the Minimum+Strings
+// convenience bundle, matching `Stem.Transformers.Standard`.
+fn parse_groups(names: &[String]) -> u8 {
+    let mut set = GROUP_MINIMUM;
+    for name in names {
+        set |= match name.as_str() {
+            "minimum" => GROUP_MINIMUM,
+            "strings" => GROUP_STRINGS,
+            "collections" => GROUP_COLLECTIONS,
+            "predicates" => GROUP_PREDICATES,
+            "i18n" => GROUP_I18N,
+            "standard" => GROUP_MINIMUM | GROUP_STRINGS,
+            _ => 0,
+        };
+    }
+    set
 }
 
-fn instr_unsupported(instr: &Instr) -> Option<String> {
+// The capability group(s) that provide a built-in transformer, or `None` if the
+// name is not a native built-in. `take`/`drop`/`slice`/`first`/`reverse` are
+// shared by Strings and Collections, so either group enables them. Kept in sync
+// with the match arms in `call`.
+fn builtin_groups(name: &str) -> Option<u8> {
+    Some(match name {
+        "escape_html" | "escape_json" | "default" | "lookup" | "join" => GROUP_MINIMUM,
+        "trim" | "upcase" | "downcase" | "capitalize" | "truncate" | "replace" | "starts_with"
+        | "ends_with" => GROUP_STRINGS,
+        "take" | "drop" | "slice" | "first" | "reverse" => GROUP_STRINGS | GROUP_COLLECTIONS,
+        "map" | "filter" | "sort" | "sort_by" | "group_by" | "compact" | "uniq" | "flatten" => {
+            GROUP_COLLECTIONS
+        }
+        "contains" | "empty?" | "present?" => GROUP_PREDICATES,
+        _ => return None,
+    })
+}
+
+// Group names in a bitset, joined with " or " for the unloaded-group message.
+fn group_phrase(set: u8) -> String {
+    [
+        (GROUP_MINIMUM, "minimum"),
+        (GROUP_STRINGS, "strings"),
+        (GROUP_COLLECTIONS, "collections"),
+        (GROUP_PREDICATES, "predicates"),
+        (GROUP_I18N, "i18n"),
+    ]
+    .iter()
+    .filter(|(bit, _)| set & bit != 0)
+    .map(|(_, name)| *name)
+    .collect::<Vec<_>>()
+    .join(" or ")
+}
+
+// Walk a program for the first construct the native core cannot render with
+// byte-parity, or the first transformer call outside the enabled groups,
+// returning the full error string (no source span: the render input carries the
+// compiled program, not the original template).
+fn check_instrs(instrs: &[Instr], groups: u8) -> Option<String> {
+    instrs.iter().find_map(|instr| check_instr(instr, groups))
+}
+
+fn check_instr(instr: &Instr, groups: u8) -> Option<String> {
     match instr {
         Instr::Text { .. } => None,
         Instr::Emit { value, escape, .. } => {
             if !SUPPORTED_ESCAPES.contains(&escape.as_str()) {
-                Some(format!("escape mode '{escape}'"))
+                Some(format!(
+                    "stem_native error: unsupported escape mode '{escape}'"
+                ))
             } else {
-                op_unsupported(value)
+                check_op(value, groups)
             }
         }
         Instr::If {
             cond,
             then,
             otherwise,
-        } => op_unsupported(cond)
-            .or_else(|| unsupported_feature(then))
-            .or_else(|| unsupported_feature(otherwise)),
+        } => check_op(cond, groups)
+            .or_else(|| check_instrs(then, groups))
+            .or_else(|| check_instrs(otherwise, groups)),
         Instr::Each {
             subject,
             body,
@@ -407,27 +454,36 @@ fn instr_unsupported(instr: &Instr) -> Option<String> {
             body,
             otherwise,
             ..
-        } => op_unsupported(subject)
-            .or_else(|| unsupported_feature(body))
-            .or_else(|| unsupported_feature(otherwise)),
-        Instr::Scope { base, hash, body } => op_unsupported(base)
-            .or_else(|| hash.values().find_map(op_unsupported))
-            .or_else(|| unsupported_feature(body)),
+        } => check_op(subject, groups)
+            .or_else(|| check_instrs(body, groups))
+            .or_else(|| check_instrs(otherwise, groups)),
+        Instr::Scope { base, hash, body } => check_op(base, groups)
+            .or_else(|| hash.values().find_map(|op| check_op(op, groups)))
+            .or_else(|| check_instrs(body, groups)),
     }
 }
 
-fn op_unsupported(op: &Op) -> Option<String> {
+fn check_op(op: &Op, groups: u8) -> Option<String> {
     match op {
-        Op::Call { name, args, kwargs } => {
-            if !SUPPORTED_TRANSFORMERS.contains(&name.as_str()) {
-                Some(format!("transformer '{name}'"))
-            } else if !kwargs.is_empty() {
-                Some(format!("keyword arguments to transformer '{name}'"))
-            } else {
-                args.iter().find_map(op_unsupported)
+        Op::Call { name, args, kwargs } => match builtin_groups(name) {
+            None => Some(format!("stem_native error: unknown transformer '{name}'")),
+            Some(provides) => {
+                if !kwargs.is_empty() {
+                    Some(format!(
+                        "stem_native error: keyword arguments to transformer '{name}' are not supported"
+                    ))
+                } else if provides & groups == 0 {
+                    Some(format!(
+                        "stem_native error: transformer '{name}' requires the {} capability group, \
+                         which is not enabled. Add it to the request \"transformers\" list.",
+                        group_phrase(provides)
+                    ))
+                } else {
+                    args.iter().find_map(|arg| check_op(arg, groups))
+                }
             }
-        }
-        Op::Get { base, .. } => op_unsupported(base),
+        },
+        Op::Get { base, .. } => check_op(base, groups),
         _ => None,
     }
 }
@@ -457,7 +513,13 @@ fn exec_all(instructions: &[Instr], ctx: &Ctx, out: &mut String, segs: &mut Vec<
 
 // Record a non-empty output run `[begin, end)` against its source provenance.
 // Empty runs (e.g. an emit that renders to "") map to no output and are skipped.
-fn record(segs: &mut Vec<Segment>, src: &Option<Src>, begin: usize, end: usize, kind: &'static str) {
+fn record(
+    segs: &mut Vec<Segment>,
+    src: &Option<Src>,
+    begin: usize,
+    end: usize,
+    kind: &'static str,
+) {
     if let (Some(src), true) = (src, end > begin) {
         segs.push(Segment {
             out: begin,
@@ -490,7 +552,11 @@ fn exec(instr: &Instr, ctx: &Ctx, out: &mut String, segs: &mut Vec<Segment>) {
             then,
             otherwise,
         } => {
-            let branch = if truthy(&eval(cond, ctx)) { then } else { otherwise };
+            let branch = if truthy(&eval(cond, ctx)) {
+                then
+            } else {
+                otherwise
+            };
             exec_all(branch, ctx, out, segs);
         }
 
@@ -782,17 +848,13 @@ fn escape_with(s: &str, mode: &str) -> String {
 
 // ── Transformer stdlib (mirror Stem.Transformers) ───────────────────────────
 //
-// Implements the built-in transformers that can match the BEAM byte-for-byte.
-// The set is mirrored in `SUPPORTED_TRANSFORMERS`; `unsupported_feature` refuses
-// any program referencing a name outside it, so dispatch here never has to
-// panic. Deliberately excluded (no byte-parity is possible, so they are kept out
-// of the differential fuzzer):
-//   * json / inspect — Elixir-specific serialization formatting and map key
-//     ordering;
-//   * i18n `t` — delegates to a host-provided translator (a host closure), so
-//     the bytecode marks it a host transformer the native core cannot run.
-// Unicode-cased transforms match for ASCII; the fuzzer restricts inputs to
-// ASCII, where String.upcase/downcase and Rust's casing agree.
+// Implements the built-in transformers that match the BEAM byte-for-byte. Each
+// name's providing capability group is declared in `builtin_groups`, and
+// `check_op` refuses a program before rendering if it calls a name whose group
+// the caller has not enabled — so dispatch here is reached only for an allowed
+// name and never has to panic. Unicode-cased transforms (`upcase`/`downcase`/
+// `capitalize`) match for ASCII; the fuzzer restricts inputs to ASCII, where
+// String.upcase/downcase and Rust's casing agree.
 
 fn call(name: &str, args: &[Value]) -> Value {
     match name {
@@ -1330,9 +1392,25 @@ mod guard_tests {
     use super::*;
     use serde_json::json;
 
+    // Minimum-only render (the secure default): no capability groups loaded.
     fn render(program: Value, data: Value) -> String {
         let request = json!({ "program": { "instructions": program }, "data": data });
         handle(&request.to_string())
+    }
+
+    // Render with explicit capability groups loaded.
+    fn render_groups(program: Value, data: Value, groups: &[&str]) -> String {
+        let request =
+            json!({ "program": { "instructions": program }, "data": data, "transformers": groups });
+        handle(&request.to_string())
+    }
+
+    fn upcase_program() -> Value {
+        json!([{
+            "t": "emit",
+            "value": { "t": "call", "name": "upcase", "args": [{ "t": "assign", "name": "x" }], "kwargs": {} },
+            "escape": "html"
+        }])
     }
 
     #[test]
@@ -1346,16 +1424,20 @@ mod guard_tests {
     }
 
     #[test]
-    fn unsupported_transformer_is_a_structured_error_not_a_panic() {
-        let out = render(
+    fn unknown_transformer_is_a_structured_error_not_a_panic() {
+        let out = render_groups(
             json!([{
                 "t": "emit",
-                "value": { "t": "call", "name": "json", "args": [{ "t": "assign", "name": "x" }], "kwargs": {} },
+                "value": { "t": "call", "name": "no_such_xform", "args": [{ "t": "assign", "name": "x" }], "kwargs": {} },
                 "escape": "html"
             }]),
             json!({ "x": "a" }),
+            &["strings", "collections", "predicates"],
         );
-        assert!(out.contains("transformer 'json'"), "got: {out}");
+        assert!(
+            out.contains("unknown transformer 'no_such_xform'"),
+            "got: {out}"
+        );
     }
 
     #[test]
@@ -1381,15 +1463,86 @@ mod guard_tests {
     #[test]
     fn missing_kwargs_field_still_deserializes() {
         // Programs predating the kwargs field omit it; serde defaults it empty.
-        let out = render(
+        let out = render_groups(
             json!([{
                 "t": "emit",
                 "value": { "t": "call", "name": "upcase", "args": [{ "t": "assign", "name": "x" }] },
                 "escape": "html"
             }]),
             json!({ "x": "hi" }),
+            &["strings"],
         );
         assert_eq!(out, "HI");
+    }
+
+    #[test]
+    fn transformer_in_an_unloaded_group_is_refused_before_render() {
+        // Minimum-only: `upcase` (Strings) is gated off and refused up front.
+        let out = render(upcase_program(), json!({ "x": "hi" }));
+        assert!(
+            out.contains("requires the strings capability group"),
+            "got: {out}"
+        );
+    }
+
+    #[test]
+    fn transformer_renders_once_its_group_is_loaded() {
+        assert_eq!(
+            render_groups(upcase_program(), json!({ "x": "hi" }), &["strings"]),
+            "HI"
+        );
+    }
+
+    #[test]
+    fn standard_bundle_loads_strings() {
+        // "standard" is the Minimum+Strings convenience bundle.
+        assert_eq!(
+            render_groups(upcase_program(), json!({ "x": "hi" }), &["standard"]),
+            "HI"
+        );
+    }
+
+    #[test]
+    fn collections_transformer_is_gated_independently_of_strings() {
+        let program = json!([{
+            "t": "emit",
+            "value": {
+                "t": "call", "name": "join",
+                "args": [
+                    { "t": "call", "name": "sort", "args": [{ "t": "assign", "name": "xs" }], "kwargs": {} },
+                    { "t": "lit", "value": "," }
+                ],
+                "kwargs": {}
+            },
+            "escape": "html"
+        }]);
+        let data = json!({ "xs": ["b", "a", "c"] });
+
+        // Strings loaded but not Collections: `sort` is still refused.
+        let refused = render_groups(program.clone(), data.clone(), &["strings"]);
+        assert!(
+            refused.contains("transformer 'sort' requires the collections capability group"),
+            "got: {refused}"
+        );
+
+        // Collections loaded: it renders. (`join` is Minimum, always on.)
+        assert_eq!(render_groups(program, data, &["collections"]), "a,b,c");
+    }
+
+    #[test]
+    fn shared_transformer_is_enabled_by_either_group() {
+        // `first` is shared by Strings and Collections; either group enables it.
+        let program = json!([{
+            "t": "emit",
+            "value": { "t": "call", "name": "first", "args": [{ "t": "assign", "name": "xs" }], "kwargs": {} },
+            "escape": "html"
+        }]);
+        let data = json!({ "xs": ["a", "b"] });
+        assert_eq!(
+            render_groups(program.clone(), data.clone(), &["strings"]),
+            "a"
+        );
+        assert_eq!(render_groups(program, data, &["collections"]), "a");
     }
 
     fn render_if(data: Value) -> String {
@@ -1439,16 +1592,26 @@ mod source_map_tests {
     // covering exactly `[0, output.len())`. Returns the parsed segment array.
     fn assert_tiles(result: &Value) -> Vec<Value> {
         let output = result["output"].as_str().expect("output string");
-        let segments = result["segments"].as_array().expect("segments array").clone();
+        let segments = result["segments"]
+            .as_array()
+            .expect("segments array")
+            .clone();
         let mut cursor = 0usize;
         for seg in &segments {
             let out = seg["out"].as_u64().unwrap() as usize;
             let len = seg["len"].as_u64().unwrap() as usize;
-            assert_eq!(out, cursor, "segment gap/overlap at {cursor}; segments: {segments:?}");
+            assert_eq!(
+                out, cursor,
+                "segment gap/overlap at {cursor}; segments: {segments:?}"
+            );
             assert!(len > 0, "empty segment recorded: {seg:?}");
             cursor += len;
         }
-        assert_eq!(cursor, output.len(), "segments do not cover the whole output");
+        assert_eq!(
+            cursor,
+            output.len(),
+            "segments do not cover the whole output"
+        );
         segments
     }
 
@@ -1497,17 +1660,24 @@ mod source_map_tests {
         let result = render_mapped_req(&program, json!({}));
         assert_eq!(result["output"], "[]");
         let segments = assert_tiles(&result);
-        assert_eq!(segments.len(), 2, "only the two bracket texts: {segments:?}");
+        assert_eq!(
+            segments.len(),
+            2,
+            "only the two bracket texts: {segments:?}"
+        );
     }
 
     #[test]
     fn default_wire_carries_no_src_and_maps_to_no_segments() {
         // Compiling without `map` yields the parity wire (no `src`); rendering it
         // with `map: true` still works but produces an empty segment list.
-        let program = compile::compile_to_wire("Hi {{name}}!", &compile::Partials::new())
-            .expect("compiles");
+        let program =
+            compile::compile_to_wire("Hi {{name}}!", &compile::Partials::new()).expect("compiles");
         let instrs = program["instructions"].as_array().unwrap();
-        assert!(instrs.iter().all(|i| i.get("src").is_none()), "wire leaked src");
+        assert!(
+            instrs.iter().all(|i| i.get("src").is_none()),
+            "wire leaked src"
+        );
 
         let result = render_mapped_req(&program, json!({ "name": "Ada" }));
         assert_eq!(result["output"], "Hi Ada!");

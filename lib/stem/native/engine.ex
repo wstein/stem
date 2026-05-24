@@ -31,12 +31,24 @@ defmodule Stem.Native.Engine do
     end
   end
 
-  @doc "Builds a `{program, data}` request map for a template + assigns."
-  @spec request(String.t(), map() | keyword(), atom()) :: map()
-  def request(template, data, escape) do
+  @doc """
+  Builds a `{program, data, transformers}` request map for a template + assigns.
+
+  `groups` names the capability groups the caller has loaded (group-name strings,
+  e.g. `["strings", "collections"]`); the native engine enables Minimum always
+  and refuses any transformer outside the listed groups, mirroring the BEAM
+  `transformers:` binding.
+  """
+  @spec request(String.t(), map() | keyword(), atom(), [String.t()]) :: map()
+  def request(template, data, escape, groups \\ []) do
     {:ok, ast} = Stem.Parser.parse_with_spans(template)
     program = Stem.Bytecode.compile(ast, escape: escape)
-    %{"program" => Stem.Bytecode.to_wire(program), "data" => data}
+
+    %{
+      "program" => Stem.Bytecode.to_wire(program),
+      "data" => data,
+      "transformers" => groups
+    }
   end
 
   @doc """
@@ -71,7 +83,10 @@ defmodule Stem.Native.Engine do
     payload = JSON.encode!(%{"compile_batch" => sources})
 
     tmp =
-      Path.join(System.tmp_dir!(), "stem_native_compile_#{System.unique_integer([:positive])}.json")
+      Path.join(
+        System.tmp_dir!(),
+        "stem_native_compile_#{System.unique_integer([:positive])}.json"
+      )
 
     File.write!(tmp, payload)
 

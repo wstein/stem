@@ -33,6 +33,12 @@ export async function createRenderer(wasmBytes) {
     return decoder.decode(output);
   }
 
+  // The capability groups the playground loads. The playground author is
+  // trusted, so it enables every group with a native byte-parity implementation
+  // (i18n is omitted: `t`/`translate` need a host translator the browser has
+  // none of). Mirrors a BEAM caller passing `transformers:` for these groups.
+  const PLAYGROUND_GROUPS = ["minimum", "strings", "collections", "predicates"];
+
   // Render a compiled program against data. By default returns the output
   // string. With `{ map: true }` it returns `{ output, segments }`, where each
   // segment ties a byte run of the output back to its source: `{ out, len, file,
@@ -41,8 +47,9 @@ export async function createRenderer(wasmBytes) {
   // segments tile the output in order, so any output offset maps to a source.
   // Mapped rendering needs a program compiled with `compile(.., { map: true })`;
   // an unmapped program renders correctly but yields an empty segment list.
-  function render(program, data, { map = false } = {}) {
-    const raw = call({ program, data, map });
+  // `transformers` overrides the loaded capability groups.
+  function render(program, data, { map = false, transformers = PLAYGROUND_GROUPS } = {}) {
+    const raw = call({ program, data, map, transformers });
     return map ? JSON.parse(raw) : raw;
   }
 

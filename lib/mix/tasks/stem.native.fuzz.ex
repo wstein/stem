@@ -43,12 +43,17 @@ defmodule Mix.Tasks.Stem.Native.Fuzz do
       |> Map.merge(Stem.Transformers.Collections.all())
       |> Map.merge(Stem.Transformers.Predicates.all())
 
+    # The same groups, by name, for the native engine's capability gate.
+    groups = ~w(minimum strings collections predicates)
+
     cases = for _ <- 1..count, do: gen_case()
 
     expected =
       Enum.map(cases, fn {template, data} -> render_oracle(template, data, transformers) end)
 
-    requests = Enum.map(cases, fn {template, data} -> Engine.request(template, data, :html) end)
+    requests =
+      Enum.map(cases, fn {template, data} -> Engine.request(template, data, :html, groups) end)
+
     actuals = Engine.render_batch(engine, requests)
 
     failures =
