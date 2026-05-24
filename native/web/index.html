@@ -6,442 +6,615 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link
       rel="icon"
-      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%232563eb'/%3E%3Ctext x='50%25' y='57%25' font-size='34' text-anchor='middle' fill='white' font-family='sans-serif'%3ES%3C/text%3E%3C/svg%3E"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%237c3aed'/%3E%3Ctext x='50%25' y='57%25' font-size='34' text-anchor='middle' fill='white' font-family='sans-serif'%3ES%3C/text%3E%3C/svg%3E"
     />
-    <title>Stem Playground - compile and render in the browser</title>
+    <title>Stem Playground — IDE</title>
     <style>
+      /* ── Design tokens ───────────────────────────────────────────── */
       :root {
-        --bg: #f7f7f8;
-        --panel: #ffffff;
-        --ink: #15171a;
-        --muted: #5f6773;
-        --line: #d9dde5;
-        --accent: #2563eb;
-        --accent-soft: #dbeafe;
+        --bg: #ffffff;
+        --bg-1: #fbfbfc;
+        --bg-2: #f4f4f5;
+        --bg-3: #ededef;
+        --bg-toolbar: #ffffff;
+        --bg-statusbar: #fafafa;
+        --bg-tab-active: #ffffff;
+        --bg-tab-inactive: transparent;
+        --bg-pane: #ffffff;
+        --bg-gutter: #fafafa;
+
+        --fg: #18181b;
+        --fg-secondary: #52525b;
+        --fg-muted: #71717a;
+        --fg-faint: #a1a1aa;
+
+        --border: #e4e4e7;
+        --border-strong: #d4d4d8;
+
+        --accent: #7c3aed;
+        --accent-2: #6d28d9;
+        --accent-soft: #ede9fe;
+        --accent-softer: #f5f3ff;
+
         --danger: #b91c1c;
-        --ok: #15803d;
+        --danger-faint: #fee2e2;
+        --success: #16a34a;
+
+        --tok-tag: #7c3aed;
+        --tok-cmt: #94a3b8;
+        --tok-key: #1d4ed8;
+        --tok-str: #047857;
+        --tok-num: #b45309;
+
+        --font-ui: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+
+        --topbar-h: 44px;
+        --statusbar-h: 26px;
+        --pane-header-h: 38px;
+        --tabs-h: 36px;
+        --radius: 6px;
+
+        --shadow-pop: 0 12px 32px -8px rgba(24,24,27,.18), 0 0 0 1px rgba(24,24,27,.06);
       }
 
       * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        color: var(--ink);
-        background:
-          radial-gradient(100rem 40rem at -20% -30%, #e9f2ff 0%, transparent 60%),
-          radial-gradient(80rem 50rem at 120% -40%, #e7f9f2 0%, transparent 60%),
-          var(--bg);
-        font: 15px/1.45 "Instrument Sans", "Avenir Next", Avenir, "Segoe UI", sans-serif;
+
+      html, body {
+        margin: 0; padding: 0; height: 100%; overflow: hidden;
+        font-family: var(--font-ui);
+        font-size: 13px; line-height: 1.45;
+        color: var(--fg); background: var(--bg-1);
+        -webkit-font-smoothing: antialiased;
       }
 
-      .page {
-        max-width: 1100px;
-        margin: 1.25rem auto 2rem;
-        padding: 0 1rem;
+      button { font: inherit; color: inherit; }
+      input, select { font: inherit; color: inherit; }
+      kbd {
+        font: 11px/1 var(--font-mono);
+        background: var(--bg-2); border: 1px solid var(--border);
+        border-bottom-width: 2px; padding: 2px 5px; border-radius: 4px;
+        color: var(--fg-secondary);
       }
 
-      h1 {
-        margin: 0;
-        font-size: 1.65rem;
-        letter-spacing: 0.01em;
-      }
+      /* ── App shell ───────────────────────────────────────────────── */
+      #app { display: flex; flex-direction: column; height: 100vh; width: 100vw; }
 
-      .muted {
-        color: var(--muted);
-        font-size: 0.9rem;
-      }
-
+      /* ── Top bar ─────────────────────────────────────────────────── */
       .topbar {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.8rem;
-        flex-wrap: wrap;
-        margin: 0.75rem 0 1rem;
+        height: var(--topbar-h); flex: 0 0 auto;
+        display: flex; align-items: center; gap: 14px; padding: 0 12px;
+        background: var(--bg-toolbar); border-bottom: 1px solid var(--border);
+        user-select: none;
       }
-
-      .row {
-        display: flex;
-        align-items: center;
-        gap: 0.5rem;
-        flex-wrap: wrap;
+      .brand {
+        display: flex; align-items: center; gap: 8px;
+        font-weight: 600; font-size: 13px; letter-spacing: -.01em; padding-right: 8px;
       }
-
-      select, button, input {
-        font: inherit;
-        border: 1px solid var(--line);
-        border-radius: 8px;
-        background: #fff;
-        color: var(--ink);
-        padding: 0.32rem 0.55rem;
+      .brand .mark {
+        width: 18px; height: 18px; border-radius: 5px;
+        background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
+        display: grid; place-items: center;
+        color: #fff; font-family: var(--font-mono); font-size: 11px; font-weight: 700;
       }
+      .topbar .divider { width: 1px; height: 18px; background: var(--border); }
+      .topbar-group { display: flex; align-items: center; gap: 6px; }
+      .field-label { color: var(--fg-muted); font-size: 12px; padding-right: 2px; }
 
-      button { cursor: pointer; }
-      button:hover { border-color: #aeb7c5; }
-      button:focus-visible, select:focus-visible, input:focus-visible {
-        outline: 2px solid var(--accent-soft);
-        outline-offset: 1px;
+      select.select, button.btn {
+        height: 26px; padding: 0 8px;
+        border: 1px solid var(--border-strong); border-radius: var(--radius);
+        background: var(--bg); color: var(--fg); font-size: 12px; cursor: pointer;
+        transition: background 80ms ease, border-color 80ms ease;
       }
+      select.select:hover, button.btn:hover { background: var(--bg-2); }
+      select.select:focus, button.btn:focus {
+        outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+      button.btn .kbd-inline { color: var(--fg-faint); margin-left: 6px; font: 11px/1 var(--font-mono); }
 
+      .spacer { flex: 1 1 auto; }
+      .hint { font-size: 12px; color: var(--fg-muted); display: flex; align-items: center; gap: 6px; }
+
+      /* ── Workspace ───────────────────────────────────────────────── */
       .workspace {
-        display: grid;
-        grid-template-columns: 1.2fr 0.8fr;
-        gap: 0.85rem;
+        flex: 1 1 auto; min-height: 0;
+        display: flex; flex-direction: row;
+        background: var(--border);
+      }
+      .pane {
+        flex: 1 1 0; min-width: 220px; background: var(--bg-pane);
+        display: flex; flex-direction: column; min-height: 0; overflow: hidden;
       }
 
-      .panel {
-        background: var(--panel);
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        box-shadow: 0 10px 24px rgba(20, 23, 31, 0.05);
-        overflow: hidden;
+      /* ── Splitter ────────────────────────────────────────────────── */
+      .splitter {
+        flex: 0 0 6px; background: var(--border); cursor: col-resize;
+        position: relative; transition: background 100ms ease;
+      }
+      .splitter::after { content: ""; position: absolute; inset: 0; margin: 0 -3px; }
+      .splitter:hover, .splitter.dragging { background: var(--accent); }
+      body.dragging-col { cursor: col-resize !important; }
+      body.dragging-row { cursor: row-resize !important; }
+      body.dragging-col *, body.dragging-row * { user-select: none !important; }
+      body.dragging-col iframe, body.dragging-row iframe { pointer-events: none !important; }
+
+      /* ── Pane header ─────────────────────────────────────────────── */
+      .pane-header {
+        flex: 0 0 var(--pane-header-h); height: var(--pane-header-h);
+        display: flex; align-items: center; gap: 10px; padding: 0 12px;
+        border-bottom: 1px solid var(--border); background: var(--bg-toolbar);
+      }
+      .pane-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 0 1 auto; overflow: hidden; }
+      .pane-title h2 {
+        flex: 0 0 auto; margin: 0; font-size: 12px; font-weight: 600;
+        letter-spacing: .04em; text-transform: uppercase; color: var(--fg-secondary);
+      }
+      .pane-title .sub {
+        font-size: 11px; color: var(--fg-faint);
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
+      }
+      .pane-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+
+      .segmented {
+        display: inline-flex; border: 1px solid var(--border-strong);
+        border-radius: var(--radius); overflow: hidden; background: var(--bg);
+      }
+      .segmented button {
+        background: transparent; border: 0; padding: 0 10px; height: 24px;
+        font-size: 12px; color: var(--fg-secondary); cursor: pointer;
+      }
+      .segmented button:hover { background: var(--bg-2); }
+      .segmented button.on { background: var(--accent-soft); color: var(--accent-2); font-weight: 600; }
+
+      /* ── Tabs ────────────────────────────────────────────────────── */
+      .tabs-wrap {
+        flex: 0 0 var(--tabs-h); height: var(--tabs-h);
+        display: flex; align-items: stretch;
+        border-bottom: 1px solid var(--border); background: var(--bg-2); min-width: 0;
+      }
+      .tabs {
+        flex: 1 1 0; min-width: 0; height: 100%;
+        display: flex; align-items: flex-end; padding: 0 4px; gap: 1px;
+        overflow-x: auto; overflow-y: hidden; scrollbar-width: thin;
+      }
+      .tabs-pinned {
+        flex: 0 0 auto; height: 100%; display: flex; align-items: flex-end;
+        border-left: 1px solid var(--border); background: var(--bg-2);
+        box-shadow: -6px 0 6px -4px rgba(24,24,27,.08); padding-right: 4px;
+      }
+      .tabs::-webkit-scrollbar { height: 4px; }
+      .tabs::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 4px; }
+
+      .tab {
+        flex: 0 0 auto; height: calc(var(--tabs-h) - 1px);
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 0 10px 0 12px; border-right: 1px solid var(--border);
+        background: var(--bg-tab-inactive); color: var(--fg-secondary);
+        font-size: 12px; font-family: var(--font-mono);
+        cursor: pointer; position: relative; user-select: none; white-space: nowrap;
+      }
+      .tab:hover { background: var(--bg-3); color: var(--fg); }
+      .tab.active { background: var(--bg-tab-active); color: var(--fg); font-weight: 600; }
+      .tab.active::after {
+        content: ""; position: absolute; left: 0; right: 0; top: 0;
+        height: 2px; background: var(--accent);
+      }
+      .tab.is-main::before {
+        content: ""; width: 6px; height: 6px; border-radius: 50%;
+        background: var(--accent); margin-right: 2px;
+      }
+      .tab.is-data { background: var(--accent-softer); color: var(--accent-2); }
+      .tab.is-data::before {
+        content: ""; width: 6px; height: 6px; border-radius: 2px;
+        background: var(--tok-key); margin-right: 2px;
+      }
+      .tab.is-data.active { background: var(--bg-tab-active); color: var(--tok-key); }
+      .tab.is-data.active::after { background: var(--tok-key); }
+      .tab.is-data:hover { color: var(--tok-key); }
+      .tab .close {
+        width: 16px; height: 16px; display: grid; place-items: center;
+        border-radius: 3px; color: var(--fg-faint); font-size: 12px; margin-left: 2px;
+      }
+      .tab .close:hover { background: var(--border); color: var(--fg); }
+      .tab-add {
+        flex: 0 0 auto; height: calc(var(--tabs-h) - 1px);
+        padding: 0 10px; border: 0; background: transparent;
+        color: var(--fg-muted); font-family: var(--font-mono); font-size: 12px;
+        cursor: pointer; display: inline-flex; align-items: center; gap: 4px;
+      }
+      .tab-add:hover { color: var(--accent); background: var(--bg-3); }
+
+      /* ── Rename bar ──────────────────────────────────────────────── */
+      .rename-bar[hidden] { display: none; }
+      .rename-bar {
+        flex: 0 0 32px; height: 32px;
+        display: flex; align-items: center; gap: 8px; padding: 0 12px;
+        border-bottom: 1px solid var(--border); background: var(--bg-1);
+        font-size: 12px; color: var(--fg-muted);
+      }
+      .rename-bar input {
+        width: 160px; height: 22px; padding: 0 6px;
+        border: 1px solid var(--border-strong); border-radius: 4px;
+        background: var(--bg); font: 12px/1 var(--font-mono); color: var(--fg);
+      }
+      .rename-bar input:focus {
+        outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+      }
+      .rename-bar code {
+        font: 11px/1 var(--font-mono); background: var(--bg-2);
+        border: 1px solid var(--border); padding: 3px 6px;
+        border-radius: 4px; color: var(--accent-2);
       }
 
-      .panel-head {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.5rem;
-        padding: 0.65rem 0.8rem;
-        border-bottom: 1px solid var(--line);
-        background: linear-gradient(180deg, #fff 0%, #fafbfd 100%);
+      /* ── Editor panes (CodeMirror) ───────────────────────────────── */
+      .editor-pane { display: none; overflow: hidden; }
+      .editor-pane.is-active { display: block; flex: 1 1 auto; min-height: 0; }
+
+      .editor-pane .cm-editor { height: 100%; font-size: 12.5px; }
+      .editor-pane .cm-scroller { overflow: auto; }
+      .editor-pane .cm-gutters {
+        background: var(--bg-gutter); border-right: 1px solid var(--border);
+        color: var(--fg-faint); min-width: 38px;
+      }
+      .editor-pane .cm-activeLineGutter { background: var(--accent-softer); color: var(--fg-muted); }
+      .editor-pane .cm-content { padding: 8px 0; }
+      .editor-pane .cm-line { padding: 0 12px; }
+      .editor-pane .cm-selectionBackground { background: var(--accent-soft) !important; }
+
+      /* Handlebars token colours for CM decorations */
+      .cm-hb-comment { color: var(--tok-cmt); font-style: italic; }
+      .cm-hb-block   { color: var(--tok-tag); font-weight: 500; }
+      .cm-hb-partial { color: var(--tok-str); font-weight: 500; }
+      .cm-hb-raw     { color: var(--tok-num); }
+      .cm-hb-expr    { color: var(--tok-key); }
+
+      /* ── Output pane ─────────────────────────────────────────────── */
+      .output-body {
+        flex: 1 1 auto; min-height: 0; position: relative;
+        background: var(--bg-pane); overflow: hidden;
+      }
+      .output-body iframe { width: 100%; height: 100%; border: 0; background: var(--bg); display: block; }
+      .output-body pre {
+        margin: 0; padding: 12px 14px; width: 100%; height: 100%; overflow: auto;
+        background: var(--bg-1); color: var(--fg);
+        font: 12.5px/1.55 var(--font-mono); white-space: pre-wrap; word-break: break-word;
+      }
+      .output-body[data-empty="true"]::after {
+        content: "no output"; position: absolute; inset: 0;
+        display: grid; place-items: center;
+        color: var(--fg-faint); font-size: 12px; pointer-events: none;
       }
 
-      .panel-title {
-        margin: 0;
-        font-size: 0.95rem;
-        font-weight: 650;
+      /* ── Status bar ──────────────────────────────────────────────── */
+      .statusbar {
+        flex: 0 0 var(--statusbar-h); height: var(--statusbar-h);
+        display: flex; align-items: center; gap: 14px; padding: 0 12px;
+        background: var(--bg-statusbar); border-top: 1px solid var(--border);
+        font-size: 11.5px; color: var(--fg-secondary); user-select: none;
       }
-
-      .panel-sub {
-        margin: 0;
-        font-size: 0.78rem;
-        color: var(--muted);
+      .statusbar .status-pill {
+        display: inline-flex; align-items: center; gap: 6px;
+        padding: 2px 8px; border-radius: 999px;
       }
-
-      .panel-body {
-        padding: 0.6rem;
+      .statusbar .dot {
+        width: 7px; height: 7px; border-radius: 50%;
+        background: var(--success); display: inline-block;
       }
-
-      #tabs {
-        display: flex;
-        align-items: flex-end;
-        flex-wrap: wrap;
-        gap: 0.22rem;
-        margin: 0 -0.6rem 0.48rem;
-        padding: 0.45rem 0.6rem 0;
-        border-bottom: 1px solid var(--line);
-        background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+      .statusbar.has-error .dot { background: var(--danger); }
+      .statusbar.has-error .status-pill {
+        background: var(--danger-faint); color: var(--danger); font-weight: 500;
       }
+      .statusbar:not(.has-error) .status-pill { color: var(--success); }
+      .statusbar .status-msg { color: inherit; font-family: var(--font-mono); }
+      .statusbar .meta { color: var(--fg-muted); font-family: var(--font-mono); font-size: 11px; }
+      .statusbar .meta b { color: var(--fg-secondary); font-weight: 600; }
 
-      #tabs .tab {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.05rem;
-        height: 1.8rem;
-        border: 1px solid #c8d0dc;
-        border-bottom: none;
-        border-radius: 9px 9px 0 0;
-        background: #e9edf4;
-        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
-        transition: background 120ms ease, border-color 120ms ease;
-      }
-
-      #tabs .tab.is-active {
-        background: #fff;
-        border-color: var(--accent);
-        position: relative;
-      }
-
-      #tabs .tab.is-active::after {
-        content: "";
-        position: absolute;
-        left: 0;
-        right: 0;
-        bottom: -1px;
-        height: 1px;
-        background: #fff;
-      }
-
-      #tabs .tab-label {
-        border: 0;
-        background: transparent;
-        border-radius: 8px;
-        color: #1f2937;
-        height: 100%;
-        padding: 0.28rem 0.58rem;
-        font-size: 0.7rem;
-        letter-spacing: 0.01em;
-        text-transform: lowercase;
-      }
-
-      #tabs .tab.is-active .tab-label {
-        color: var(--accent);
-        font-weight: 700;
-      }
-
-      /* Inline-editable name shown in place of the label on the active partial.
-         Sized to its content via the `size` attribute set in renderTabs. */
-      #tabs .tab-name {
-        border: 0;
-        background: transparent;
-        color: var(--accent);
-        font-weight: 700;
-        font-size: 0.7rem;
-        letter-spacing: 0.01em;
-        height: 100%;
-        padding: 0.28rem 0.2rem 0.28rem 0.58rem;
-        outline: none;
-      }
-
-      #tabs .tab-close {
-        border: 0;
-        background: transparent;
-        color: #7b8796;
-        border-radius: 6px;
-        width: 1.2rem;
-        height: 1.2rem;
-        padding: 0;
-        margin-right: 0.18rem;
-        line-height: 1;
-        font-size: 0.85rem;
-      }
-
-      #tabs .tab-close:hover {
-        color: #ef4444;
-        background: rgba(239, 68, 68, 0.12);
-        border-color: transparent;
-      }
-
-      #tabs .tab-add {
-        border: 1px dashed #b8c1cf;
-        border-bottom: none;
-        border-radius: 9px 9px 0 0;
-        background: #f8fafc;
-        color: #566173;
-        height: 1.8rem;
-        padding: 0.28rem 0.58rem;
-        margin-left: 0.12rem;
-      }
-
-      #tabs .tab-add:hover {
-        background: #eef2f7;
-      }
-
-      .editor-shell {
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        overflow: hidden;
-      }
-
-      .editor-shell .cm-editor {
-        min-height: 120px;
-        max-height: 65vh;
-      }
-
-      .editor-shell .cm-scroller {
-        overflow: auto;
-      }
-
-      .cm-hb-comment { color: #94a3b8; font-style: italic; }
-      .cm-hb-block { color: #7c3aed; font-weight: 650; }
-      .cm-hb-partial { color: #0f766e; font-weight: 650; }
-      .cm-hb-raw { color: #b45309; }
-      .cm-hb-expr { color: #2563eb; }
-
-      .status {
-        margin-top: 0.45rem;
-        min-height: 1.2rem;
-        font-size: 0.84rem;
-        color: var(--muted);
-      }
-
-      .status.error { color: var(--danger); }
-      .status.ok { color: var(--ok); }
-
-      .kbd {
-        font: 11px/1.2 ui-monospace, "SF Mono", Menlo, monospace;
-        border: 1px solid var(--line);
-        border-radius: 6px;
-        padding: 0.12rem 0.35rem;
-        background: #fff;
-      }
-
-      .output-grid {
-        display: grid;
-        grid-template-rows: auto 1fr;
-      }
-
-      #preview {
-        width: 100%;
-        min-height: 80px;
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        background: #fff;
-        overflow: hidden;
-      }
-
-      #output {
-        margin: 0;
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        background: #f8f9fb;
-        padding: 0.7rem;
-        white-space: pre-wrap;
-        word-break: break-word;
-        min-height: 120px;
-        font: 12.5px/1.45 ui-monospace, "SF Mono", Menlo, monospace;
-      }
-
-      [hidden] { display: none !important; }
-
-      .panel-output {
-        grid-column: 1 / -1;
-      }
-
-      @media (max-width: 960px) {
-        .workspace { grid-template-columns: 1fr; }
-        .panel-output { grid-column: 1; }
-      }
-
+      /* ── Command palette ─────────────────────────────────────────── */
       .palette-backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(10, 12, 16, 0.36);
-        display: grid;
-        place-items: start center;
-        padding-top: 12vh;
-        z-index: 100;
+        position: fixed; inset: 0; background: rgba(24,24,27,.28);
+        display: grid; place-items: start center; padding-top: 14vh; z-index: 100;
       }
-
       .palette {
-        width: min(680px, calc(100vw - 2rem));
-        background: #fff;
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        box-shadow: 0 20px 60px rgba(10, 12, 16, 0.25);
-        overflow: hidden;
+        width: 480px; max-width: 92vw; background: var(--bg);
+        border-radius: 10px; box-shadow: var(--shadow-pop);
+        overflow: hidden; border: 1px solid var(--border);
       }
-
       .palette input {
-        width: 100%;
-        border: 0;
-        border-bottom: 1px solid var(--line);
-        border-radius: 0;
-        padding: 0.7rem 0.85rem;
+        width: 100%; border: 0; border-bottom: 1px solid var(--border);
+        padding: 12px 14px; font-size: 14px; outline: none;
+        background: var(--bg); color: var(--fg);
+      }
+      .palette ul { list-style: none; margin: 0; padding: 6px 0; max-height: 50vh; overflow-y: auto; }
+      .palette li {
+        padding: 8px 14px; display: flex; align-items: center; gap: 10px;
+        cursor: pointer; font-size: 13px; color: var(--fg);
+      }
+      .palette li.sel { background: var(--accent-soft); color: var(--accent-2); }
+      .palette li .pkind {
+        font: 10px/1 var(--font-mono); color: var(--fg-muted); background: var(--bg-2);
+        padding: 2px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: .04em;
+      }
+      .palette li.sel .pkind { color: var(--accent-2); }
+
+      /* Toast */
+      .toast {
+        position: fixed; bottom: calc(var(--statusbar-h) + 12px); left: 50%;
+        transform: translateX(-50%) translateY(8px); opacity: 0;
+        background: #18181b; color: #fff; padding: 8px 14px; border-radius: 6px;
+        font-size: 12px; z-index: 200; pointer-events: none;
+        transition: opacity 160ms ease, transform 160ms ease;
+      }
+      .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+      /* ── Focus mode ──────────────────────────────────────────────── */
+      .workspace.focus-sources .pane:not(.pane-sources),
+      .workspace.focus-sources .splitter,
+      .workspace.focus-output .pane:not(.pane-output),
+      .workspace.focus-output .splitter { display: none; }
+      .workspace.focus-sources .pane-sources,
+      .workspace.focus-output .pane-output { flex: 1 1 100%; }
+
+      .focus-toggle {
+        width: 24px; height: 24px; border-radius: 4px;
+        border: 1px solid transparent; background: transparent;
+        display: grid; place-items: center; cursor: pointer; color: var(--fg-faint);
+      }
+      .focus-toggle:hover { background: var(--bg-2); color: var(--fg); }
+      .focus-toggle.on { background: var(--accent-soft); color: var(--accent-2); }
+      .focus-toggle svg { width: 13px; height: 13px; }
+
+      /* ── Themes ──────────────────────────────────────────────────── */
+      body[data-theme="dim"] {
+        --bg: #efeae3; --bg-1: #f4f0e8; --bg-2: #e8e1d4; --bg-3: #ddd5c4;
+        --bg-toolbar: #f0ebe2; --bg-statusbar: #e8e3d8;
+        --bg-tab-active: #faf6ee; --bg-pane: #f8f3ea; --bg-gutter: #efe9dc;
+        --fg: #2b2620; --fg-secondary: #524a3e; --fg-muted: #7c715f; --fg-faint: #a89c87;
+        --border: #d8d0bf; --border-strong: #c4ba9f;
+      }
+      body[data-theme="dark"] {
+        --bg: #18181b; --bg-1: #1c1c1f; --bg-2: #27272a; --bg-3: #3f3f46;
+        --bg-toolbar: #1c1c1f; --bg-statusbar: #1a1a1d;
+        --bg-tab-active: #27272a; --bg-pane: #1f1f23; --bg-gutter: #1a1a1d;
+        --fg: #f4f4f5; --fg-secondary: #d4d4d8; --fg-muted: #a1a1aa; --fg-faint: #71717a;
+        --border: #2f2f33; --border-strong: #3f3f46;
+        --accent-soft: #3b1d75; --accent-softer: #1e1135;
+        --tok-tag: #c4b5fd; --tok-cmt: #71717a; --tok-key: #93c5fd;
+        --tok-str: #6ee7b7; --tok-num: #fbbf24;
+        --danger-faint: #3b0a0a;
+      }
+      body[data-theme="dark"] { background-color: var(--bg) !important; }
+      body[data-theme="dim"]  { background-color: var(--bg-1) !important; }
+      body[data-theme="dark"] iframe { background: #0f0f12; }
+
+      /* ── Moods ───────────────────────────────────────────────────── */
+      body[data-mood="terminal"] {
+        --font-ui: var(--font-mono);
+        --accent: #10b981; --accent-2: #047857;
+        --accent-soft: rgba(16,185,129,.18); --accent-softer: rgba(16,185,129,.08);
+        --tok-tag: #10b981; --tok-key: #34d399;
+        --topbar-h: 38px; --statusbar-h: 22px; --pane-header-h: 32px; --tabs-h: 32px; --radius: 3px;
+      }
+      body[data-mood="terminal"] .brand .mark {
+        background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+      }
+      body[data-mood="notebook"] {
+        --accent: #d97706; --accent-2: #b45309;
+        --accent-soft: rgba(217,119,6,.16); --accent-softer: rgba(217,119,6,.06);
+        --tok-tag: #b45309; --tok-key: #92400e;
+        --topbar-h: 52px; --statusbar-h: 28px; --pane-header-h: 44px; --tabs-h: 38px;
+      }
+      body[data-mood="notebook"] .brand {
+        font-family: "Charter","Iowan Old Style","Palatino","Georgia",serif;
+        font-style: italic; font-size: 15px;
+      }
+      body[data-mood="notebook"] .brand .mark {
+        background: linear-gradient(135deg, #d97706 0%, #fbbf24 100%);
+        font-family: inherit; font-style: italic;
+      }
+      body[data-mood="notebook"] .pane-title h2 {
+        font-family: "Charter","Iowan Old Style","Palatino","Georgia",serif;
+        font-style: italic; font-weight: 600; letter-spacing: 0; text-transform: none; font-size: 15px;
+      }
+      body[data-mood="notebook"] .tab {
+        font-family: "Charter","Iowan Old Style","Palatino","Georgia",serif;
+        font-style: italic; font-size: 13px;
+      }
+      body[data-mood="notebook"][data-theme="light"] {
+        --bg-1: #faf5e9; --bg-2: #f1ebd9; --bg-pane: #fefaef;
+        --bg-toolbar: #faf5e9; --bg-gutter: #f5efde;
       }
 
-      .palette-list {
-        margin: 0;
-        max-height: 45vh;
-        overflow: auto;
-        padding: 0.2rem;
-        list-style: none;
+      /* ── Stacked layout ──────────────────────────────────────────── */
+      .workspace.stacked { flex-direction: column; }
+      .workspace.stacked > .splitter {
+        width: 100%; height: 6px; cursor: row-resize; flex: 0 0 6px;
       }
+      .workspace.stacked .pane { min-width: 0; min-height: 160px; }
 
-      .palette-item {
-        width: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 0.5rem;
-        border: 0;
-        border-radius: 8px;
-        background: transparent;
-        padding: 0.42rem 0.5rem;
-        text-align: left;
+      /* ── Tweaks panel ────────────────────────────────────────────── */
+      .tw-panel {
+        position: fixed; right: 18px; bottom: 42px; width: 300px;
+        background: var(--bg); border: 1px solid var(--border);
+        border-radius: 10px; box-shadow: var(--shadow-pop); z-index: 150;
+        font-family: var(--font-ui); color: var(--fg); overflow: hidden;
       }
-
-      .palette-item:hover,
-      .palette-item[aria-current="true"] {
-        background: var(--accent-soft);
+      .tw-header {
+        display: flex; align-items: center; gap: 8px; padding: 10px 12px;
+        border-bottom: 1px solid var(--border); background: var(--bg-1); cursor: move;
       }
-
-      .palette-empty {
-        margin: 0;
-        color: var(--muted);
-        font-size: 0.86rem;
-        padding: 0.65rem 0.8rem;
+      .tw-title {
+        display: flex; align-items: center; gap: 8px;
+        font-weight: 600; font-size: 12px; letter-spacing: .04em; text-transform: uppercase;
+      }
+      .tw-pill {
+        width: 8px; height: 8px; border-radius: 2px;
+        background: linear-gradient(135deg, var(--accent) 0%, #a855f7 100%);
+      }
+      .tw-close {
+        margin-left: auto; width: 22px; height: 22px; border: 0;
+        background: transparent; color: var(--fg-muted); font-size: 18px;
+        line-height: 1; border-radius: 4px; cursor: pointer;
+      }
+      .tw-close:hover { background: var(--bg-2); color: var(--fg); }
+      .tw-section { padding: 12px 12px 14px; border-bottom: 1px solid var(--border); }
+      .tw-section:last-of-type { border-bottom: 0; }
+      .tw-section-head { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
+      .tw-section-title {
+        font-size: 10px; font-weight: 700; letter-spacing: .1em;
+        text-transform: uppercase; color: var(--fg-secondary);
+      }
+      .tw-section-hint { font-size: 11px; color: var(--fg-faint); margin-left: auto; }
+      .tw-section-body { display: flex; gap: 6px; flex-wrap: wrap; }
+      .tw-swatch {
+        flex: 1 1 0; min-width: 0; display: flex; flex-direction: column;
+        align-items: center; gap: 6px; padding: 8px 6px;
+        border: 1px solid var(--border); border-radius: 6px; background: var(--bg); cursor: pointer;
+        transition: border-color 120ms ease, background 120ms ease;
+      }
+      .tw-swatch:hover { background: var(--bg-1); }
+      .tw-swatch.on { border-color: var(--accent); background: var(--accent-softer); }
+      .tw-swatch-grid {
+        width: 100%; height: 28px; border-radius: 4px; border: 1px solid var(--border);
+        background: linear-gradient(135deg, var(--c1) 0%, var(--c1) 40%, var(--c2) 40%, var(--c2) 70%, var(--c3) 70%);
+      }
+      .tw-swatch-label { font-size: 11px; font-weight: 600; color: var(--fg-secondary); }
+      .tw-swatch.on .tw-swatch-label { color: var(--accent-2); }
+      .tw-card {
+        flex: 1 1 100%; display: flex; align-items: center; gap: 10px;
+        padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px;
+        background: var(--bg); cursor: pointer; text-align: left;
+        transition: border-color 120ms ease, background 120ms ease;
+      }
+      .tw-card:hover { background: var(--bg-1); }
+      .tw-card.on { border-color: var(--accent); background: var(--accent-softer); }
+      .tw-card-dot { width: 14px; height: 14px; border-radius: 50%; flex: 0 0 14px; }
+      .tw-card-body { display: flex; flex-direction: column; min-width: 0; }
+      .tw-card-label { font-size: 13px; font-weight: 600; color: var(--fg); }
+      .tw-card[data-mood="terminal"] .tw-card-label { font-family: var(--font-mono); }
+      .tw-card[data-mood="notebook"] .tw-card-label {
+        font-family: "Charter","Iowan Old Style","Palatino","Georgia",serif; font-style: italic;
+      }
+      .tw-card-desc { font-size: 11px; color: var(--fg-muted); margin-top: 1px; }
+      .tw-segmented { display: flex; flex: 1 1 100%; border: 1px solid var(--border); border-radius: 6px; overflow: hidden; }
+      .tw-segmented button {
+        flex: 1 1 0; border: 0; background: var(--bg); padding: 8px 10px;
+        font-size: 12px; font-weight: 500; color: var(--fg-secondary); cursor: pointer;
+        transition: background 120ms ease, color 120ms ease;
+      }
+      .tw-segmented button + button { border-left: 1px solid var(--border); }
+      .tw-segmented button:hover { background: var(--bg-1); }
+      .tw-segmented button.on { background: var(--accent-soft); color: var(--accent-2); font-weight: 600; }
+      .tw-foot {
+        padding: 8px 12px 10px; font-size: 11px; color: var(--fg-faint);
+        background: var(--bg-1); border-top: 1px solid var(--border);
       }
     </style>
   </head>
   <body>
-    <main class="page">
-      <h1>Stem Playground</h1>
-      <p class="muted">
-        Templates compile to portable bytecode and render entirely in your browser through
-        wasm32-unknown-unknown. No server and no Elixir runtime are needed.
-      </p>
-
-      <div class="topbar">
-        <div class="row">
-          <label for="example">Example</label>
-          <select id="example"></select>
-          <button id="share" title="Copy a link that restores this template and data">Copy link</button>
-        <button id="commands" title="Open command palette">Commands</button>
+    <div id="app">
+      <!-- ── Top bar ──────────────────────────────────────────────── -->
+      <header class="topbar">
+        <div class="brand">
+          <div class="mark" aria-hidden="true">S</div>
+          <span>Stem Playground</span>
         </div>
-        <div class="muted">Tip: <span class="kbd">Cmd/Ctrl+Shift+P</span> for commands.</div>
-      </div>
+        <div class="divider"></div>
+        <div class="topbar-group">
+          <span class="field-label">Example</span>
+          <select id="example-select" class="select" aria-label="Load example"></select>
+        </div>
+        <div class="topbar-group">
+          <button id="share-btn" class="btn" title="Copy a link that restores this template and data">Copy link</button>
+          <button id="cmd-btn" class="btn" title="Open command palette">Commands <span class="kbd-inline">⌘⇧P</span></button>
+          <button id="tweaks-btn" class="btn" title="Open Tweaks panel (theme, mood, layout)">Tweaks</button>
+        </div>
+        <div class="spacer"></div>
+        <span class="hint">Press <kbd>⌘⇧P</kbd> for commands</span>
+      </header>
 
-      <section class="workspace">
-        <article class="panel">
-          <header class="panel-head">
-            <div>
-              <h2 class="panel-title">Templates</h2>
-              <p class="panel-sub">Main + partial tabs, compiled in-browser.</p>
+      <!-- ── Workspace ────────────────────────────────────────────── -->
+      <main class="workspace">
+        <!-- Sources pane: template + partial tabs + data.yaml tab -->
+        <section class="pane pane-sources" aria-label="Sources">
+          <header class="pane-header">
+            <div class="pane-title">
+              <h2>Sources</h2>
+              <span class="sub" id="sources-sub">entry template · compiled in-browser</span>
+            </div>
+            <div class="pane-actions">
+              <button class="focus-toggle" data-pane="sources" title="Focus this pane (Esc to exit)">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+                  <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/>
+                </svg>
+              </button>
             </div>
           </header>
-          <div class="panel-body">
-            <div id="tabs"></div>
-            <div class="editor-shell" id="templateEditor"></div>
-            <p id="error" class="status"></p>
-          </div>
-        </article>
 
-        <article class="panel">
-          <header class="panel-head">
-            <div>
-              <h2 class="panel-title">Data (YAML)</h2>
-              <p class="panel-sub">Live YAML data used for render preview.</p>
-            </div>
-          </header>
-          <div class="panel-body">
-            <div class="editor-shell" id="dataEditor"></div>
+          <div class="tabs-wrap">
+            <div class="tabs" id="tmpl-tabs"></div>
+            <div class="tabs-pinned" id="tabs-pinned"></div>
           </div>
-        </article>
 
-        <article class="panel panel-output">
-          <header class="panel-head">
-            <div>
-              <h2 class="panel-title">Output</h2>
-              <p class="panel-sub">Rendered preview runs in a locked-down iframe.</p>
+          <div id="rename-bar" class="rename-bar" hidden>
+            <label for="partial-name">Partial name</label>
+            <input id="partial-name" spellcheck="false" />
+            <span>referenced as</span>
+            <code id="partial-ref"></code>
+          </div>
+
+          <div class="editor-pane is-active" id="template-editor-container"></div>
+          <div class="editor-pane" id="data-editor-container"></div>
+        </section>
+
+        <div id="splitter-1" class="splitter" role="separator" aria-orientation="vertical"
+             title="Drag to resize · double-click to reset"></div>
+
+        <!-- Output pane -->
+        <section class="pane pane-output" aria-label="Output">
+          <header class="pane-header">
+            <div class="pane-title">
+              <h2>Output</h2>
+              <span class="sub">rendered in a locked-down iframe</span>
             </div>
-            <div class="row">
-              <label for="escape">Escape</label>
-              <select id="escape">
+            <div class="pane-actions">
+              <span class="field-label" style="font-size:11px">Escape</span>
+              <select id="escape-select" class="select" aria-label="Escape mode">
                 <option value="">(as compiled)</option>
                 <option value="html">html</option>
                 <option value="xml">xml</option>
                 <option value="json">json</option>
                 <option value="none">none</option>
               </select>
-              <label><input type="radio" name="view" value="rendered" checked /> Rendered</label>
-              <label><input type="radio" name="view" value="source" /> Source</label>
+              <div class="segmented" role="tablist">
+                <button data-view="rendered" class="on">Rendered</button>
+                <button data-view="source">Source</button>
+              </div>
+              <button class="focus-toggle" data-pane="output" title="Focus this pane (Esc to exit)">
+                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+                  <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/>
+                </svg>
+              </button>
             </div>
           </header>
-          <div class="panel-body output-grid">
-            <iframe id="preview" sandbox="allow-same-origin" title="Rendered output"></iframe>
-            <pre id="output" hidden></pre>
+
+          <div class="output-body" data-empty="true">
+            <iframe id="output-preview" sandbox="allow-same-origin" title="Rendered output"></iframe>
+            <pre id="output-source" hidden></pre>
           </div>
-        </article>
-      </section>
-<div class="palette-backdrop" id="paletteBackdrop" hidden>
-    <section class="palette" role="dialog" aria-modal="true" aria-label="Command palette">
-        <input id="paletteSearch" placeholder="Type a command" />
-        <ul class="palette-list" id="paletteList"></ul>
-        <p class="palette-empty" id="paletteEmpty" hidden>No command matches your filter.</p>
-    </section>
-</div>
-    </main>
+        </section>
+      </main>
+
+      <!-- ── Status bar ────────────────────────────────────────────── -->
+      <footer class="statusbar">
+        <span class="status-pill">
+          <span class="dot"></span>
+          <span id="status-msg" class="status-msg">no errors</span>
+        </span>
+        <span class="spacer"></span>
+        <span id="status-meta" class="meta"></span>
+      </footer>
+    </div>
 
     <script type="module">
       import { createRenderer } from "./stem.mjs";
@@ -470,97 +643,27 @@
       import { html } from "https://esm.sh/@codemirror/lang-html@6.4.11?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
       import { dump as dumpYaml, load as loadYaml } from "https://esm.sh/js-yaml@4.1.0";
 
+      // ── Bootstrap ─────────────────────────────────────────────────────
       const WASM = "../stem_native/target/wasm32-unknown-unknown/release/stem_native.wasm";
-      const $ = (id) => document.getElementById(id);
-      const isMac = /Mac|iPhone|iPad/.test(navigator.platform);
-      const modLabel = isMac ? "Cmd" : "Ctrl";
+      const LS_SPLIT  = "stem-playground:splits.v2";
+      const LS_TWEAKS = "stem-playground:tweaks";
+
+      const byId = (id) => document.getElementById(id);
+      const qs   = (sel) => document.querySelector(sel);
 
       const renderer = await createRenderer(await (await fetch(WASM)).arrayBuffer());
       const examples = await (await fetch("./examples.json")).json();
 
-      examples.forEach((ex, i) => {
-        const opt = document.createElement("option");
-        opt.value = String(i);
-        opt.textContent = ex.label;
-        $("example").append(opt);
-      });
-
-      const sharedExtensions = [
-        lineNumbers(),
-        highlightActiveLineGutter(),
-        highlightActiveLine(),
-        bracketMatching(),
-        syntaxHighlighting(defaultHighlightStyle),
-        cmHistory(),
-        keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab])
-      ];
-
-      const hbExprMark = Decoration.mark({ class: "cm-hb-expr" });
-      const hbCommentMark = Decoration.mark({ class: "cm-hb-comment" });
-      const hbBlockMark = Decoration.mark({ class: "cm-hb-block" });
-      const hbPartialMark = Decoration.mark({ class: "cm-hb-partial" });
-      const hbRawMark = Decoration.mark({ class: "cm-hb-raw" });
-
-      const handlebarsDecorator = new MatchDecorator({
-        regexp: /\{\{!--[\s\S]*?--\}\}|\{\{![\s\S]*?\}\}|\{\{\{[\s\S]*?\}\}\}|\{\{[\s\S]*?\}\}/g,
-        decoration: (match) => {
-          const token = match[0];
-          if (token.startsWith("{{!--") || token.startsWith("{{!")) return hbCommentMark;
-          if (token.startsWith("{{{")) return hbRawMark;
-          if (token.startsWith("{{>") || token.startsWith("{{ >")) return hbPartialMark;
-          if (token.startsWith("{{#") || token.startsWith("{{/") || /^\{\{\s*else\b/.test(token)) {
-            return hbBlockMark;
-          }
-          return hbExprMark;
-        }
-      });
-
-      const handlebarsHighlighting = ViewPlugin.fromClass(
-        class {
-          constructor(view) {
-            this.decorations = handlebarsDecorator.createDeco(view);
-          }
-
-          update(update) {
-            this.decorations = handlebarsDecorator.updateDeco(update, this.decorations);
-          }
-        },
-        {
-          decorations: (value) => value.decorations
-        }
-      );
-
+      // ── State ─────────────────────────────────────────────────────────
+      let tabs        = [{ name: "main", source: "" }];
+      let activeTabIdx = 0;
+      let activeView   = "tmpl";      // "tmpl" | "data"
+      let outputView   = "rendered";  // "rendered" | "source"
+      let escapeMode   = "";
+      let focusMode    = null;
       let templateDiagnostics = [];
 
-      function createEditor(parent, doc, language, onChange, extraExtensions = []) {
-        return new EditorView({
-          parent,
-          state: EditorState.create({
-            doc,
-            extensions: [
-              ...sharedExtensions,
-              language,
-              ...extraExtensions,
-              EditorView.lineWrapping,
-              EditorView.updateListener.of((update) => {
-                if (update.docChanged) onChange(update.state.doc.toString());
-              })
-            ]
-          })
-        });
-      }
-
-      function setEditorText(view, text) {
-        const current = view.state.doc.toString();
-        if (current === text) return;
-        view.dispatch({
-          changes: { from: 0, to: current.length, insert: text }
-        });
-      }
-
-      let tabs = [{ name: "main", source: "" }];
-      let active = 0;
-      const activeTab = () => tabs[active];
+      const activeTab = () => tabs[activeTabIdx];
 
       function partialsMap() {
         const map = {};
@@ -568,117 +671,181 @@
         return map;
       }
 
+      // ── CodeMirror ────────────────────────────────────────────────────
+      const hbExprMark    = Decoration.mark({ class: "cm-hb-expr" });
+      const hbCommentMark = Decoration.mark({ class: "cm-hb-comment" });
+      const hbBlockMark   = Decoration.mark({ class: "cm-hb-block" });
+      const hbPartialMark = Decoration.mark({ class: "cm-hb-partial" });
+      const hbRawMark     = Decoration.mark({ class: "cm-hb-raw" });
+
+      const handlebarsDecorator = new MatchDecorator({
+        regexp: /\{\{!--[\s\S]*?--\}\}|\{\{![\s\S]*?\}\}|\{\{\{[\s\S]*?\}\}\}|\{\{[\s\S]*?\}\}/g,
+        decoration(match) {
+          const t = match[0];
+          if (t.startsWith("{{!--") || t.startsWith("{{!")) return hbCommentMark;
+          if (t.startsWith("{{{"))  return hbRawMark;
+          if (t.startsWith("{{>") || t.startsWith("{{ >")) return hbPartialMark;
+          if (t.startsWith("{{#") || t.startsWith("{{/") || /^\{\{\s*else\b/.test(t)) return hbBlockMark;
+          return hbExprMark;
+        }
+      });
+
+      const handlebarsHighlighting = ViewPlugin.fromClass(
+        class {
+          constructor(view) { this.decorations = handlebarsDecorator.createDeco(view); }
+          update(update) { this.decorations = handlebarsDecorator.updateDeco(update, this.decorations); }
+        },
+        { decorations: (v) => v.decorations }
+      );
+
+      // Make CM fill its container (height driven by flex parent)
+      const fillTheme = EditorView.theme({
+        "&": { height: "100%" },
+        ".cm-scroller": { overflow: "auto" }
+      });
+
+      const sharedExts = [
+        lineNumbers(), highlightActiveLineGutter(), highlightActiveLine(),
+        bracketMatching(), syntaxHighlighting(defaultHighlightStyle),
+        cmHistory(), keymap.of([...defaultKeymap, ...historyKeymap, indentWithTab]),
+        fillTheme,
+      ];
+
+      const templateView = new EditorView({
+        parent: byId("template-editor-container"),
+        state: EditorState.create({
+          doc: "",
+          extensions: [
+            ...sharedExts,
+            html(),
+            handlebarsHighlighting,
+            lintGutter(),
+            linter(() => templateDiagnostics),
+            EditorView.updateListener.of((u) => {
+              if (u.docChanged) { activeTab().source = u.state.doc.toString(); debouncedRun(); }
+              if (u.selectionSet) updateStatusMeta();
+            })
+          ]
+        })
+      });
+
+      const dataView = new EditorView({
+        parent: byId("data-editor-container"),
+        state: EditorState.create({
+          doc: "",
+          extensions: [
+            ...sharedExts,
+            yaml(),
+            EditorView.updateListener.of((u) => {
+              if (u.docChanged) debouncedRun();
+              if (u.selectionSet) updateStatusMeta();
+            })
+          ]
+        })
+      });
+
+      function setEditorText(view, text) {
+        const cur = view.state.doc.toString();
+        if (cur !== text) view.dispatch({ changes: { from: 0, to: cur.length, insert: text } });
+      }
+
+      // ── Tabs ──────────────────────────────────────────────────────────
       function renderTabs() {
-        const bar = $("tabs");
+        const bar = byId("tmpl-tabs");
         bar.innerHTML = "";
 
         tabs.forEach((tab, i) => {
-          const wrap = document.createElement("div");
-          wrap.className = "tab";
-          if (i === active) wrap.classList.add("is-active");
-
-          if (i !== 0 && i === active) {
-            // Active partial: rename it inline, right on the tab.
-            const input = document.createElement("input");
-            input.className = "tab-name";
-            input.value = tab.name;
-            input.spellcheck = false;
-            input.size = Math.max(tab.name.length, 4);
-            input.setAttribute("aria-label", "partial name");
-            input.title = `referenced as {{> ${tab.name}}}`;
-            input.addEventListener("input", () => {
-              tab.name = input.value;
-              input.size = Math.max(input.value.length, 4);
-              input.title = `referenced as {{> ${input.value}}}`;
-              debouncedRun();
-            });
-            wrap.append(input);
-          } else {
-            const btn = document.createElement("button");
-            btn.type = "button";
-            btn.className = "tab-label";
-            btn.textContent = i === 0 ? "main" : tab.name || "(unnamed)";
-            btn.title = i === 0 ? "entry template (rendered)" : `partial · {{> ${tab.name}}}`;
-            if (i === active) btn.setAttribute("aria-current", "true");
-            btn.addEventListener("click", () => selectTab(i));
-            wrap.append(btn);
-          }
-
+          const isActive = activeView === "tmpl" && i === activeTabIdx;
+          const t = document.createElement("div");
+          t.className = "tab" + (isActive ? " active" : "") + (i === 0 ? " is-main" : "");
+          t.title = i === 0 ? "entry template" : `partial · {{> ${tab.name}}}`;
+          t.addEventListener("click", () => selectTemplateTab(i));
+          t.append(document.createTextNode(i === 0 ? "main" : (tab.name || "(unnamed)")));
           if (i !== 0) {
-            const x = document.createElement("button");
-            x.type = "button";
-            x.className = "tab-close";
-            x.textContent = "×";
-            x.title = "remove partial";
-            x.addEventListener("click", (event) => {
-              event.stopPropagation();
-              removeTab(i);
-            });
-            wrap.append(x);
+            const x = document.createElement("span");
+            x.className = "close"; x.title = "remove partial"; x.textContent = "×";
+            x.addEventListener("click", (e) => { e.stopPropagation(); removeTab(i); });
+            t.append(x);
           }
-
-          bar.append(wrap);
+          bar.append(t);
         });
 
         const add = document.createElement("button");
-        add.type = "button";
-        add.className = "tab-add";
-        add.textContent = "+ partial";
+        add.className = "tab-add"; add.title = "add partial"; add.textContent = "＋ partial";
         add.addEventListener("click", addPartial);
         bar.append(add);
+
+        const dataTab = document.createElement("div");
+        dataTab.className = "tab is-data" + (activeView === "data" ? " active" : "");
+        dataTab.title = "data values for the render preview (YAML)";
+        dataTab.textContent = "data.yaml";
+        dataTab.addEventListener("click", selectDataTab);
+        byId("tabs-pinned").replaceChildren(dataTab);
       }
 
-      function syncEditor() {
-        setEditorText(templateView, activeTab().source);
-        renderTabs();
-        run();
+      function selectTemplateTab(i) {
+        activeView = "tmpl"; activeTabIdx = i; syncEditor();
       }
-
-      function selectTab(i) {
-        active = i;
-        clearTemplateDiagnostics();
-        syncEditor();
+      function selectDataTab() {
+        activeView = "data"; syncEditor();
       }
-
       function addPartial() {
-        let n = 1;
-        let name;
-        do {
-          name = "partial" + n++;
-        } while (tabs.some((t) => t.name === name));
-
+        let n = 1, name;
+        do { name = "partial" + n++; } while (tabs.some((t) => t.name === name));
         tabs.push({ name, source: "" });
-        active = tabs.length - 1;
+        activeView = "tmpl"; activeTabIdx = tabs.length - 1;
         syncEditor();
       }
-
       function removeTab(i) {
         if (i === 0) return;
-
-        if (active === i) active = i - 1;
-        else if (active > i) active -= 1;
-
+        if (activeTabIdx === i) activeTabIdx = i - 1;
+        else if (activeTabIdx > i) activeTabIdx -= 1;
         tabs.splice(i, 1);
         syncEditor();
       }
 
+      function syncEditor() {
+        const tmplPane = byId("template-editor-container");
+        const dataPane = byId("data-editor-container");
+        const renameBar = byId("rename-bar");
+
+        if (activeView === "tmpl") {
+          setEditorText(templateView, activeTab().source);
+          tmplPane.classList.add("is-active");
+          dataPane.classList.remove("is-active");
+          renameBar.hidden = activeTabIdx === 0;
+          if (activeTabIdx !== 0) {
+            byId("partial-name").value = activeTab().name;
+            byId("partial-ref").textContent = `{{> ${activeTab().name}}}`;
+          }
+          byId("sources-sub").textContent = activeTabIdx === 0
+            ? "entry template · compiled in-browser"
+            : `partial · referenced as {{> ${activeTab().name}}}`;
+        } else {
+          dataPane.classList.add("is-active");
+          tmplPane.classList.remove("is-active");
+          renameBar.hidden = true;
+          byId("sources-sub").textContent = "live YAML data used for the render preview";
+        }
+
+        renderTabs();
+        run();
+        updateStatusMeta();
+      }
+
+      // ── Compile + render ──────────────────────────────────────────────
       function applyEscape(program, mode) {
         if (!mode) return program;
-
         const rewrite = (instructions) =>
-          instructions.map((instruction) => {
-            const next = { ...instruction };
+          instructions.map((inst) => {
+            const next = { ...inst };
             if (next.t === "emit") next.escape = mode;
             for (const key of ["then", "else", "body"]) {
               if (Array.isArray(next[key])) next[key] = rewrite(next[key]);
             }
             return next;
           });
-
-        return {
-          ...program,
-          instructions: rewrite(program.instructions)
-        };
+        return { ...program, instructions: rewrite(program.instructions) };
       }
 
       function previewDoc(body) {
@@ -686,105 +853,15 @@
         return (
           '<!doctype html><html><head><meta charset="utf-8">' +
           `<meta http-equiv="Content-Security-Policy" content="${csp}">` +
-          "<style>body{font:14px/1.5 system-ui,sans-serif;margin:.5rem;color:#18181b}</style>" +
+          "<style>html,body{margin:0}body{font:13px/1.5 system-ui,sans-serif;padding:14px;color:#18181b;background:#fff}</style>" +
           `</head><body>${body}</body></html>`
         );
       }
 
       function setOutput(str) {
-        $("output").textContent = str;
-        $("preview").srcdoc = previewDoc(str);
-      }
-
-      function updateTemplateDiagnostics(diags) {
-        templateDiagnostics = diags;
-        templateView.dispatch({ effects: setDiagnosticsEffect.of(diags) });
-      }
-
-      function clearTemplateDiagnostics() {
-        updateTemplateDiagnostics([]);
-      }
-
-      function setError(message) {
-        const error = $("error");
-        if (message) {
-          error.className = "status error";
-          error.textContent = message;
-        } else {
-          error.className = "status ok";
-          error.textContent = "no errors";
-        }
-      }
-
-      function setView(view) {
-        const rendered = view !== "source";
-        $("preview").hidden = !rendered;
-        $("output").hidden = rendered;
-        if (rendered) requestAnimationFrame(resizePreview);
-      }
-
-      function resizePreview() {
-        const frame = $("preview");
-        try {
-          const doc = frame.contentDocument;
-          if (doc && doc.body) {
-            frame.style.height = Math.max(doc.documentElement.scrollHeight, doc.body.scrollHeight, 120) + "px";
-          }
-        } catch {
-          frame.style.height = "120px";
-        }
-      }
-
-      function currentView() {
-        return document.querySelector('input[name="view"]:checked').value;
-      }
-
-      function cycleView() {
-        const next = currentView() === "rendered" ? "source" : "rendered";
-        document.querySelector(`input[name="view"][value="${next}"]`).checked = true;
-        setView(next);
-        updateHash();
-      }
-
-      function state() {
-        return {
-          tabs: tabs.map((tab) => ({ n: tab.name, s: tab.source })),
-          d: dataView.state.doc.toString(),
-          e: $("escape").value,
-          v: currentView()
-        };
-      }
-
-      function updateHash() {
-        history.replaceState(null, "", "#" + encodeState(state()));
-      }
-
-      function restoreHash() {
-        if (!location.hash.length) return false;
-
-        try {
-          const decoded = decodeState(location.hash.slice(1));
-
-          tabs =
-            Array.isArray(decoded.tabs) && decoded.tabs.length > 0
-              ? decoded.tabs.map((tab, index) => ({
-                  name: index === 0 ? "main" : tab.n ?? "partial",
-                  source: tab.s ?? ""
-                }))
-              : [{ name: "main", source: "" }];
-
-          active = 0;
-          setEditorText(dataView, decoded.d ?? "");
-          $("escape").value = decoded.e ?? "";
-
-          const view = decoded.v === "source" ? "source" : "rendered";
-          document.querySelector(`input[name="view"][value="${view}"]`).checked = true;
-          setView(view);
-          syncEditor();
-          return true;
-        } catch {
-          return false;
-        }
+        byId("output-source").textContent = str;
+        byId("output-preview").srcdoc = previewDoc(str);
+        qs(".output-body").dataset.empty = str ? "false" : "true";
       }
 
       function run() {
@@ -793,282 +870,508 @@
         const compiled = renderer.compile(mainSource, partialsMap());
 
         if (compiled.error) {
-          if (active === 0) {
+          if (activeView === "tmpl" && activeTabIdx === 0) {
             const [from, to] = byteRangeToCharRange(mainSource, compiled.error.start, compiled.error.end);
-            updateTemplateDiagnostics([
-              {
-                from,
-                to,
-                severity: "error",
-                message: compiled.error.message
-              }
-            ]);
+            updateDiagnostics([{ from, to, severity: "error", message: compiled.error.message }]);
             const pos = charToLineColumn(mainSource, from);
-            setError(`${compiled.error.message} (line ${pos.line}, column ${pos.column})`);
+            setError(`compile error: ${compiled.error.message} (Ln ${pos.line}, Col ${pos.column})`);
           } else {
-            clearTemplateDiagnostics();
-            setError(`${compiled.error.message} (in main template)`);
+            clearDiagnostics();
+            setError("compile error: " + compiled.error.message);
           }
-
-          setOutput("");
-          updateHash();
-          return;
+          setOutput(""); saveHash(); return;
         }
 
-        clearTemplateDiagnostics();
+        clearDiagnostics();
 
         let data;
         try {
           data = loadYaml(dataSource || "null");
           if (typeof data === "undefined") data = null;
-        } catch (error) {
-          setError("invalid YAML data: " + error.message);
-          setOutput("");
-          updateHash();
-          return;
+        } catch (err) {
+          setError("invalid YAML: " + err.message);
+          setOutput(""); saveHash(); return;
         }
 
         try {
-          const program = applyEscape(compiled.program, $("escape").value);
+          const program = applyEscape(compiled.program, escapeMode);
           setOutput(renderer.render(program, data));
           setError("");
-        } catch (error) {
-          setError("render error: " + error.message);
+        } catch (err) {
+          setError("render error: " + err.message);
           setOutput("");
         }
-
-        updateHash();
+        saveHash();
       }
 
-      const debouncedRun = debounce(run, 150);
+      const debouncedRun = debounce(run, 100);
 
-      const templateView = createEditor(
-        $("templateEditor"),
-        "",
-        html(),
-        (source) => {
-          activeTab().source = source;
-          debouncedRun();
-        },
-        [
-          handlebarsHighlighting,
-          lintGutter(),
-          linter(() => templateDiagnostics)
-        ]
-      );
-
-      const dataView = createEditor($("dataEditor"), "{}", yaml(), () => {
-        debouncedRun();
-      });
-
-      async function copyShareLink() {
-        updateHash();
-        await navigator.clipboard?.writeText(location.href);
-        $("share").textContent = "Copied!";
-        setTimeout(() => {
-          $("share").textContent = "Copy link";
-        }, 1200);
+      function updateDiagnostics(diags) {
+        templateDiagnostics = diags;
+        templateView.dispatch({ effects: setDiagnosticsEffect.of(diags) });
+      }
+      function clearDiagnostics() {
+        if (!templateDiagnostics.length) return;
+        templateDiagnostics = [];
+        templateView.dispatch({ effects: setDiagnosticsEffect.of([]) });
       }
 
-      const commandDefinitions = [
-        { title: "Run render now", shortcut: `${modLabel}+Enter`, action: () => run() },
-        { title: "Focus template editor", shortcut: `${modLabel}+1`, action: () => templateView.focus() },
-        { title: "Focus YAML editor", shortcut: `${modLabel}+2`, action: () => dataView.focus() },
-        { title: "Add partial tab", shortcut: `${modLabel}+Alt+N`, action: () => addPartial() },
-        { title: "Copy share link", shortcut: `${modLabel}+Shift+C`, action: async () => copyShareLink() },
-        { title: "Toggle output view", shortcut: `${modLabel}+Shift+V`, action: () => cycleView() }
-      ];
-
-      let paletteSelection = 0;
-
-      function filteredCommands() {
-        const needle = $("paletteSearch").value.trim().toLowerCase();
-        return commandDefinitions.filter((cmd) => cmd.title.toLowerCase().includes(needle));
+      // ── Status bar ────────────────────────────────────────────────────
+      function setError(msg) {
+        const bar = qs(".statusbar");
+        const txt = byId("status-msg");
+        if (msg) { bar.classList.add("has-error"); txt.textContent = msg; }
+        else { bar.classList.remove("has-error"); txt.textContent = "no errors"; }
       }
 
-      function renderPaletteList() {
-        const items = filteredCommands();
-        const list = $("paletteList");
-        list.innerHTML = "";
+      function escapeHtml(s) {
+        return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      }
 
-        if (items.length === 0) {
-          $("paletteEmpty").hidden = false;
-          paletteSelection = 0;
-          return;
-        }
+      function updateStatusMeta() {
+        const view = activeView === "data" ? dataView : templateView;
+        const sel  = view.state.selection.main;
+        const line = view.state.doc.lineAt(sel.head);
+        const col  = sel.head - line.from + 1;
+        const fileName = activeView === "data" ? "data.yaml" : activeTab().name;
+        const lang = activeView === "data" ? "YAML" : "Handlebars";
+        byId("status-meta").innerHTML =
+          `<b>${escapeHtml(fileName)} · Ln ${line.number}, Col ${col}</b>` +
+          `  ·  ${lang}  ·  UTF-8  ·  Escape: <b>${escapeMode || "as compiled"}</b>`;
+      }
 
-        $("paletteEmpty").hidden = true;
-        if (paletteSelection >= items.length) paletteSelection = items.length - 1;
+      // ── Output view ───────────────────────────────────────────────────
+      function setOutputView(view) {
+        outputView = view;
+        const rendered = view !== "source";
+        byId("output-preview").hidden = !rendered;
+        byId("output-source").hidden = rendered;
+        for (const b of document.querySelectorAll(".segmented button"))
+          b.classList.toggle("on", b.dataset.view === view);
+      }
 
-        items.forEach((item, index) => {
-          const li = document.createElement("li");
-          const button = document.createElement("button");
-          button.type = "button";
-          button.className = "palette-item";
-          if (index === paletteSelection) button.setAttribute("aria-current", "true");
-          button.innerHTML = `<span>${item.title}</span><span class="kbd">${item.shortcut}</span>`;
-          button.addEventListener("click", async () => {
-            closePalette();
-            await item.action();
-          });
-          li.append(button);
-          list.append(li);
+      // ── Splitter ──────────────────────────────────────────────────────
+      let splits = { w0: null, h0: null };
+      try { const r = localStorage.getItem(LS_SPLIT); if (r) splits = JSON.parse(r); } catch {}
+
+      function saveSplits() { try { localStorage.setItem(LS_SPLIT, JSON.stringify(splits)); } catch {} }
+
+      function isStacked() { return qs(".workspace")?.classList.contains("stacked"); }
+
+      function applySplits() {
+        const ws = qs(".workspace");
+        if (!ws) return;
+        const stacked = isStacked();
+        const total = stacked ? ws.clientHeight : ws.clientWidth;
+        if (total <= 0) return;
+        const usable = total - 6;
+        const MIN = stacked ? 160 : 240;
+        const key = stacked ? "h0" : "w0";
+        let s = splits[key] ?? Math.round(usable * 0.55);
+        s = Math.max(MIN, Math.min(usable - MIN, s));
+        splits[key] = s;
+        const panes = document.querySelectorAll(".pane");
+        panes[0].style.flex = `0 0 ${s}px`;
+        panes[1].style.flex = "1 1 0";
+      }
+
+      function attachSplitter(el) {
+        el.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          el.classList.add("dragging");
+          const stacked = isStacked();
+          document.body.classList.add(stacked ? "dragging-row" : "dragging-col");
+          const wsRect = qs(".workspace").getBoundingClientRect();
+          const key = stacked ? "h0" : "w0";
+          const startS = splits[key];
+          const startPos = stacked ? e.clientY : e.clientX;
+          const MIN = stacked ? 160 : 240;
+          const usable = (stacked ? wsRect.height : wsRect.width) - 6;
+
+          const onMove = (ev) => {
+            const cur = stacked ? ev.clientY : ev.clientX;
+            splits[key] = Math.max(MIN, Math.min(usable - MIN, startS + (cur - startPos)));
+            applySplits();
+          };
+          const onUp = () => {
+            el.classList.remove("dragging");
+            document.body.classList.remove("dragging-col", "dragging-row");
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+            saveSplits();
+          };
+          window.addEventListener("mousemove", onMove);
+          window.addEventListener("mouseup", onUp);
+        });
+        el.addEventListener("dblclick", () => {
+          splits = { w0: null, h0: null };
+          applySplits(); saveSplits();
         });
       }
 
-      function openPalette() {
-        $("paletteBackdrop").hidden = false;
-        $("paletteSearch").value = "";
-        paletteSelection = 0;
-        renderPaletteList();
-        $("paletteSearch").focus();
+      // ── Focus mode ────────────────────────────────────────────────────
+      function setFocus(mode) {
+        focusMode = mode;
+        const ws = qs(".workspace");
+        ws.classList.remove("focus-sources", "focus-output");
+        for (const b of document.querySelectorAll(".focus-toggle")) b.classList.remove("on");
+        if (mode) {
+          ws.classList.add("focus-" + mode);
+          const btn = document.querySelector(`.focus-toggle[data-pane="${mode}"]`);
+          if (btn) btn.classList.add("on");
+        }
+      }
+      function toggleFocus(mode) { setFocus(focusMode === mode ? null : mode); }
+
+      // ── Examples ──────────────────────────────────────────────────────
+      function buildExampleSelect() {
+        const sel = byId("example-select");
+        const custom = document.createElement("option");
+        custom.value = "-1"; custom.textContent = "(custom)";
+        sel.append(custom);
+        examples.forEach((ex, i) => {
+          const opt = document.createElement("option");
+          opt.value = String(i); opt.textContent = ex.label;
+          sel.append(opt);
+        });
       }
 
-      function closePalette() {
-        $("paletteBackdrop").hidden = true;
-        templateView.focus();
-      }
-
-      async function executePaletteSelection() {
-        const items = filteredCommands();
-        if (items.length === 0) return;
-        const selected = items[paletteSelection];
-        closePalette();
-        await selected.action();
-      }
-
-      // Each example lives in examples/<id>/ as individual files: main.stem, one
-      // .stem per partial, and data.json. Fetch them, populate the tabs, and
-      // show the data as YAML in the editor.
-      async function loadExample(example) {
-        const dir = `./examples/${example.id}/`;
-        const [mainSource, dataText, ...partialSources] = await Promise.all([
-          fetch(dir + example.main).then((response) => response.text()),
-          fetch(dir + example.data).then((response) => response.text()),
-          ...example.partials.map((name) =>
-            fetch(`${dir}${name}.stem`).then((response) => response.text()),
-          ),
+      async function loadExample(idx) {
+        const ex = examples[idx];
+        if (!ex) return;
+        const dir = `./examples/${ex.id}/`;
+        const [mainSrc, dataText, ...partialSrcs] = await Promise.all([
+          fetch(dir + ex.main).then((r) => r.text()),
+          fetch(dir + ex.data).then((r) => r.text()),
+          ...ex.partials.map((name) => fetch(`${dir}${name}.stem`).then((r) => r.text())),
         ]);
-
-        tabs = [{ name: "main", source: mainSource }];
-        example.partials.forEach((name, i) => tabs.push({ name, source: partialSources[i] }));
-
-        active = 0;
+        tabs = [{ name: "main", source: mainSrc }];
+        ex.partials.forEach((name, i) => tabs.push({ name, source: partialSrcs[i] }));
+        activeTabIdx = 0; activeView = "tmpl";
         setEditorText(dataView, dumpYaml(JSON.parse(dataText), { indent: 2, lineWidth: -1, noRefs: true }));
-        $("escape").value = "";
-
-        const view = example.view === "source" ? "source" : "rendered";
-        document.querySelector(`input[name="view"][value="${view}"]`).checked = true;
-        setView(view);
+        escapeMode = "";
+        byId("escape-select").value = "";
+        byId("example-select").value = String(idx);
+        setOutputView(ex.view === "source" ? "source" : "rendered");
         syncEditor();
       }
 
-      $("example").addEventListener("change", (event) => {
-        loadExample(examples[Number(event.target.value)]);
-      });
-
-      $("escape").addEventListener("change", debouncedRun);
-      $("preview").addEventListener("load", resizePreview);
-      $("share").addEventListener("click", copyShareLink);
-      $("commands").addEventListener("click", openPalette);
-
-      $("paletteBackdrop").addEventListener("click", (event) => {
-        if (event.target === $("paletteBackdrop")) closePalette();
-      });
-      $("paletteSearch").addEventListener("input", () => {
-        paletteSelection = 0;
-        renderPaletteList();
-      });
-      $("paletteSearch").addEventListener("keydown", async (event) => {
-        const items = filteredCommands();
-
-        if (event.key === "Escape") {
-          event.preventDefault();
-          closePalette();
-          return;
-        }
-
-        if (event.key === "ArrowDown") {
-          event.preventDefault();
-          paletteSelection = Math.min(items.length - 1, paletteSelection + 1);
-          renderPaletteList();
-          return;
-        }
-
-        if (event.key === "ArrowUp") {
-          event.preventDefault();
-          paletteSelection = Math.max(0, paletteSelection - 1);
-          renderPaletteList();
-          return;
-        }
-
-        if (event.key === "Enter") {
-          event.preventDefault();
-          await executePaletteSelection();
-        }
-      });
-
-      for (const radio of document.querySelectorAll('input[name="view"]')) {
-        radio.addEventListener("change", () => {
-          setView(currentView());
-          updateHash();
-        });
+      // ── URL state ─────────────────────────────────────────────────────
+      function snapshotState() {
+        return {
+          tabs: tabs.map((t) => ({ n: t.name, s: t.source })),
+          d: dataView.state.doc.toString(),
+          e: escapeMode, v: outputView,
+          av: activeView, ai: activeTabIdx,
+        };
       }
 
-      window.addEventListener("keydown", (event) => {
-        const mod = event.metaKey || event.ctrlKey;
+      function saveHash() {
+        try { history.replaceState(null, "", "#" + encodeState(snapshotState())); } catch {}
+      }
 
-        if (mod && event.shiftKey && event.key.toLowerCase() === "p") {
-          event.preventDefault();
-          if ($("paletteBackdrop").hidden) openPalette();
-          else closePalette();
-          return;
+      function restoreHash() {
+        if (!location.hash.length) return false;
+        try {
+          const s = decodeState(location.hash.slice(1));
+          tabs = Array.isArray(s.tabs) && s.tabs.length
+            ? s.tabs.map((t, i) => ({ name: i === 0 ? "main" : (t.n ?? "partial"), source: t.s ?? "" }))
+            : [{ name: "main", source: "" }];
+          activeTabIdx = Math.max(0, Math.min(tabs.length - 1, s.ai ?? 0));
+          activeView = s.av === "data" ? "data" : "tmpl";
+          setEditorText(dataView, s.d ?? "");
+          escapeMode = s.e ?? "";
+          byId("escape-select").value = escapeMode;
+          byId("example-select").value = "-1";
+          setOutputView(s.v === "source" ? "source" : "rendered");
+          syncEditor();
+          return true;
+        } catch { return false; }
+      }
+
+      // ── Command palette ───────────────────────────────────────────────
+      function buildCommands() {
+        return [
+          ...examples.map((ex, i) => ({
+            label: `Load example · ${ex.label}`, kind: "example",
+            run: () => loadExample(i),
+          })),
+          { label: "Open data.yaml",     kind: "sources", run: selectDataTab },
+          { label: "Open main template", kind: "sources", run: () => selectTemplateTab(0) },
+          { label: "Add partial",        kind: "sources", run: addPartial },
+          { label: "Toggle focus · Sources", kind: "view", run: () => toggleFocus("sources") },
+          { label: "Toggle focus · Output",  kind: "view", run: () => toggleFocus("output") },
+          { label: "View · Rendered", kind: "view", run: () => { setOutputView("rendered"); run(); } },
+          { label: "View · Source",   kind: "view", run: () => { setOutputView("source"); run(); } },
+          { label: "Reset layout", kind: "view",
+            run: () => { splits = { w0: null, h0: null }; applySplits(); saveSplits(); setFocus(null); } },
+          { label: "Copy share link", kind: "share", run: copyShareLink },
+          ...["", "html", "xml", "json", "none"].map((m) => ({
+            label: `Escape · ${m || "(as compiled)"}`, kind: "render",
+            run: () => { escapeMode = m; byId("escape-select").value = m; run(); updateStatusMeta(); },
+          })),
+        ];
+      }
+
+      let paletteOpen = false;
+      function openPalette() {
+        if (paletteOpen) return;
+        paletteOpen = true;
+        const all = buildCommands();
+        let filtered = all, sel = 0;
+
+        const back = document.createElement("div");
+        back.className = "palette-backdrop";
+        const box = document.createElement("div");
+        box.className = "palette";
+        const input = document.createElement("input");
+        input.type = "text"; input.placeholder = "Type a command…"; input.spellcheck = false;
+        const list = document.createElement("ul");
+
+        function renderList() {
+          list.innerHTML = "";
+          filtered.forEach((cmd, i) => {
+            const li = document.createElement("li");
+            li.className = i === sel ? "sel" : "";
+            li.addEventListener("click", () => { cmd.run(); close(); });
+            li.addEventListener("mouseenter", () => { sel = i; renderList(); });
+            const kind = document.createElement("span");
+            kind.className = "pkind"; kind.textContent = cmd.kind;
+            li.append(kind, cmd.label);
+            list.append(li);
+          });
         }
+        function close() { paletteOpen = false; back.remove(); }
 
-        if (!$("paletteBackdrop").hidden && event.key === "Escape") {
-          event.preventDefault();
-          closePalette();
-          return;
+        input.addEventListener("input", () => {
+          const q = input.value.toLowerCase().trim();
+          filtered = q ? all.filter((c) => c.label.toLowerCase().includes(q)) : all;
+          sel = 0; renderList();
+        });
+        input.addEventListener("keydown", (e) => {
+          if (e.key === "ArrowDown") { sel = Math.min(filtered.length - 1, sel + 1); renderList(); e.preventDefault(); }
+          else if (e.key === "ArrowUp") { sel = Math.max(0, sel - 1); renderList(); e.preventDefault(); }
+          else if (e.key === "Enter") { if (filtered[sel]) { filtered[sel].run(); close(); } }
+          else if (e.key === "Escape") close();
+        });
+        back.addEventListener("mousedown", (e) => { if (e.target === back) close(); });
+        box.append(input, list);
+        back.append(box);
+        document.body.append(back);
+        renderList();
+        setTimeout(() => input.focus(), 0);
+      }
+
+      // ── Toast ─────────────────────────────────────────────────────────
+      function toast(msg) {
+        let t = qs(".toast");
+        if (!t) { t = document.createElement("div"); t.className = "toast"; document.body.append(t); }
+        t.textContent = msg;
+        requestAnimationFrame(() => t.classList.add("show"));
+        clearTimeout(t._hide);
+        t._hide = setTimeout(() => t.classList.remove("show"), 1400);
+      }
+
+      async function copyShareLink() {
+        saveHash();
+        try { await navigator.clipboard?.writeText(location.href); toast("Link copied to clipboard"); }
+        catch { toast("Couldn't copy (permission?)"); }
+      }
+
+      // ── Tweaks panel ──────────────────────────────────────────────────
+      const TWEAK_OPTS = {
+        theme: [
+          { value: "light", label: "Light", swatch: ["#ffffff","#f4f4f5","#18181b"] },
+          { value: "dim",   label: "Dim",   swatch: ["#f4f1ec","#e8e3da","#2b2620"] },
+          { value: "dark",  label: "Dark",  swatch: ["#18181b","#27272a","#f4f4f5"] },
+        ],
+        mood: [
+          { value: "workshop", label: "Workshop", desc: "Clean IDE · violet · sans + mono",       accent: "#7c3aed" },
+          { value: "terminal", label: "Terminal", desc: "Monospaced everything · phosphor green",  accent: "#10b981" },
+          { value: "notebook", label: "Notebook", desc: "Serif headings · warm paper · amber",     accent: "#d97706" },
+        ],
+        layout: [
+          { value: "split",   label: "Split",   hint: "Sources ← → Output" },
+          { value: "stacked", label: "Stacked", hint: "Sources ↑ Output ↓" },
+        ],
+      };
+
+      let tweaks = { theme: "light", mood: "workshop", layout: "split" };
+      try { const r = localStorage.getItem(LS_TWEAKS); if (r) tweaks = { ...tweaks, ...JSON.parse(r) }; } catch {}
+
+      function applyTweaks() {
+        document.body.dataset.theme = tweaks.theme;
+        document.body.dataset.mood  = tweaks.mood;
+        qs(".workspace")?.classList.toggle("stacked", tweaks.layout === "stacked");
+        window.dispatchEvent(new Event("resize"));
+      }
+      function saveTweaks() { try { localStorage.setItem(LS_TWEAKS, JSON.stringify(tweaks)); } catch {} }
+
+      function mkEl(tag, attrs = {}, children = []) {
+        const n = document.createElement(tag);
+        for (const [k, v] of Object.entries(attrs)) {
+          if (k === "class") n.className = v;
+          else if (k.startsWith("on") && typeof v === "function") n.addEventListener(k.slice(2), v);
+          else if (v != null && v !== false) n.setAttribute(k, v);
         }
-
-        if (mod && event.key === "Enter") {
-          event.preventDefault();
-          run();
-          return;
+        for (const c of [].concat(children)) {
+          if (c != null) n.append(c instanceof Node ? c : document.createTextNode(String(c)));
         }
+        return n;
+      }
 
-        if (mod && event.altKey && event.key.toLowerCase() === "n") {
-          event.preventDefault();
-          addPartial();
-          return;
+      function twSection(title, hint, children) {
+        return mkEl("div", { class: "tw-section" }, [
+          mkEl("div", { class: "tw-section-head" }, [
+            mkEl("span", { class: "tw-section-title" }, title),
+            hint ? mkEl("span", { class: "tw-section-hint" }, hint) : null,
+          ]),
+          mkEl("div", { class: "tw-section-body" }, [].concat(children)),
+        ]);
+      }
+
+      let tweaksPanel = null;
+
+      function buildTweaksPanel() {
+        const panel = mkEl("div", { class: "tw-panel", role: "dialog", "aria-label": "Tweaks" });
+
+        const header = mkEl("div", { class: "tw-header" }, [
+          mkEl("div", { class: "tw-title" }, [mkEl("span", { class: "tw-pill" }), "Tweaks"]),
+          mkEl("button", { class: "tw-close", title: "Close", onclick: hideTweaks }, "×"),
+        ]);
+        panel.append(header);
+
+        panel.append(twSection("Theme", null,
+          TWEAK_OPTS.theme.map((o) =>
+            mkEl("button", {
+              class: "tw-swatch" + (tweaks.theme === o.value ? " on" : ""),
+              title: o.label, onclick: () => setTweak("theme", o.value),
+            }, [
+              mkEl("span", { class: "tw-swatch-grid", style: `--c1:${o.swatch[0]};--c2:${o.swatch[1]};--c3:${o.swatch[2]};` }),
+              mkEl("span", { class: "tw-swatch-label" }, o.label),
+            ])
+          )
+        ));
+
+        panel.append(twSection("Mood", "Resets type, accent, density.",
+          TWEAK_OPTS.mood.map((o) =>
+            mkEl("button", {
+              class: "tw-card" + (tweaks.mood === o.value ? " on" : ""),
+              "data-mood": o.value, onclick: () => setTweak("mood", o.value),
+            }, [
+              mkEl("span", { class: "tw-card-dot", style: `background:${o.accent};` }),
+              mkEl("span", { class: "tw-card-body" }, [
+                mkEl("span", { class: "tw-card-label" }, o.label),
+                mkEl("span", { class: "tw-card-desc" }, o.desc),
+              ]),
+            ])
+          )
+        ));
+
+        panel.append(twSection("Layout", null, [
+          mkEl("div", { class: "tw-segmented" },
+            TWEAK_OPTS.layout.map((o) =>
+              mkEl("button", {
+                class: tweaks.layout === o.value ? "on" : "",
+                title: o.hint, onclick: () => setTweak("layout", o.value),
+              }, o.label)
+            )
+          )
+        ]));
+
+        panel.append(mkEl("div", { class: "tw-foot" }, "Edits persist across reloads."));
+
+        // Draggable by header
+        header.addEventListener("mousedown", (e) => {
+          if (e.target.classList.contains("tw-close")) return;
+          const rect = panel.getBoundingClientRect();
+          const dx = e.clientX - rect.left, dy = e.clientY - rect.top;
+          const onMove = (ev) => {
+            panel.style.left   = Math.max(8, Math.min(window.innerWidth  - rect.width  - 8, ev.clientX - dx)) + "px";
+            panel.style.top    = Math.max(8, Math.min(window.innerHeight - rect.height - 8, ev.clientY - dy)) + "px";
+            panel.style.right  = "auto";
+            panel.style.bottom = "auto";
+          };
+          const onUp = () => {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+          };
+          window.addEventListener("mousemove", onMove);
+          window.addEventListener("mouseup", onUp);
+        });
+
+        return panel;
+      }
+
+      function setTweak(key, value) {
+        tweaks[key] = value;
+        applyTweaks(); saveTweaks();
+        // Rebuild panel to reflect new selection
+        if (tweaksPanel) {
+          tweaksPanel.remove();
+          tweaksPanel = buildTweaksPanel();
+          document.body.append(tweaksPanel);
         }
+      }
 
-        if (mod && event.shiftKey && event.key.toLowerCase() === "c") {
-          event.preventDefault();
-          void copyShareLink();
-          return;
-        }
+      function showTweaks() {
+        if (tweaksPanel) { hideTweaks(); return; }
+        tweaksPanel = buildTweaksPanel();
+        document.body.append(tweaksPanel);
+      }
+      function hideTweaks() {
+        if (tweaksPanel) { tweaksPanel.remove(); tweaksPanel = null; }
+      }
 
-        if (mod && event.shiftKey && event.key.toLowerCase() === "v") {
-          event.preventDefault();
-          cycleView();
-          return;
-        }
+      // ── Wire events ───────────────────────────────────────────────────
+      byId("share-btn").addEventListener("click", copyShareLink);
+      byId("cmd-btn").addEventListener("click", openPalette);
+      byId("tweaks-btn").addEventListener("click", showTweaks);
 
-        if (mod && event.key === "1") {
-          event.preventDefault();
-          templateView.focus();
-          return;
-        }
+      byId("example-select").addEventListener("change", (e) => {
+        const v = Number(e.target.value);
+        if (v >= 0) loadExample(v);
+      });
 
-        if (mod && event.key === "2") {
-          event.preventDefault();
-          dataView.focus();
+      byId("escape-select").addEventListener("change", (e) => {
+        escapeMode = e.target.value; run(); updateStatusMeta();
+      });
+
+      for (const b of document.querySelectorAll(".segmented button")) {
+        b.addEventListener("click", () => { setOutputView(b.dataset.view); run(); });
+      }
+
+      for (const b of document.querySelectorAll(".focus-toggle")) {
+        b.addEventListener("click", () => toggleFocus(b.dataset.pane));
+      }
+
+      byId("partial-name").addEventListener("input", (e) => {
+        if (activeView !== "tmpl" || activeTabIdx === 0) return;
+        activeTab().name = e.target.value;
+        byId("partial-ref").textContent = `{{> ${activeTab().name}}}`;
+        renderTabs(); debouncedRun();
+      });
+
+      window.addEventListener("keydown", (e) => {
+        const mod = e.metaKey || e.ctrlKey;
+        if (mod && e.shiftKey && e.key.toLowerCase() === "p") {
+          e.preventDefault(); openPalette();
+        } else if (e.key === "Escape" && focusMode) {
+          setFocus(null);
         }
       });
 
-      setView(currentView());
-      if (!restoreHash()) await loadExample(examples[0]);
+      window.addEventListener("resize", applySplits);
+
+      // ── Boot ──────────────────────────────────────────────────────────
+      buildExampleSelect();
+      attachSplitter(byId("splitter-1"));
+      applyTweaks();
+      setOutputView(outputView);
+
+      if (!restoreHash()) await loadExample(3); // default: HTML cards
+      applySplits();
+      updateStatusMeta();
     </script>
   </body>
 </html>
