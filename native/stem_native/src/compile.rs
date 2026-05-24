@@ -132,7 +132,12 @@ impl Block {
 }
 
 enum Token {
-    Text(String),
+    Text {
+        text: String,
+        // Byte span of the raw text run in the source being tokenized (relative
+        // to the current file). Used only for the span-annotated source map.
+        span: Span,
+    },
     Expr {
         raw: String,
         escape: &'static str,
@@ -162,14 +167,21 @@ enum Token {
 fn tokenize(src: &str) -> Result<Vec<Token>, CompileError> {
     let mut tokens = Vec::new();
     let mut text = String::new();
+    let mut text_start = 0; // byte offset where the pending text run began
     let mut trim_next = false;
     let mut i = 0;
 
     while i < src.len() {
         let Some(rel) = src[i..].find("{{") else {
+            if text.is_empty() {
+                text_start = i;
+            }
             text.push_str(&src[i..]);
             break;
         };
+        if text.is_empty() {
+            text_start = i;
+        }
         text.push_str(&src[i..i + rel]);
         let start = i + rel;
 
@@ -193,7 +205,7 @@ fn tokenize(src: &str) -> Result<Vec<Token>, CompileError> {
         let tag_end = inner_start + rel2 + close.len();
         let (inner2, trim_left, trim_right) = extract_trim(inner);
 
-        flush_text(&mut tokens, &mut text, &mut trim_next);
+        flush_text(&mut tokens, &mut text, &mut trim_next, (text_start, start));
         if trim_left {
             trim_trailing_text(&mut tokens);
         }
@@ -204,7 +216,12 @@ fn tokenize(src: &str) -> Result<Vec<Token>, CompileError> {
         i = tag_end;
     }
 
-    flush_text(&mut tokens, &mut text, &mut trim_next);
+    flush_text(
+        &mut tokens,
+        &mut text,
+        &mut trim_next,
+        (text_start, src.len()),
+    );
     Ok(tokens)
 }
 
@@ -237,22 +254,26 @@ fn extract_trim(inner: &str) -> (String, bool, bool) {
 }
 
 // Flush the pending text buffer as a `Text` token. A pending right-trim strips
-// the buffer's leading whitespace first.
-fn flush_text(tokens: &mut Vec<Token>, text: &mut String, trim_next: &mut bool) {
+// the buffer's leading whitespace first. The span covers the raw source run
+// (whitespace control may shorten the content but not the recorded span).
+fn flush_text(tokens: &mut Vec<Token>, text: &mut String, trim_next: &mut bool, span: Span) {
     let mut content = std::mem::take(text);
     if *trim_next {
         content = content.trim_start().to_string();
         *trim_next = false;
     }
     if !content.is_empty() {
-        tokens.push(Token::Text(content));
+        tokens.push(Token::Text {
+            text: content,
+            span,
+        });
     }
 }
 
 // A left-trim marker strips trailing whitespace from the immediately preceding
 // text token, dropping it if it becomes empty.
 fn trim_trailing_text(tokens: &mut Vec<Token>) {
-    if let Some(Token::Text(text)) = tokens.last_mut() {
+    if let Some(Token::Text { text, .. }) = tokens.last_mut() {
         let trimmed = text.trim_end().to_string();
         if trimmed.is_empty() {
             tokens.pop();
@@ -348,9 +369,10 @@ enum Stop {
 enum Node {
     Text {
         text: String,
-        // The template/partial the text came from ("main" for the entry), used
-        // only when compiling a span-annotated program.
+        // The template/partial the text came from ("main" for the entry) and the
+        // raw byte span in that file, used only for span-annotated programs.
         file: String,
+        span: Span,
     },
     Emit {
         expr: Expr,
@@ -433,9 +455,10 @@ fn collect(
     loop {
         match it.next() {
             None => return Ok((nodes, Stop::Eof)),
-            Some(Token::Text(text)) => nodes.push(Node::Text {
+            Some(Token::Text { text, span }) => nodes.push(Node::Text {
                 text,
                 file: current_file(asm),
+                span,
             }),
             Some(Token::Expr { raw, escape, span }) => {
                 nodes.push(Node::Emit {
@@ -1318,10 +1341,10 @@ fn lower_node<'a>(
     match node {
         // Region definitions are inlined at yield sites, never emitted in place.
         Node::Region { .. } => Ok(Vec::new()),
-        Node::Text { text, file } => {
+        Node::Text { text, file, span } => {
             let mut instr = json!({ "t": "text", "text": text });
             if with_spans {
-                instr["src"] = json!({ "file": file });
+                instr["src"] = json!({ "file": file, "start": span.0, "end": span.1 });
             }
             single(instr)
         }

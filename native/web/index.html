@@ -878,11 +878,14 @@
         for (const seg of segments) {
           const [from, to] = byteRangeToCharRange(output, seg.out, seg.out + seg.len);
           if (from > cursor) pre.appendChild(document.createTextNode(output.slice(cursor, from)));
-          const isExpr = typeof seg.start === "number";
           const span = document.createElement("span");
-          span.className = "seg" + (isExpr ? " seg-expr" : "");
+          span.className = "seg" + (seg.kind === "emit" ? " seg-expr" : "");
           span.dataset.file = seg.file;
-          if (isExpr) { span.dataset.start = String(seg.start); span.dataset.end = String(seg.end); }
+          span.dataset.kind = seg.kind;
+          if (typeof seg.start === "number") {
+            span.dataset.start = String(seg.start);
+            span.dataset.end = String(seg.end);
+          }
           span.textContent = output.slice(from, to);
           pre.appendChild(span);
           cursor = to;
@@ -986,21 +989,24 @@
 
       function showSegTip(seg) {
         const file = seg.dataset.file;
-        const isExpr = seg.dataset.start !== undefined;
+        const isExpr = seg.dataset.kind === "emit";
         segTip.textContent = "";
 
+        // "expression from <file> template" / "literal from <file> partial".
         const head = document.createElement("div");
-        head.append(document.createTextNode((isExpr ? "expression" : "literal text") + " · "));
+        head.append(document.createTextNode((isExpr ? "expression" : "literal") + " from "));
         const fileEl = document.createElement("span");
         fileEl.className = "seg-tip-file";
-        fileEl.textContent = file === "main" ? "main (entry)" : file;
-        head.append(fileEl);
+        fileEl.textContent = file;
+        head.append(fileEl, document.createTextNode(file === "main" ? " template" : " partial"));
         segTip.append(head);
 
-        if (isExpr) {
+        // For expressions, show the originating tag (literals just echo the
+        // output, so a snippet would be redundant).
+        if (isExpr && seg.dataset.start !== undefined) {
           const src = fileSource(file);
           const [s, e] = byteRangeToCharRange(src, Number(seg.dataset.start), Number(seg.dataset.end));
-          const tag = src.slice(s, e);
+          const tag = src.slice(s, e).trim();
           if (tag) {
             const code = document.createElement("code");
             code.textContent = tag;

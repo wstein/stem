@@ -130,7 +130,10 @@ struct Segment {
     len: usize,
     // Originating template/partial ("main" for the entry).
     file: String,
-    // Byte span of the source tag in `file` (emit only; absent for literal text).
+    // "text" for literal text, "emit" for an expression — lets the UI label and
+    // style the run without inspecting the span.
+    kind: &'static str,
+    // Byte span of the source (the text run, or the `{{ }}` tag) in `file`.
     #[serde(skip_serializing_if = "Option::is_none")]
     start: Option<usize>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -454,12 +457,13 @@ fn exec_all(instructions: &[Instr], ctx: &Ctx, out: &mut String, segs: &mut Vec<
 
 // Record a non-empty output run `[begin, end)` against its source provenance.
 // Empty runs (e.g. an emit that renders to "") map to no output and are skipped.
-fn record(segs: &mut Vec<Segment>, src: &Option<Src>, begin: usize, end: usize) {
+fn record(segs: &mut Vec<Segment>, src: &Option<Src>, begin: usize, end: usize, kind: &'static str) {
     if let (Some(src), true) = (src, end > begin) {
         segs.push(Segment {
             out: begin,
             len: end - begin,
             file: src.file.clone(),
+            kind,
             start: src.start,
             end: src.end,
         });
@@ -471,14 +475,14 @@ fn exec(instr: &Instr, ctx: &Ctx, out: &mut String, segs: &mut Vec<Segment>) {
         Instr::Text { text, src } => {
             let begin = out.len();
             out.push_str(text);
-            record(segs, src, begin, out.len());
+            record(segs, src, begin, out.len(), "text");
         }
 
         Instr::Emit { value, escape, src } => {
             let begin = out.len();
             let rendered = to_string(&eval(value, ctx));
             out.push_str(&escape_with(&rendered, escape));
-            record(segs, src, begin, out.len());
+            record(segs, src, begin, out.len(), "emit");
         }
 
         Instr::If {
@@ -1455,13 +1459,20 @@ mod source_map_tests {
         assert_eq!(result["output"], "Hi Ada!");
 
         let segments = assert_tiles(&result);
-        // "Hi " (text, main) | "Ada" (emit, main, with span) | "!" (text, main).
+        // "Hi " (text, main) | "Ada" (emit, main) | "!" (text, main); every run
+        // carries its source byte span.
         assert_eq!(segments.len(), 3);
         assert_eq!(segments[0]["file"], "main");
-        assert!(segments[0].get("start").is_none(), "text carries no span");
+        assert_eq!(segments[0]["kind"], "text");
+        assert_eq!(segments[0]["start"], 0); // "Hi " span
+        assert_eq!(segments[0]["end"], 3);
         assert_eq!(segments[1]["file"], "main");
+        assert_eq!(segments[1]["kind"], "emit");
         assert_eq!(segments[1]["start"], 3); // byte offset of `{{name}}`
         assert_eq!(segments[1]["end"], 11);
+        assert_eq!(segments[2]["kind"], "text");
+        assert_eq!(segments[2]["start"], 11); // "!" span
+        assert_eq!(segments[2]["end"], 12);
     }
 
     #[test]
@@ -1474,7 +1485,7 @@ mod source_map_tests {
         // The emitted "X" run must trace back to the `card` partial, not "main".
         let emit = segments
             .iter()
-            .find(|s| s.get("start").is_some())
+            .find(|s| s["kind"] == "emit")
             .expect("an emit segment");
         assert_eq!(emit["file"], "card");
     }
