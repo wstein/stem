@@ -83,4 +83,19 @@
     </table>
   </div>
 
+  <!-- ── ESCAPE ─────────────────────────────── -->
+  <div class="group escape">
+    <div class="group-head" style="border-left: 3px solid #0ea5e9">
+      <span class="dot" style="background:#0ea5e9"></span>
+      <h2>escape</h2>
+      <span class="badge" style="background:#0ea5e91a;color:#0369a1">literal output · always available</span>
+    </div>
+    <table>
+      <tr><td class="col-expr"><code>\{{name}}</code></td><td class="col-result"><code>\{{name}}</code></td></tr>
+      <tr><td class="col-expr"><code>\\{{name}}</code></td><td class="col-result"><code>\\{{name}}</code></td></tr>
+      <tr><td class="col-expr"><code>\\\{{name}}</code></td><td class="col-result"><code>\\\{{name}}</code></td></tr>
+      <tr><td class="col-expr"><code>{{{{raw}}}}{{name}}{{{{/raw}}}}</code></td><td class="col-result"><code>{{{{raw}}}}{{name}}{{{{/raw}}}}</code></td></tr>
+    </table>
+  </div>
+
 </div>

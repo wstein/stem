@@ -19,15 +19,16 @@ h1 span { font-weight: 400; opacity: .45; font-size: 12px; letter-spacing: .06em
 .sheet {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto auto auto auto;
   gap: 14px;
 }
 .group { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px #0001; }
-/* Explicit placement: DEFAULT full-width row 1, FORMAT/EVAL side-by-side row 2, TRANSFORM full-width row 3 */
+/* Row 1: DEFAULT full-width; Row 2: FORMAT + EVAL; Row 3: TRANSFORM full-width; Row 4: ESCAPE full-width */
 .group.default   { grid-column: 1 / span 2; grid-row: 1; }
 .group.format    { grid-column: 1;           grid-row: 2; }
 .group.eval      { grid-column: 2;           grid-row: 2; }
 .group.transform { grid-column: 1 / span 2; grid-row: 3; }
+.group.escape    { grid-column: 1 / span 2; grid-row: 4; }
 .group-head {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 14px;
