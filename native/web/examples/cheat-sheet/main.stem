@@ -1,9 +1,14 @@
 {{> styles}}
 <div class="sheet">
 {{> header}}
-<div class="cards">
-{{#each capability_groups}}{{> group}}{{/each}}
+<div class="cols">
+{{#each main_groups}}{{> group}}{{/each}}
+</div>
+<div class="cols cols-narrow">
+{{#each narrow_groups}}{{> group}}{{/each}}
 {{> loading}}
 </div>
+{{> data_source}}
 {{> footer}}
 </div>
+{{> scripts}}

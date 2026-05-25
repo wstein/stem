@@ -1,5 +1,11 @@
-<section class="card" style="--a:{{accent}}">
-  <div class="head"><span class="dot"></span><h2>{{name}}</h2><span class="pill">{{pill}}</span><span class="count">{{transformers | len}}</span><p class="desc">{{desc}}</p></div>
+<section id="{{slug}}" class="card" style="--a:{{accent}}">
+  <div class="head">
+    <span class="dot"></span>
+    <h2>{{name}}<a href="#{{slug}}" class="anchor" aria-label="Permalink">§</a></h2>
+    <span class="pill">{{pill}}</span>
+    <span class="count">{{transformers |> len}}</span>
+    <p class="desc">{{desc}}</p>
+  </div>
   <div class="rows">{{#each transformers}}{{> row}}{{/each}}</div>
-  {{#if callout}}<div class="callout{{#if warn}} warn{{/if}}"><span class="ico">{{#if warn}}!{{else}}A{{/if}}</span><div>{{callout}}</div></div>{{/if}}
+  {{#if callout}}<div class="callout{{#if warn}} warn{{/if}}"><span class="ico">{{#if warn}}!{{else}}i{{/if}}</span><div>{{callout}}</div></div>{{/if}}
 </section>

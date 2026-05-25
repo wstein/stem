@@ -1,28 +1,43 @@
 <div class="top">
-  <div class="brand">
-    <svg class="mark" viewBox="0 0 48 48" fill="none" aria-hidden="true">
-      <path d="M18 10 C14 10 13 12 13 16 L13 21 C13 23 12 24 10 24 C12 24 13 25 13 27 L13 32 C13 36 14 38 18 38" stroke="#7c4dff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M30 10 C34 10 35 12 35 16 L35 21 C35 23 36 24 38 24 C36 24 35 25 35 27 L35 32 C35 36 34 38 30 38" stroke="#7c4dff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-      <path d="M24 14 L24 40" stroke="#10b981" stroke-width="2.4" stroke-linecap="round"/>
-      <path d="M24 24 C21 22 19 22 17 23" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
-      <path d="M24 30 C27 28 29 28 31 29" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
-      <circle cx="24" cy="14" r="2" fill="#10b981"/>
+  <div class="mark" aria-hidden="true">
+    <svg viewBox="0 0 48 48" fill="none">
+      <!-- outer { -->
+      <path d="M10 11 C6 11 6 13 6 17 L6 21 C6 23 3 24 3 24 C3 24 6 25 6 27 L6 31 C6 35 6 37 10 37" stroke="#7c4dff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- inner { -->
+      <path d="M16 11 C12 11 12 13 12 17 L12 21 C12 23 9 24 9 24 C9 24 12 25 12 27 L12 31 C12 35 12 37 16 37" stroke="#7c4dff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>
+      <!-- inner } -->
+      <path d="M32 11 C36 11 36 13 36 17 L36 21 C36 23 39 24 39 24 C39 24 36 25 36 27 L36 31 C36 35 36 37 32 37" stroke="#7c4dff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>
+      <!-- outer } -->
+      <path d="M38 11 C42 11 42 13 42 17 L42 21 C42 23 45 24 45 24 C45 24 42 25 42 27 L42 31 C42 35 42 37 38 37" stroke="#7c4dff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+      <!-- stem -->
+      <path d="M24 13 L24 38" stroke="#10b981" stroke-width="2.4" stroke-linecap="round"/>
+      <!-- branches -->
+      <path d="M24 22 C21 20 19 20 17 21" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
+      <path d="M24 29 C27 27 29 27 31 28" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
+      <circle cx="24" cy="13" r="2" fill="#10b981"/>
     </svg>
-    <span>Stem · Template Transformers · v1</span>
   </div>
-  <h1>Built-in Transformer<br><span class="accent">Reference Sheet</span></h1>
-  <p class="sub">Transformers are called inside <code>{{{{#raw}}}}{{ … }}{{{{/raw}}}}</code> tags. Only <em>default</em> is always on — the rest are enabled per render in the host. Every result below is rendered live by the engine.</p>
+  <div class="titles">
+    <div class="brand">
+      <span>Stem · v1</span>
+    </div>
+    <h1>Stem Template <span class="accent">Reference Sheet</span></h1>
+  </div>
 </div>
 <div class="syntax">
   <div class="syntax-row">
-    <div class="lbl">Call<b>name first</b></div>
+    <div class="lbl">Pipe<b>value first</b></div>
+    <code>{{{{#raw}}}}{{ value |> transformer }}{{{{/raw}}}}</code>
+    <code>{{{{#raw}}}}{{ value |> transformer(arg1, arg2) }}{{{{/raw}}}}</code>
+  </div>
+  <div class="syntax-row">
+    <div class="lbl">Prefix<b>name first</b></div>
     <code>{{{{#raw}}}}{{ transformer value }}{{{{/raw}}}}</code>
     <code>{{{{#raw}}}}{{ transformer value arg1 arg2 }}{{{{/raw}}}}</code>
   </div>
-  <div class="syntax-row">
-    <div class="lbl">Compose<b>| and ( )</b></div>
-    <code>{{{{#raw}}}}{{ value | transformer | transformer arg }}{{{{/raw}}}}</code>
-    <code>{{{{#raw}}}}{{ transformer (transformer value) }}{{{{/raw}}}}</code>
-  </div>
-  <p class="syntax-note">A call is <code>{{{{#raw}}}}name arg…{{{{/raw}}}}</code>. <code>|</code> pipes the value in as the next call's first argument; <code>( )</code> groups a call as an argument. The two compose: <code>{{{{#raw}}}}{{ name | trim | capitalize }}{{{{/raw}}}}</code> = <code>{{{{#raw}}}}{{ capitalize (trim name) }}{{{{/raw}}}}</code></p>
+  <p class="syntax-note">
+    Both styles compose and are equivalent —
+    <code>{{{{#raw}}}}{{ name |> trim |> capitalize }}{{{{/raw}}}}</code> =
+    <code>{{{{#raw}}}}{{ capitalize (trim name) }}{{{{/raw}}}}</code>
+  </p>
 </div>

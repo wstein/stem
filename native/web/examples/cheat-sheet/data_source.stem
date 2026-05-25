@@ -1,0 +1,37 @@
+<section id="data" class="card" style="--a:var(--g-data);margin-top:14px">
+  <div class="head">
+    <span class="dot"></span>
+    <h2>source data<a href="#data" class="anchor" aria-label="Permalink">§</a></h2>
+    <span class="pill">yaml</span>
+    <p class="desc">Context bound to every expression on this sheet.</p>
+  </div>
+  <div class="data-cols">
+<pre class="codeblock"><span class="c"># scalars</span>
+<span class="k">str</span>:     <span class="f">"  Hello, World!  "</span>
+<span class="k">title</span>:   <span class="f">"the quick brown fox"</span>
+<span class="k">blurb</span>:   <span class="f">"Template engines are powerful"</span>
+<span class="k">unsafe</span>:  <span class="f">"&lt;script&gt;alert('xss')&lt;/script&gt;"</span>
+<span class="k">quote</span>:   <span class="f">"say \"hello\" to everyone"</span>
+<span class="k">present</span>: <span class="f">"I exist"</span>
+<span class="k">missing</span>: <span class="c">null</span>
+<span class="k">csv</span>:     <span class="f">"a,b,c"</span>
+<span class="k">expr</span>:    <span class="f">"{{{{#raw}}}}{{name | upcase}}{{{{/raw}}}}"</span>
+<span class="k">name</span>:    <span class="f">"World"</span>
+
+<span class="c"># collections</span>
+<span class="k">fruits</span>:  [<span class="f">banana</span>, <span class="f">apple</span>, <span class="f">cherry</span>, <span class="f">apple</span>, <span class="f">date</span>, <span class="f">elderberry</span>]
+<span class="k">sparse</span>:  [<span class="f">alpha</span>, <span class="c">null</span>, <span class="f">beta</span>, <span class="c">null</span>, <span class="f">gamma</span>]
+<span class="k">nested</span>:  [[<span class="f">x</span>, <span class="f">y</span>], [<span class="f">p</span>, <span class="f">q</span>], [<span class="f">r</span>]]</pre>
+<pre class="codeblock"><span class="c"># map</span>
+<span class="k">config</span>:
+  <span class="k">host</span>: <span class="f">localhost</span>
+  <span class="k">port</span>: <span class="m">5432</span>
+
+<span class="c"># list of maps</span>
+<span class="k">people</span>:
+  - { <span class="k">name</span>: <span class="f">Carol</span>, <span class="k">age</span>: <span class="m">32</span>, <span class="k">dept</span>: <span class="f">Engineering</span>, <span class="k">lead</span>: <span class="m">true</span> }
+  - { <span class="k">name</span>: <span class="f">Alice</span>, <span class="k">age</span>: <span class="m">28</span>, <span class="k">dept</span>: <span class="f">Design</span> }
+  - { <span class="k">name</span>: <span class="f">Bob</span>,   <span class="k">age</span>: <span class="m">35</span>, <span class="k">dept</span>: <span class="f">Engineering</span>, <span class="k">lead</span>: <span class="m">true</span> }
+  - { <span class="k">name</span>: <span class="f">Dave</span>,  <span class="k">age</span>: <span class="m">28</span>, <span class="k">dept</span>: <span class="f">Design</span> }</pre>
+  </div>
+</section>

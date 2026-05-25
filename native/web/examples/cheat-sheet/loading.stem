@@ -1,14 +1,22 @@
-<section class="card loading" style="--a:#18173a">
-  <div class="head"><span class="dot"></span><h2>loading groups · elixir</h2><span class="pill">host config</span><p class="desc">Pass transformer modules to Stem.Unsafe.eval_string/2 — the default group needs no opt-in.</p></div>
-  <pre class="codeblock"># format group (low risk)
-Stem.Unsafe.eval_string(template, assigns: data,
-  transformers: Stem.Transformers.Strings.all())
+<section id="loading" class="card" style="--a:var(--g-host)">
+  <div class="head">
+    <span class="dot"></span>
+    <h2>loading · elixir<a href="#loading" class="anchor" aria-label="Permalink">§</a></h2>
+    <span class="pill host-pill">host config</span>
+    <p class="desc">Pass transformer modules to Stem.Unsafe.eval_string/2 — the default group needs no opt-in.</p>
+  </div>
+<pre class="codeblock"><span class="c"># format (low risk)</span>
+<span class="m">Stem.Unsafe</span>.<span class="f">eval_string</span>(template,
+  <span class="k">assigns:</span> data,
+  <span class="k">transformers:</span> <span class="m">Stem.Transformers.Strings</span>.<span class="f">all</span>())
 
-# transform group (medium risk — audited)
-Stem.Unsafe.eval_string(template, assigns: data,
-  transformers: Stem.Transformers.Collections.all())
+<span class="c"># transform (audited)</span>
+<span class="m">Stem.Unsafe</span>.<span class="f">eval_string</span>(template,
+  <span class="k">assigns:</span> data,
+  <span class="k">transformers:</span> <span class="m">Stem.Transformers.Collections</span>.<span class="f">all</span>())
 
-# everything bundled
-Stem.Unsafe.eval_string(template, assigns: data,
-  transformers: Stem.Transformers.Standard.all())</pre>
+<span class="c"># bundled</span>
+<span class="m">Stem.Unsafe</span>.<span class="f">eval_string</span>(template,
+  <span class="k">assigns:</span> data,
+  <span class="k">transformers:</span> <span class="m">Stem.Transformers.Standard</span>.<span class="f">all</span>())</pre>
 </section>

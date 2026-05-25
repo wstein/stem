@@ -1,4 +1,9 @@
 <div class="foot">
-  <div class="legend">{{#each capability_groups}}<span><i style="background:{{accent}}"></i>{{name}} · {{pill}}</span>{{/each}}</div>
-  <div>STEM · TRANSFORMERS · QUICK REFERENCE · v1</div>
+  <div class="legend">
+    {{#each main_groups}}<span><i aria-hidden="true" style="background:{{accent}}"></i>{{name}}</span>{{/each}}
+    {{#each narrow_groups}}<span><i aria-hidden="true" style="background:{{accent}}"></i>{{name}}</span>{{/each}}
+    <span><i aria-hidden="true" style="background:var(--g-host)"></i>host</span>
+    <span><i aria-hidden="true" style="background:var(--g-data)"></i>data</span>
+  </div>
+  <div>STEM · TEMPLATE · REFERENCE SHEET · v1</div>
 </div>

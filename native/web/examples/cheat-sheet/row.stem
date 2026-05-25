@@ -1,1 +1,1 @@
-<div class="row" title="{{desc}}"><div class="expr"><code>{{example}}</code></div><div class="out"><code>{{#if result}}{{result}}{{else}}{{example | eval}}{{/if}}</code></div></div>
+<div class="row" title="{{desc}}"><div class="expr">{{example}}</div><div class="out{{#if cap}} cap{{/if}}"{{#if cap}} title="{{result}}"{{/if}}>{{#if result}}{{result}}{{else}}{{example |> eval}}{{/if}}</div></div>

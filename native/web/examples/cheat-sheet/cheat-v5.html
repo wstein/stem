@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Stem Template · Reference Sheet</title>
+<style>
+  *,*::before,*::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:#eef1f6;
+    --surface:#fff;
+    --surface-alt:#f7f8fb;
+    --border:#e2e5ec;
+    --soft:#ecedf2;
+    --ink:#2e2b6b;
+    --ink-soft:#4a4890;
+    --ink-mute:#6e6c96;
+    --label:#14123a;
+
+    --g-default:  #64748b;
+    --g-format:   #16a36b;
+    --g-transform:#f29e3a;
+    --g-eval:     #7c5cf0;
+    --g-escape:   #3a7bf2;
+    --g-host:     #18173a;
+    --g-data:     #0891b2;
+    --surface-stripe: #fafbfd;
+  }
+
+  html, body { background: var(--bg); }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .sheet { max-width: 1500px; margin: 0 auto; padding: 36px 36px 56px; }
+
+  /* ── HEADER ─────────────────────────────────────── */
+  .top {
+    margin-bottom: 18px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+  }
+  .top .mark {
+    flex-shrink: 0;
+    width: clamp(56px, 7vw, 80px);
+    aspect-ratio: 1;
+    display: block;
+  }
+  .top .mark svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
+  .top .titles {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+  }
+  .brand {
+    display:flex; align-items:center; gap:10px;
+    font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--ink-soft); font-weight:600; margin-bottom:6px;
+  }
+  h1 {
+    font-size: clamp(24px, 3.4vw, 36px);
+    font-weight:700; letter-spacing:-.02em; line-height:1.06;
+    color: var(--label);
+  }
+  h1 .accent { color: var(--ink-mute); font-weight:400; }
+
+  /* ── SYNTAX STRIP ──────────────────────────────── */
+  .syntax {
+    margin: 16px 0 18px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    border-radius: 12px;
+    padding: 14px 18px;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .syntax-row {
+    display: grid;
+    grid-template-columns: 130px 1fr 1fr;
+    gap: 14px; align-items: center;
+  }
+  .syntax .lbl {
+    font-size: 10.5px; letter-spacing:.16em; text-transform:uppercase;
+    color: var(--ink-mute); font-weight:600;
+  }
+  .syntax .lbl b {
+    display: block; font-size: 13.5px; color: var(--label);
+    margin-top: 3px; letter-spacing: 0; text-transform: none; font-weight: 600;
+  }
+  .syntax code {
+    display: block;
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    font-size: 12px; color: var(--ink);
+    background: var(--surface-alt);
+    border: 1px solid var(--soft);
+    padding: 9px 12px; border-radius: 8px;
+    word-break: break-word;
+  }
+  .syntax-note { font-size: 11.5px; color: var(--ink-soft); line-height: 1.5; }
+  .syntax-note code {
+    display: inline; background: var(--surface-alt); border: none;
+    padding: 1px 5px; border-radius: 4px;
+    font-family: ui-monospace, monospace; font-size: 11.5px;
+  }
+
+  /* ── LAYOUT: column-count flow, cards may break ── */
+  .cols { column-gap: 14px; }
+  @media (min-width: 600px)  { .cols { column-count: 2; } }
+  @media (min-width: 1100px) { .cols { column-count: 3; } }
+  @media (min-width: 1400px) { .cols { column-count: 4; } }
+
+  /* group 2: fixed 2-column row, no breaking */
+  .cols.cols-narrow {
+    margin-top: 14px;
+    column-count: 1;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  @media (min-width: 800px) {
+    .cols.cols-narrow {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  .cols.cols-narrow .card {
+    margin: 0;
+    break-inside: avoid;
+  }
+
+  /* ── CARD ───────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--a);  /* colored bar runs full height */
+    border-radius: 12px;
+    /* NOTE: no overflow:hidden — that makes the card atomic and blocks
+       multicolumn breaking. Inner children round their own corners. */
+    break-inside: auto;
+    -webkit-column-break-inside: auto;
+    page-break-inside: auto;
+    margin: 0 0 14px;
+    display: block;
+    width: 100%;
+  }
+  .card > :first-child {
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+  }
+  .card > :last-child {
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+    /* NOTE: no overflow:hidden — makes .rows atomic and blocks
+       multicolumn breaking, stranding the head alone in a column */
+  }
+  /* round the last row's bottom corners so the alt background doesn't
+     bleed past the card's rounded corners */
+  .rows .row:last-child {
+    border-bottom-left-radius: 10px;
+    border-bottom-right-radius: 10px;
+  }
+  /* keep the head together with at least one row so a column never
+     starts with just a header */
+  .head {
+    padding: 11px 13px 9px;
+    display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+    break-inside: avoid;
+    break-after: avoid;
+  }
+  .head .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--a); flex-shrink:0; }
+  .head h2 {
+    font-size: 12px; letter-spacing:.12em; text-transform: uppercase;
+    font-weight: 700; color: var(--label);
+  }
+  .head .pill {
+    font-size: 10px; letter-spacing:.08em; text-transform: uppercase;
+    font-weight: 600; padding: 2px 6px; border-radius: 4px;
+    /* fallback for no color-mix */
+    background: rgba(0,0,0,0.08);
+    /* color-mix: ~93% global support — no IE / old Safari */
+    background: color-mix(in srgb, var(--a) 14%, transparent);
+    color: var(--a);
+  }
+  .head .count {
+    margin-left: auto;
+    font-family: ui-monospace, monospace; font-size: 10.5px;
+    color: var(--ink-mute);
+  }
+  .head .desc {
+    flex-basis: 100%;
+    font-size: 11.5px;
+    color: var(--ink-soft);
+    line-height: 1.4;
+    margin-top: 1px;
+  }
+
+  /* ── ROWS ───────────────────────────────────────── */
+  .rows { display: block; }
+  .row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-top: 1px solid var(--soft);
+    padding: 6px 13px;
+    gap: 10px;
+    align-items: start;
+    min-height: 26px;
+    break-inside: avoid; /* never split mid-row */
+  }
+  .row:nth-child(even) { background: var(--surface-stripe); }
+
+  .expr, .out {
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    font-size: 11.5px;
+    line-height: 1.45;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .expr { color: #4f53b8; }
+  .out  { color: #16794d; }
+
+  .out.cap {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding: 3px 5px;
+    background: var(--surface-alt);
+    border: 1px solid var(--soft);
+    border-radius: 5px;
+    font-size: 10.5px;
+    color: var(--ink-soft);
+    cursor: help;
+  }
+
+  /* ── CALLOUTS ──────────────────────────────────── */
+  .callout {
+    border-top: 1px solid var(--soft);
+    padding: 8px 13px;
+    font-size: 11.5px; color: var(--ink-soft);
+    background: #fff8ee;
+    display: flex; gap: 8px; line-height: 1.45;
+    break-inside: avoid;
+  }
+  .callout.warn { background: #fff0f3; color: #8a2942; }
+  .callout .ico {
+    width: 13px; height: 13px; border-radius: 50%;
+    background: var(--a); color: #fff; flex-shrink: 0; margin-top: 1px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 9px; font-weight: 700;
+  }
+  .callout.warn .ico { background: #c2305a; }
+
+  /* ── CODE BLOCK ────────────────────────────────── */
+  .codeblock {
+    margin: 0; padding: 12px 13px;
+    background: var(--surface-alt); color: var(--ink);
+    border-top: 1px solid var(--soft);
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    font-size: 11px; line-height: 1.6;
+    overflow-x: auto;
+    white-space: pre;
+    break-inside: avoid;
+  }
+  .codeblock .c { color: var(--ink-mute); }
+  .codeblock .m { color: #1a56b0; }
+  .codeblock .f { color: #b45309; }
+  .codeblock .k { color: #6d28d9; }
+
+  /* loading card pill — overrides the tonal default */
+  .host-pill { background: #e6e5f0; color: var(--g-host); }
+
+  /* ── FOOTER ────────────────────────────────────── */
+  .foot {
+    margin-top: 18px; display: flex; justify-content: space-between; align-items: center;
+    font-size: 11px; color: var(--ink-mute);
+    border-top: 1px solid var(--border); padding-top: 12px;
+    flex-wrap: wrap; gap: 12px;
+  }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend i { width: 8px; height: 8px; border-radius: 50%; }
+
+  /* ── FOCUS ─────────────────────────────────────── */
+  :focus-visible { outline: 2px solid var(--g-eval); outline-offset: 2px; border-radius: 3px; }
+
+  /* ── COPY BUTTON ──────────────────────────────── */
+  .expr { position: relative; padding-right: 20px; }
+  .copy {
+    position: absolute; top: 50%; right: 0; transform: translateY(-50%);
+    opacity: 0; transition: opacity 0.15s, color 0.15s;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 4px; padding: 2px 4px;
+    cursor: pointer; color: var(--ink-mute); line-height: 0;
+  }
+  .copy:hover { color: var(--ink); background: var(--surface-alt); }
+  .copy.copied { color: #16a36b; opacity: 1 !important; }
+  .row:hover .copy { opacity: 1; }
+
+  /* ── ANCHOR LINKS ─────────────────────────────── */
+  section[id] { scroll-margin-top: 20px; }
+  .anchor {
+    color: var(--ink-mute); text-decoration: none;
+    margin-left: 7px; font-size: 11px; font-weight: 400;
+    letter-spacing: 0; text-transform: none;
+    opacity: 0; transition: opacity 0.1s;
+  }
+  .head:hover .anchor { opacity: 1; }
+  .anchor:hover { color: var(--ink-soft); }
+
+  /* ── KBD ───────────────────────────────────────── */
+  kbd {
+    font-family: ui-monospace, "JetBrains Mono", monospace;
+    font-size: 0.9em;
+    background: var(--surface-alt);
+    border: 1px solid var(--border);
+    border-bottom: 2px solid var(--soft);
+    border-radius: 4px;
+    padding: 1px 5px;
+    color: var(--label);
+  }
+
+  /* ── SOURCE DATA ──────────────────────────────── */
+  .data-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+  .data-cols .codeblock { border-radius: 0; }
+  .data-cols .codeblock:first-child {
+    border-right: 1px solid var(--soft);
+    border-bottom-left-radius: 10px;
+  }
+  .data-cols .codeblock:last-child { border-bottom-right-radius: 10px; }
+  @media (max-width: 700px) {
+    .data-cols { grid-template-columns: 1fr; }
+    .data-cols .codeblock:first-child {
+      border-right: none;
+      border-bottom: 1px solid var(--soft);
+      border-bottom-left-radius: 0;
+    }
+  }
+
+  /* ── RESPONSIVE ────────────────────────────────── */
+
+  /* tablet: collapse 3-col syntax to single-column stack before it gets cramped */
+  @media (max-width: 780px) {
+    .sheet { padding: 24px 20px 44px; }
+    .syntax-row { grid-template-columns: 1fr; gap: 8px; }
+    .syntax .lbl b { margin-top: 1px; }
+  }
+
+  @media (max-width: 600px) {
+    .sheet { padding: 20px 12px 32px; }
+    .copy { opacity: 1; padding: 5px 7px; } /* always visible, larger touch target */
+    .row { grid-template-columns: 1fr; gap: 2px; }
+    .row .out::before {
+      content: "↳ ";
+      color: var(--ink-mute);
+    }
+  }
+
+  /* ── PRINT ─────────────────────────────────────── */
+  @media print {
+    body, html { background: white; }
+    .sheet { max-width: 100%; padding: 0; }
+    .cols { column-count: 2; }
+    .codeblock {
+      background: #f5f5f5; color: #1a1a2e;
+      border: 1px solid #ccc;
+    }
+    .codeblock .c { color: #666; }
+    .codeblock .m { color: #1a3a5c; }
+    .codeblock .f { color: #7a4a00; }
+    .codeblock .k { color: #5a00a0; }
+    .card { border-left-color: #999; break-inside: avoid; }
+    .copy, .anchor { display: none; }
+  }
+
+  /* ── DARK MODE ─────────────────────────────────── */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0d0c1e;
+      --surface: #161527;
+      --surface-alt: #1c1b31;
+      --border: #2b2947;
+      --soft: #22203c;
+      --ink: #c4c1ec;
+      --ink-soft: #9491cc;
+      --ink-mute: #706ea0;
+      --label: #e6e3ff;
+      --surface-stripe: #1c1b31;
+    }
+    .row:nth-child(even) { background: var(--surface-stripe); }
+    .expr { color: #9098f8; }
+    .out  { color: #34d578; }
+    .callout { background: #1e1800; }
+    .callout.warn { background: #1e0008; color: #f0879e; }
+    .callout.warn .ico { background: #c2305a; }
+    .codeblock { background: #0a0917; color: #cfcde8; border-top-color: rgba(255,255,255,0.07); }
+    .codeblock .c { color: #8b8aaa; }
+    .codeblock .m { color: #9ec5ff; }
+    .codeblock .f { color: #ffb86b; }
+    .codeblock .k { color: #d8a0ff; }
+    .head .pill {
+      background: rgba(255,255,255,0.1);
+      background: color-mix(in srgb, var(--a) 20%, transparent);
+    }
+    .host-pill { background: rgba(255,255,255,0.1); color: var(--ink-mute); }
+  }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <!-- ── HEADER ───────────────────────────────────── -->
+  <div class="top">
+    <div class="mark" aria-hidden="true">
+      <svg viewBox="0 0 48 48" fill="none">
+        <!-- outer { -->
+        <path d="M10 11 C6 11 6 13 6 17 L6 21 C6 23 3 24 3 24 C3 24 6 25 6 27 L6 31 C6 35 6 37 10 37" stroke="#7c4dff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- inner { -->
+        <path d="M16 11 C12 11 12 13 12 17 L12 21 C12 23 9 24 9 24 C9 24 12 25 12 27 L12 31 C12 35 12 37 16 37" stroke="#7c4dff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>
+        <!-- inner } -->
+        <path d="M32 11 C36 11 36 13 36 17 L36 21 C36 23 39 24 39 24 C39 24 36 25 36 27 L36 31 C36 35 36 37 32 37" stroke="#7c4dff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" opacity="0.55"/>
+        <!-- outer } -->
+        <path d="M38 11 C42 11 42 13 42 17 L42 21 C42 23 45 24 45 24 C45 24 42 25 42 27 L42 31 C42 35 42 37 38 37" stroke="#7c4dff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- stem -->
+        <path d="M24 13 L24 38" stroke="#10b981" stroke-width="2.4" stroke-linecap="round"/>
+        <!-- branches -->
+        <path d="M24 22 C21 20 19 20 17 21" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
+        <path d="M24 29 C27 27 29 27 31 28" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
+        <circle cx="24" cy="13" r="2" fill="#10b981"/>
+      </svg>
+    </div>
+    <div class="titles">
+      <div class="brand">
+        <span>Stem · v1</span>
+      </div>
+      <h1>Stem Template <span class="accent">Reference Sheet</span></h1>
+    </div>
+  </div>
+
+  <!-- ── SYNTAX ───────────────────────────────────── -->
+  <div class="syntax">
+    <div class="syntax-row">
+      <div class="lbl">Pipe<b>value first</b></div>
+      <code>{{ value |&gt; transformer }}</code>
+      <code>{{ value |&gt; transformer(arg1, arg2) }}</code>
+    </div>
+    <div class="syntax-row">
+      <div class="lbl">Prefix<b>name first</b></div>
+      <code>{{ transformer value }}</code>
+      <code>{{ transformer value arg1 arg2 }}</code>
+    </div>
+    <p class="syntax-note">
+      Both styles compose and are equivalent — <code>{{ name |&gt; trim |&gt; capitalize }}</code> = <code>{{ capitalize (trim name) }}</code>
+    </p>
+  </div>
+
+  <!-- ── COLUMNS ──────────────────────────────────── -->
+  <div class="cols">
+
+    <!-- ════ DEFAULT ════ -->
+    <section id="default" class="card" style="--a:var(--g-default)">
+      <div class="head">
+        <span class="dot"></span>
+        <h2>default<a href="#default" class="anchor" aria-label="Permalink">§</a></h2>
+        <span class="pill">always on</span>
+        <span class="count">17</span>
+        <p class="desc">Output helpers, serialisation, collection access, predicates.</p>
+      </div>
+      <div class="rows">
+        <div class="row"><div class="expr">{{unsafe |&gt; escape_html}}</div><div class="out">&amp;lt;script&amp;gt;…&amp;lt;/script&amp;gt;</div></div>
+        <div class="row"><div class="expr">{{quote |&gt; escape_json}}</div><div class="out">say \"hello\" to everyone</div></div>
+        <div class="row"><div class="expr">{{fruits |&gt; take(3) |&gt; json}}</div><div class="out">["banana","apple","cherry"]</div></div>
+        <div class="row"><div class="expr">{{fruits |&gt; take(3) |&gt; inspect}}</div><div class="out">["banana", "apple", "cherry"]</div></div>
+        <div class="row"><div class="expr">{{missing |&gt; default("N/A")}}</div><div class="out">N/A</div></div>
+        <div class="row"><div class="expr">{{fruits |&gt; take(3) |&gt; join(", ")}}</div><div class="out">banana, apple, cherry</div></div>
+        <div class="row"><div class="expr">{{title |&gt; log}}</div><div class="out" style="color:var(--ink-mute)">↳ stderr · renders ""</div></div>
+        <div class="row"><div class="expr">{{fruits |&gt; first}}</div><div class="out">banana</div></div>
+        <div class="row"><div class="expr">{{fruits |&gt; last}}</div><div class="out">elderberry</div></div>
+        <div class="row"><div class="expr">{{fruits |&gt; len}}</div><div class="out">6</div></div>
+        <div class="row"><div class="expr">{{config |&gt; lookup("host")}}</div><div class="out">localhost</div></div>
+        <div class="row"><div class="expr">{{fruits |&gt; lookup(2)}}</div><div class="out">cherry</div></div>
+        <div class="row"><div class="expr">{{fruits |&gt; contains("apple")}}</div><div class="out">true</div></div>
+        <div class="row"><div class="expr">{{title |&gt; starts_with("the")}}</div><div class="out">true</div></div>
+        <div class="row"><div class="expr">{{title |&gt; ends_with("fox")}}</div><div class="out">true</div></div>
+        <div class="row"><div class="expr">{{missing |&gt; empty?}}</div><div class="out">true</div></div>
+        <div class="row"><div class="expr">{{present |&gt; present?}}</div><div class="out">true</div></div>
+      </div>
+    </section>
+
+    <!-- ════ FORMAT ════ -->
+    <section id="format" class="card" style="--a:var(--g-format)">
+      <div class="head">
+        <span class="dot"></span>
+        <h2>format<a href="#format" class="anchor" aria-label="Permalink">§</a></h2>
+        <span class="pill">low risk</span>
+        <span class="count">6</span>
+        <p class="desc">Atomic string transforms that cannot iterate or recurse.</p>
+      </div>
+      <div class="rows">
+        <div class="row"><div class="expr">{{title |&gt; upcase}}</div><div class="out">THE QUICK BROWN FOX</div></div>
+        <div class="row"><div class="expr">{{blurb |&gt; downcase}}</div><div class="out">template engines are powerful</div></div>
+        <div class="row"><div class="expr">{{title |&gt; capitalize}}</div><div class="out">The quick brown fox</div></div>
+        <div class="row"><div class="expr">{{str |&gt; trim}}</div><div class="out">Hello, World!</div></div>
+        <div class="row"><div class="expr">{{blurb |&gt; truncate(20, "…")}}</div><div class="out">Template engines ar…</div></div>
+        <div class="row"><div class="expr">{{title |&gt; replace("quick", "lazy")}}</div><div class="out">the lazy brown fox</div></div>
+      </div>
+    </section>
+
+    <!-- ════ TRANSFORM ════ -->
+    <section id="transform" class="card" style="--a:var(--g-transform)">
+      <div class="head">
+        <span class="dot"></span>
+        <h2>transform<a href="#transform" class="anchor" aria-label="Permalink">§</a></h2>
+        <span class="pill">medium risk · audited</span>
+        <span class="count">13</span>
+        <p class="desc">Full-collection traversals. Loading the group emits a one-shot audit event.</p>
+      </div>
+      <div class="rows">
+        <div class="row"><div class="expr">{{csv |&gt; split(",") |&gt; join("|")}}</div><div class="out">a|b|c</div></div>
+        <div class="row"><div class="expr">{{fruits |&gt; take(3) |&gt; join(", ")}}</div><div class="out">banana, apple, cherry</div></div>
+        <div class="row"><div class="expr">{{fruits |&gt; drop(3) |&gt; join(", ")}}</div><div class="out">apple, date, elderberry</div></div>
+        <div class="row"><div class="expr">{{fruits |&gt; slice(1, 3) |&gt; join(", ")}}</div><div class="out">apple, cherry, apple</div></div>
+        <div class="row"><div class="expr">{{fruits |&gt; take(4) |&gt; reverse |&gt; join(", ")}}</div><div class="out">apple, cherry, apple, banana</div></div>
+        <div class="row"><div class="expr">{{fruits |&gt; sort |&gt; join(", ")}}</div><div class="out">apple, apple, banana, cherry, date, elderberry</div></div>
+        <div class="row"><div class="expr">{{people |&gt; sort_by("age") |&gt; map("name") |&gt; join(", ")}}</div><div class="out">Alice, Dave, Carol, Bob</div></div>
+        <div class="row"><div class="expr">{{people |&gt; map("name") |&gt; join(", ")}}</div><div class="out">Carol, Alice, Bob, Dave</div></div>
+        <div class="row"><div class="expr">{{people |&gt; filter("lead") |&gt; map("name") |&gt; join(", ")}}</div><div class="out">Carol, Bob</div></div>
+        <div class="row"><div class="expr">{{sparse |&gt; compact |&gt; join(", ")}}</div><div class="out">alpha, beta, gamma</div></div>
+        <div class="row"><div class="expr">{{fruits |&gt; uniq |&gt; sort |&gt; join(", ")}}</div><div class="out">apple, banana, cherry, date, elderberry</div></div>
+        <div class="row"><div class="expr">{{nested |&gt; flatten |&gt; join(", ")}}</div><div class="out">x, y, p, q, r</div></div>
+        <div class="row"><div class="expr">{{people |&gt; group_by("dept") |&gt; json}}</div><div class="out cap" title='{"Design":[{"age":28,"name":"Alice"},{"age":34,"name":"Dave"}],"Engineering":[{"age":32,"name":"Carol"},{"age":29,"name":"Bob"}]}'>{"Design":[{"age":28,"name":"Alice"},…],"Engineering":[…]}</div></div>
+      </div>
+      <div class="callout">
+        <span class="ico">i</span>
+        <div>Loading the transform group emits a one-shot audit event.</div>
+      </div>
+    </section>
+
+    <!-- ════ EVAL ════ -->
+    <section id="eval" class="card" style="--a:var(--g-eval)">
+      <div class="head">
+        <span class="dot"></span>
+        <h2>eval<a href="#eval" class="anchor" aria-label="Permalink">§</a></h2>
+        <span class="pill">dynamic · opt-in</span>
+        <span class="count">1</span>
+        <p class="desc">Renders a string from data as a full Stem template against the assign context.</p>
+      </div>
+      <div class="rows">
+        <div class="row"><div class="expr">{{eval expr}}</div><div class="out">WORLD</div></div>
+      </div>
+      <div class="callout warn">
+        <span class="ico">!</span>
+        <div>Never enable for untrusted templates OR data — eval renders an arbitrary Stem template at render time (SSTI).</div>
+      </div>
+    </section>
+
+  </div>
+
+  <!-- ── GROUP 2 ──────────────────────────────────── -->
+  <div class="cols cols-narrow">
+
+    <!-- ════ ESCAPE ════ -->
+    <section id="escape" class="card" style="--a:var(--g-escape)">
+      <div class="head">
+        <span class="dot"></span>
+        <h2>escape<a href="#escape" class="anchor" aria-label="Permalink">§</a></h2>
+        <span class="pill">literal output</span>
+        <span class="count">5</span>
+        <p class="desc">Always available — literal output via the consume-1 backslash rule and raw blocks.</p>
+      </div>
+      <div class="rows">
+        <div class="row"><div class="expr">\{{name}}</div><div class="out">{{name}}</div></div>
+        <div class="row"><div class="expr">\\{{name}}</div><div class="out">\World</div></div>
+        <div class="row"><div class="expr">\\\{{name}}</div><div class="out">\\World</div></div>
+        <div class="row"><div class="expr">\\\\{{name}}</div><div class="out">\\\World</div></div>
+        <div class="row"><div class="expr">{{{{#raw}}}}{{name}}{{{{/raw}}}}</div><div class="out">{{name}}</div></div>
+      </div>
+    </section>
+
+    <!-- ════ LOADING ════ -->
+    <section id="loading" class="card" style="--a:var(--g-host)">
+      <div class="head">
+        <span class="dot"></span>
+        <h2>loading · elixir<a href="#loading" class="anchor" aria-label="Permalink">§</a></h2>
+        <span class="pill host-pill">host config</span>
+        <p class="desc">Pass transformer modules to Stem.Unsafe.eval_string/2.</p>
+      </div>
+<pre class="codeblock"><span class="c"># format (low risk)</span>
+<span class="m">Stem.Unsafe</span>.<span class="f">eval_string</span>(template,
+  <span class="k">assigns:</span> data,
+  <span class="k">transformers:</span> <span class="m">Stem.Transformers.Strings</span>.<span class="f">all</span>())
+
+<span class="c"># transform (audited)</span>
+<span class="m">Stem.Unsafe</span>.<span class="f">eval_string</span>(template,
+  <span class="k">assigns:</span> data,
+  <span class="k">transformers:</span> <span class="m">Stem.Transformers.Collections</span>.<span class="f">all</span>())
+
+<span class="c"># bundled</span>
+<span class="m">Stem.Unsafe</span>.<span class="f">eval_string</span>(template,
+  <span class="k">assigns:</span> data,
+  <span class="k">transformers:</span> <span class="m">Stem.Transformers.Standard</span>.<span class="f">all</span>())</pre>
+    </section>
+
+  </div>
+
+  <!-- ── SOURCE DATA ──────────────────────────────── -->
+  <section id="data" class="card" style="--a:var(--g-data);margin-top:14px">
+    <div class="head">
+      <span class="dot"></span>
+      <h2>source data<a href="#data" class="anchor" aria-label="Permalink">§</a></h2>
+      <span class="pill">yaml</span>
+      <p class="desc">Context bound to every expression on this sheet.</p>
+    </div>
+    <div class="data-cols">
+<pre class="codeblock"><span class="c"># scalars</span>
+<span class="k">str</span>:     <span class="f">"  Hello, World!  "</span>
+<span class="k">title</span>:   <span class="f">"the quick brown fox"</span>
+<span class="k">blurb</span>:   <span class="f">"Template engines are powerful"</span>
+<span class="k">unsafe</span>:  <span class="f">"&lt;script&gt;alert('xss')&lt;/script&gt;"</span>
+<span class="k">quote</span>:   <span class="f">"say \"hello\" to everyone"</span>
+<span class="k">present</span>: <span class="f">"I exist"</span>
+<span class="k">missing</span>: <span class="c">null</span>
+<span class="k">csv</span>:     <span class="f">"a,b,c"</span>
+<span class="k">expr</span>:    <span class="f">"{{name | upcase}}"</span>
+<span class="k">name</span>:    <span class="f">"World"</span>
+
+<span class="c"># collections</span>
+<span class="k">fruits</span>:  [<span class="f">banana</span>, <span class="f">apple</span>, <span class="f">cherry</span>, <span class="f">apple</span>, <span class="f">date</span>, <span class="f">elderberry</span>]
+<span class="k">sparse</span>:  [<span class="f">alpha</span>, <span class="c">null</span>, <span class="f">beta</span>, <span class="c">null</span>, <span class="f">gamma</span>]
+<span class="k">nested</span>:  [[<span class="f">x</span>, <span class="f">y</span>], [<span class="f">p</span>, <span class="f">q</span>], [<span class="f">r</span>]]</pre>
+<pre class="codeblock"><span class="c"># map</span>
+<span class="k">config</span>:
+  <span class="k">host</span>: <span class="f">localhost</span>
+  <span class="k">port</span>: <span class="m">5432</span>
+
+<span class="c"># list of maps</span>
+<span class="k">people</span>:
+  - { <span class="k">name</span>: <span class="f">Carol</span>, <span class="k">age</span>: <span class="m">32</span>, <span class="k">dept</span>: <span class="f">Engineering</span>, <span class="k">lead</span>: <span class="m">true</span> }
+  - { <span class="k">name</span>: <span class="f">Alice</span>, <span class="k">age</span>: <span class="m">28</span>, <span class="k">dept</span>: <span class="f">Design</span> }
+  - { <span class="k">name</span>: <span class="f">Bob</span>,   <span class="k">age</span>: <span class="m">35</span>, <span class="k">dept</span>: <span class="f">Engineering</span>, <span class="k">lead</span>: <span class="m">true</span> }
+  - { <span class="k">name</span>: <span class="f">Dave</span>,  <span class="k">age</span>: <span class="m">28</span>, <span class="k">dept</span>: <span class="f">Design</span> }</pre>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ───────────────────────────────────── -->
+  <div class="foot">
+    <div class="legend">
+      <span><i aria-hidden="true" style="background:var(--g-default)"></i>default</span>
+      <span><i aria-hidden="true" style="background:var(--g-format)"></i>format</span>
+      <span><i aria-hidden="true" style="background:var(--g-transform)"></i>transform</span>
+      <span><i aria-hidden="true" style="background:var(--g-eval)"></i>eval</span>
+      <span><i aria-hidden="true" style="background:var(--g-escape)"></i>escape</span>
+      <span><i aria-hidden="true" style="background:var(--g-host)"></i>host</span>
+      <span><i aria-hidden="true" style="background:var(--g-data)"></i>data</span>
+    </div>
+    <div>STEM · TEMPLATE · REFERENCE SHEET · v1</div>
+  </div>
+
+</div>
+<script>
+document.querySelectorAll('.expr').forEach(expr => {
+  const text = expr.textContent.trim();
+  const copyIcon = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  const checkIcon = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  const btn = document.createElement('button');
+  btn.className = 'copy';
+  btn.setAttribute('aria-label', 'Copy');
+  btn.setAttribute('title', 'Copy expression');
+  btn.dataset.copy = text;
+  btn.innerHTML = copyIcon;
+  expr.appendChild(btn);
+  btn.addEventListener('click', async e => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(btn.dataset.copy);
+      btn.innerHTML = checkIcon;
+      btn.classList.add('copied');
+      setTimeout(() => { btn.innerHTML = copyIcon; btn.classList.remove('copied'); }, 1400);
+    } catch (_) {}
+  });
+});
+</script>
+</body>
+</html>

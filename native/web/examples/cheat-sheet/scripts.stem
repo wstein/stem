@@ -1,0 +1,23 @@
+<script>
+document.querySelectorAll('.expr').forEach(expr => {
+  const text = expr.textContent.trim();
+  const copyIcon = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+  const checkIcon = '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+  const btn = document.createElement('button');
+  btn.className = 'copy';
+  btn.setAttribute('aria-label', 'Copy');
+  btn.setAttribute('title', 'Copy expression');
+  btn.dataset.copy = text;
+  btn.innerHTML = copyIcon;
+  expr.appendChild(btn);
+  btn.addEventListener('click', async e => {
+    e.stopPropagation();
+    try {
+      await navigator.clipboard.writeText(btn.dataset.copy);
+      btn.innerHTML = checkIcon;
+      btn.classList.add('copied');
+      setTimeout(() => { btn.innerHTML = copyIcon; btn.classList.remove('copied'); }, 1400);
+    } catch (_) {}
+  });
+});
+</script>
