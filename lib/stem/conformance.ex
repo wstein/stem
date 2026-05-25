@@ -248,6 +248,72 @@ defmodule Stem.Conformance do
       template: "{{{x | json}}}",
       data: %{x: 1.5e10},
       transformers: [:minimum]
+    },
+    # Arity boundaries: each built-in is invoked at the edge of its argument range
+    # (the subject counts as the first argument). These pin that valid boundary
+    # calls render identically across backends — the success-path companion to the
+    # render-time arity refusals fuzzed by `mix stem.native.fuzz`. The data stays
+    # in the atomization-safe domain (no string map keys — see `lookup`, which
+    # indexes a list rather than a map for that reason).
+    %{
+      name: "truncate min arity",
+      template: "{{s | truncate 3}}",
+      data: %{s: "hello"},
+      transformers: [:strings]
+    },
+    %{
+      name: "truncate max arity",
+      template: "{{s | truncate 8 \"..\"}}",
+      data: %{s: "hello world"},
+      transformers: [:strings]
+    },
+    %{
+      name: "replace exact arity",
+      template: "{{replace s \"o\" \"0\"}}",
+      data: %{s: "foo bar"},
+      transformers: [:strings]
+    },
+    %{
+      name: "slice exact arity",
+      template: "{{slice s 0 3}}",
+      data: %{s: "hello"},
+      transformers: [:strings]
+    },
+    %{
+      name: "take exact arity",
+      template: "{{items | take 2 | join \",\"}}",
+      data: %{items: ["a", "b", "c"]},
+      transformers: [:minimum, :collections]
+    },
+    %{
+      name: "drop exact arity",
+      template: "{{items | drop 1 | join \",\"}}",
+      data: %{items: ["a", "b", "c"]},
+      transformers: [:minimum, :collections]
+    },
+    %{
+      name: "lookup exact arity",
+      template: "{{lookup items 1}}",
+      data: %{items: ["a", "b", "c"]},
+      transformers: [:minimum]
+    },
+    %{
+      name: "starts_with exact arity",
+      template: "{{starts_with s \"he\"}}",
+      data: %{s: "hello"},
+      transformers: [:strings]
+    },
+    %{
+      name: "ends_with exact arity",
+      template: "{{ends_with s \"lo\"}}",
+      data: %{s: "hello"},
+      transformers: [:strings]
+    },
+    %{
+      name: "join min arity",
+      template: "{{items | join}}",
+      data: %{items: ["a", "b"]},
+      transformers: [:minimum]
     }
   ]
 

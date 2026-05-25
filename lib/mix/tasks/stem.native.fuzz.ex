@@ -67,10 +67,15 @@ defmodule Mix.Tasks.Stem.Native.Fuzz do
     report(engine, seed, count, failures)
   end
 
+  # The BEAM oracle. A render-time refusal (e.g. an arity mismatch) is normalized
+  # to the native engine's "stem_native error: " sentinel so error cases compare
+  # for parity exactly like successful renders.
   defp render_oracle(template, data, transformers) do
     quoted = Stem.compile_string(template, escape: :html)
     {result, _binding} = Code.eval_quoted(quoted, assigns: data, transformers: transformers)
     result
+  rescue
+    e in Stem.SyntaxError -> "stem_native error: " <> Exception.message(e)
   end
 
   defp report(engine, seed, count, []) do
@@ -113,28 +118,47 @@ defmodule Mix.Tasks.Stem.Native.Fuzz do
   end
 
   defp segment do
-    case rand_int(0..17) do
+    case rand_int(0..18) do
       0 -> literal()
       1 -> "{{s}}"
       2 -> "{{{s}}}"
-      3 -> "{{s |> #{string_pipeline()}}}"
+      3 -> "{{s | #{string_pipeline()}}}"
       4 -> "{{n}}"
       5 -> "{{flag}}"
-      6 -> "{{items |> join(#{quoted(separator())})}}"
-      7 -> "{{nums |> sort |> join(\",\")}}"
-      8 -> "{{words |> sort |> reverse |> join(\"-\")}}"
-      9 -> "{{items |> uniq |> join(\"/\")}}"
-      10 -> "{{items |> first}}"
-      11 -> "{{rows |> map(\"name\") |> join(\" \")}}"
+      6 -> "{{items | join #{quoted(separator())}}}"
+      7 -> "{{nums | sort | join \",\"}}"
+      8 -> "{{words | sort | reverse | join \"-\"}}"
+      9 -> "{{items | uniq | join \"/\"}}"
+      10 -> "{{items | first}}"
+      11 -> "{{rows | map \"name\" | join \" \"}}"
       12 -> "{{contains words #{quoted(ascii(1..3))}}}"
       13 -> "{{#if flag}}#{literal()}{{else}}#{literal()}{{/if}}"
-      14 -> "{{#each items}}{{this |> upcase}};{{/each}}"
+      14 -> "{{#each items}}{{this | upcase}};{{/each}}"
       15 -> "{{#each rows as |r i0 i1|}}{{i0}}/{{i1}}:{{r.name}};{{/each}}"
       16 -> "{{#with obj as |o|}}{{o.k}}={{o.v}}{{/with}}"
       # Exercises float rendering across magnitudes (the `:short` format the
       # native core reproduces — gap G2).
       17 -> "{{f}}"
+      # Render-time arity violation: a built-in called with the wrong number of
+      # arguments must refuse identically on both engines (the subject counts as
+      # the first argument), so the error sentinels compare byte-for-byte.
+      18 -> arity_violation()
     end
+  end
+
+  # A built-in invoked outside its arity range. The subject is the first
+  # argument, so each of these over- or under-fills a known range; both backends
+  # raise the same uniform message, normalized to the native sentinel in
+  # `render_oracle/3`.
+  defp arity_violation do
+    Enum.random([
+      ~s({{s | upcase "x"}}),
+      ~s({{s | truncate}}),
+      ~s({{items | first "x"}}),
+      ~s({{items | join "," "y" "z"}}),
+      ~s({{nums | sort "x"}}),
+      ~s({{words | reverse "x"}})
+    ])
   end
 
   # A float spanning a wide range of magnitudes (positive and negative
@@ -147,8 +171,8 @@ defmodule Mix.Tasks.Stem.Native.Fuzz do
   defp string_pipeline do
     stages = ~w(upcase downcase trim capitalize reverse)
     chosen = for _ <- 1..rand_int(1..3), do: Enum.random(stages)
-    chosen = if rand_int(0..1) == 1, do: chosen ++ ["truncate(#{rand_int(0..8)})"], else: chosen
-    Enum.join(chosen, " |> ")
+    chosen = if rand_int(0..1) == 1, do: chosen ++ ["truncate #{rand_int(0..8)}"], else: chosen
+    Enum.join(chosen, " | ")
   end
 
   # `1..0//1` is an empty range, so a count of 0 yields an empty list.

@@ -73,17 +73,17 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "{{#each rows}}{{this.[full name]}}{{/each}}",
     "{{#with user as |u|}}{{u.[full name]}}{{/with}}",
     # Transformers and pipelines
-    "{{name |> upcase}}",
-    "{{name |> upcase |> trim}}",
-    "{{text |> truncate(20)}}",
-    "{{items |> join(\", \")}}",
+    "{{name | upcase}}",
+    "{{name | upcase | trim}}",
+    "{{text | truncate 20}}",
+    "{{items | join \", \"}}",
     "{{upcase name}}",
     "{{default user.name \"anon\"}}",
     "{{truncate text 20}}",
     "{{default (upcase name) \"X\"}}",
     "{{link url text=label}}",
-    "{{x |> wrap(tag: \"b\")}}",
-    "{{#each items}}{{this.name |> upcase}}{{/each}}",
+    "{{x | wrap tag=\"b\"}}",
+    "{{#each items}}{{this.name | upcase}}{{/each}}",
     "{{42}} {{-3}} {{true}} {{null}}",
     # Comments and whitespace-control trim markers
     "a {{~ x ~}} b",
@@ -112,6 +112,21 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     {"{{#each users}}{{> card this}}{{/each}}", %{"card" => "[{{name}}]"}}
   ]
 
+  # The reserved boolean operators `||`/`&&`. Both compilers must refuse these at
+  # compile time (maximal munch, spaced or not). This path is unreachable from the
+  # render harness — `mix stem.native.fuzz` compiles on the BEAM before the native
+  # engine renders — so reserved-operator parity is gated here. A template that
+  # compiles on one backend while erroring on the other is the parser-differential
+  # bug this gate exists to catch.
+  @reserved_templates [
+    "{{a || b}}",
+    "{{a||b}}",
+    "{{a && b}}",
+    "{{a&&b}}",
+    "{{name | a && b}}",
+    "{{name | a || b}}"
+  ]
+
   @impl true
   def run(argv) do
     Mix.Task.run("compile")
@@ -131,7 +146,24 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
         classify(template, beam_wire, rust_wire)
       end)
 
-    report(engine, results)
+    report(engine, results, reserved_results(engine))
+  end
+
+  # `||`/`&&` must be refused by both compilers at compile time. The BEAM parser
+  # returns `{:error, _}`; the native compiler returns an `%{"error" => _}` map.
+  # Each template must error on *both* backends — one accepting while the other
+  # refuses would be a parser divergence.
+  defp reserved_results(engine) do
+    rust = Engine.compile_batch(engine, @reserved_templates)
+
+    [@reserved_templates, rust]
+    |> Enum.zip()
+    |> Enum.map(fn {template, rust_wire} ->
+      # `parse_with_spans/1` returns `{:ok, ast}` or `{:error, message, meta}`.
+      beam_refused = elem(Stem.Parser.parse_with_spans(template), 0) == :error
+      rust_refused = match?(%{"error" => _}, rust_wire)
+      {template, beam_refused, rust_refused}
+    end)
   end
 
   # A bare source string when there are no partials, else a `{template, partials}`
@@ -154,7 +186,7 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
       else: {:mismatch, template, beam_wire, rust_wire}
   end
 
-  defp report(engine, results) do
+  defp report(engine, results, reserved) do
     Mix.shell().info("Native engine: #{engine}")
     counts = Enum.frequencies_by(results, &elem(&1, 0))
     matched = Map.get(counts, :match, 0)
@@ -169,13 +201,31 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
       )
     end)
 
+    reserved_failures =
+      Enum.reject(reserved, fn {_template, beam_refused, rust_refused} ->
+        beam_refused and rust_refused
+      end)
+
+    Enum.each(reserved_failures, fn {template, beam_refused, rust_refused} ->
+      Mix.shell().error(
+        "  ✗ reserved #{inspect(template)} — refused on beam: #{beam_refused}, rust: #{rust_refused}"
+      )
+    end)
+
     Mix.shell().info(
       "Compile parity: #{matched} matched, #{pending} pending (not yet ported), " <>
         "#{length(mismatches)} mismatched of #{length(results)} templates."
     )
 
-    unless mismatches == [] do
-      Mix.raise("Native compile parity failed: #{length(mismatches)} template(s) diverged.")
+    Mix.shell().info(
+      "Reserved-operator parity: #{length(reserved) - length(reserved_failures)}/" <>
+        "#{length(reserved)} refused on both backends."
+    )
+
+    divergences = length(mismatches) + length(reserved_failures)
+
+    unless divergences == 0 do
+      Mix.raise("Native compile parity failed: #{divergences} divergence(s).")
     end
   end
 end

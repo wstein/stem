@@ -38,5 +38,15 @@
   {"data":{"x":3.14},"escape":"html","expected":"3.14","name":"float fraction","template":"{{x}}","transformers":[]},
   {"data":{"x":1.0e8},"escape":"html","expected":"1.0e8","name":"float scientific","template":"{{x}}","transformers":[]},
   {"data":{"x":1.0e-5},"escape":"html","expected":"1.0e-5","name":"float small","template":"{{x}}","transformers":[]},
-  {"data":{"x":1.5e10},"escape":"html","expected":"1.5e10","name":"json float","template":"{{{x | json}}}","transformers":["minimum"]}
+  {"data":{"x":1.5e10},"escape":"html","expected":"1.5e10","name":"json float","template":"{{{x | json}}}","transformers":["minimum"]},
+  {"data":{"s":"hello"},"escape":"html","expected":"hel","name":"truncate min arity","template":"{{s | truncate 3}}","transformers":["strings"]},
+  {"data":{"s":"hello world"},"escape":"html","expected":"hello ..","name":"truncate max arity","template":"{{s | truncate 8 \"..\"}}","transformers":["strings"]},
+  {"data":{"s":"foo bar"},"escape":"html","expected":"f00 bar","name":"replace exact arity","template":"{{replace s \"o\" \"0\"}}","transformers":["strings"]},
+  {"data":{"s":"hello"},"escape":"html","expected":"hel","name":"slice exact arity","template":"{{slice s 0 3}}","transformers":["strings"]},
+  {"data":{"items":["a","b","c"]},"escape":"html","expected":"a,b","name":"take exact arity","template":"{{items | take 2 | join \",\"}}","transformers":["minimum","collections"]},
+  {"data":{"items":["a","b","c"]},"escape":"html","expected":"b,c","name":"drop exact arity","template":"{{items | drop 1 | join \",\"}}","transformers":["minimum","collections"]},
+  {"data":{"items":["a","b","c"]},"escape":"html","expected":"b","name":"lookup exact arity","template":"{{lookup items 1}}","transformers":["minimum"]},
+  {"data":{"s":"hello"},"escape":"html","expected":"true","name":"starts_with exact arity","template":"{{starts_with s \"he\"}}","transformers":["strings"]},
+  {"data":{"s":"hello"},"escape":"html","expected":"true","name":"ends_with exact arity","template":"{{ends_with s \"lo\"}}","transformers":["strings"]},
+  {"data":{"items":["a","b"]},"escape":"html","expected":"ab","name":"join min arity","template":"{{items | join}}","transformers":["minimum"]}
 ]
