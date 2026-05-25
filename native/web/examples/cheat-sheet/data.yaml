@@ -8,6 +8,7 @@ missing: null
 csv: "a,b,c"
 expr: "title"
 name: "World"
+raw_src: "{{{{#raw}}}}{{name}}{{{{/raw}}}}"
 
 fruits: [banana, apple, cherry, apple, date, elderberry]
 sparse: [alpha, null, beta, null, gamma]
