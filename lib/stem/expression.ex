@@ -372,8 +372,13 @@ defmodule Stem.Expression do
         case split_top_level(trimmed) do
           [name | args] when args != [] ->
             if helper_name?(name) do
-              with {:ok, parsed_args} <- parse_helper_args(args) do
-                {:ok, {:stage, name, parsed_args}}
+              case parse_helper_args(args) do
+                {:ok, parsed_args} ->
+                  {:ok, {:stage, name, parsed_args}}
+
+                :error ->
+                  {:error,
+                   "pipeline stage arguments must be assigns, paths, literals, or key=value pairs"}
               end
             else
               {:error, "pipeline stage helper names must be simple identifiers"}

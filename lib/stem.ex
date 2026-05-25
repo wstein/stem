@@ -113,7 +113,7 @@ defmodule Stem do
     * `{{yield name}}` to render a named region defined earlier in the same
       expanded template scope.
     * `{{format (uppercase name)}}` style helper subexpressions.
-    * `{{name |> trim |> upcase |> truncate(20)}}` helper pipelines.
+    * `{{name | trim | upcase | truncate 20}}` helper pipelines.
     * `{{#each items as |item key|}}` / `{{#with story as |article|}}`
       block parameters. For `{{#each}}` the second parameter is the iteration
       key (the map key for maps, the index for lists). `{{#each}}` also accepts
@@ -147,7 +147,7 @@ defmodule Stem do
   JSON/YAML familiarity.
 
   Pipelines are restricted to helper stages so templates stay declarative.
-  `{{lhs |> helper(a, b)}}` compiles as if the helper had been called with
+  `{{lhs | helper a b}}` compiles as if the helper had been called with
   the pipeline value prepended: `helper(lhs, a, b)`.
 
   For layout composition, combine inline partial expansion with named regions.
@@ -181,7 +181,7 @@ defmodule Stem do
   true` to print a warning for missing values.
 
       iex> Stem.Unsafe.eval_string(
-      ...>   "{{name |> trim |> upcase}}",
+      ...>   "{{name | trim | upcase}}",
       ...>   assigns: [name: "  nina  "],
       ...>   transformers: Stem.Transformers.Standard.all()
       ...> )

@@ -161,8 +161,8 @@ defmodule Stem.CLI do
 
           # A pipeline always invokes transformers, even when its left-hand
           # side is a path/literal rather than a bare helper name
-          # (e.g. `{{user.name |> upcase}}`).
-          String.contains?(tag, "|>") ->
+          # (e.g. `{{user.name | upcase}}`).
+          String.contains?(tag, "|") ->
             true
 
           true ->
