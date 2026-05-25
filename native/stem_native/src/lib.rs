@@ -21,6 +21,8 @@ use std::collections::HashMap;
 
 mod compile;
 
+pub use compile::CompileError;
+
 #[derive(Deserialize)]
 struct Input {
     program: Program,
@@ -35,12 +37,14 @@ struct Input {
     transformers: Vec<String>,
 }
 
-#[derive(Deserialize)]
-struct Program {
+/// A compiled Stem template: the renderable unit produced by [`compile`]. Opaque
+/// — its bytecode is an internal detail. Render it with [`Program::render`].
+#[derive(Debug, Deserialize)]
+pub struct Program {
     instructions: Vec<Instr>,
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(tag = "t", rename_all = "lowercase")]
 enum Instr {
     Text {
@@ -83,7 +87,7 @@ enum Instr {
     },
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 #[serde(tag = "t", rename_all = "lowercase")]
 enum Op {
     Lit {
@@ -119,7 +123,7 @@ enum Op {
 // Provenance attached to a `text`/`emit` instruction by the span-annotated
 // compiler: which template/partial it came from and (for `emit`) the byte span
 // of the originating `{{ }}` tag in that file's source.
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 struct Src {
     file: String,
     #[serde(default)]
@@ -164,6 +168,7 @@ struct Ctx {
 /// custom transformers. Both are inert by default (the C ABI / browser use
 /// [`Host::default`]), so the shipped engine ships neither — the analogue of the
 /// BEAM, whose getters and `transformers:` binding are the caller's business.
+#[derive(Clone, Copy)]
 pub struct Host {
     /// Resolves `{"$getter": "name"}` data fields. See [`GetterResolver`].
     pub getter: GetterResolver,
@@ -271,6 +276,139 @@ pub fn handle_with_host(raw: &str, host: &Host) -> String {
     }
 }
 
+// ── Idiomatic Rust API ───────────────────────────────────────────────────────
+//
+// The typed, `Result`-returning surface for in-process Rust hosts. The JSON
+// `handle*` entries above are a thin wrapper over this same core (kept for the
+// Elixir conformance harness and the C ABI); a drift-guard test asserts the two
+// agree.
+
+/// A capability group of built-in transformers, loaded via [`RenderOptions`].
+/// The Minimum group is always available and needs no opt-in. Mirrors
+/// `Stem.Transformers.groups/0`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Group {
+    Strings,
+    Collections,
+    Predicates,
+    I18n,
+    /// The Minimum + Strings convenience bundle (`Stem.Transformers.Standard`).
+    Standard,
+}
+
+fn group_bit(group: Group) -> u8 {
+    match group {
+        Group::Strings => GROUP_STRINGS,
+        Group::Collections => GROUP_COLLECTIONS,
+        Group::Predicates => GROUP_PREDICATES,
+        Group::I18n => GROUP_I18N,
+        Group::Standard => GROUP_MINIMUM | GROUP_STRINGS,
+    }
+}
+
+/// Per-render configuration: which capability groups are loaded and which
+/// [`Host`] extensions (getters, custom transformers) are available. Minimum is
+/// always on; everything else is opt-in, secure by default.
+#[derive(Clone, Copy)]
+pub struct RenderOptions {
+    groups: u8,
+    host: Host,
+}
+
+impl Default for RenderOptions {
+    fn default() -> Self {
+        RenderOptions {
+            groups: GROUP_MINIMUM,
+            host: Host::default(),
+        }
+    }
+}
+
+impl RenderOptions {
+    /// Minimum-only, no host extensions — the secure default.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Load one capability group (chainable).
+    pub fn with_group(mut self, group: Group) -> Self {
+        self.groups |= group_bit(group);
+        self
+    }
+
+    /// Load several capability groups (chainable).
+    pub fn with_groups(mut self, groups: impl IntoIterator<Item = Group>) -> Self {
+        for group in groups {
+            self.groups |= group_bit(group);
+        }
+        self
+    }
+
+    /// Supply host getters and custom transformers (chainable).
+    pub fn with_host(mut self, host: Host) -> Self {
+        self.host = host;
+        self
+    }
+}
+
+/// A render-time failure: an unloaded capability group, an unknown transformer,
+/// a keyword-arg misuse, an unsupported escape mode, or an i18n call without a
+/// host translator. Carries the human message; the JSON boundary prefixes it
+/// with "stem_native error: ".
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RenderError {
+    pub message: String,
+}
+
+impl std::fmt::Display for RenderError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.message)
+    }
+}
+
+impl std::error::Error for RenderError {}
+
+/// Compiles template source to a [`Program`], with no partials.
+pub fn compile(source: &str) -> Result<Program, CompileError> {
+    compile_with_partials(source, &HashMap::new())
+}
+
+/// Compiles template source to a [`Program`], expanding `{{> name}}` partials
+/// from the given `name -> source` map.
+pub fn compile_with_partials(
+    source: &str,
+    partials: &HashMap<String, String>,
+) -> Result<Program, CompileError> {
+    let wire = compile::compile_to_wire(source, partials)?;
+    Ok(serde_json::from_value(wire).expect("compiler always emits a valid wire program"))
+}
+
+impl Program {
+    /// Renders the compiled template against `data` under `options`, resolving
+    /// built-in transformers (gated by the loaded groups) and any host
+    /// extensions. A construct the loaded capabilities do not permit is refused
+    /// up front as a [`RenderError`] — never a panic, never partial output.
+    pub fn render(&self, data: &Value, options: &RenderOptions) -> Result<String, RenderError> {
+        let caps = Caps {
+            groups: options.groups,
+            host_names: options.host.transformer_names,
+        };
+        match check_instrs(&self.instructions, &caps) {
+            Some(message) => Err(RenderError { message }),
+            None => Ok(render(&self.instructions, &root_ctx(data, &options.host))),
+        }
+    }
+
+    /// Reconstructs a [`Program`] from a wire bytecode string
+    /// (`Stem.Bytecode.to_wire/1` JSON) — the path a compile-time macro or the
+    /// Elixir bridge uses to hand the engine an already-compiled template.
+    pub fn from_wire(wire: &str) -> Result<Program, RenderError> {
+        serde_json::from_str(wire).map_err(|err| RenderError {
+            message: format!("invalid wire program: {err}"),
+        })
+    }
+}
+
 // ── C ABI for wasm32-unknown-unknown (browser) ───────────────────────────────
 //
 // The host writes the request JSON into linear memory at `stem_alloc(len)`,
@@ -341,20 +479,6 @@ fn parse_partials(value: Option<&Value>) -> compile::Partials {
     }
 }
 
-// The first construct in the program this core cannot render with byte-parity,
-// or the first transformer call outside the caller's enabled capability groups,
-// as a recoverable error string. Refusing up front — never panicking, never
-// emitting partial output — turns an input-triggered abort (a DoS in the
-// browser/WASM build) into a message and mirrors the BEAM, which raises before
-// rendering when a template reaches an unloaded transformer.
-fn refuse_unsupported(input: &Input, host: &Host) -> Option<String> {
-    let caps = Caps {
-        groups: parse_groups(&input.transformers),
-        host_names: host.transformer_names,
-    };
-    check_instrs(&input.program.instructions, &caps)
-}
-
 fn root_ctx(data: &Value, host: &Host) -> Ctx {
     Ctx {
         root: data.clone(),
@@ -368,11 +492,19 @@ fn root_ctx(data: &Value, host: &Host) -> Ctx {
     }
 }
 
+// The JSON-boundary render: drive the typed [`Program::render`] core, and on a
+// refusal format the engine's "stem_native error: " sentinel the Elixir bridge
+// and C ABI expect. (Refusing up front — never panicking, never emitting partial
+// output — turns an input-triggered abort in the WASM build into a message.)
 fn render_input(input: &Input, host: &Host) -> String {
-    if let Some(error) = refuse_unsupported(input, host) {
-        return error;
+    let options = RenderOptions {
+        groups: parse_groups(&input.transformers),
+        host: *host,
+    };
+    match input.program.render(&input.data, &options) {
+        Ok(output) => output,
+        Err(error) => format!("stem_native error: {}", error.message),
     }
-    render(&input.program.instructions, &root_ctx(&input.data, host))
 }
 
 // Render returning a JSON string `{"output", "segments"}`: the output plus a
@@ -380,8 +512,12 @@ fn render_input(input: &Input, host: &Host) -> String {
 // render path; the segment list is empty unless the program carries `src`
 // provenance (compiled with `map: true`).
 fn render_input_mapped(input: &Input, host: &Host) -> String {
-    let (output, segments) = match refuse_unsupported(input, host) {
-        Some(error) => (error, Vec::new()),
+    let caps = Caps {
+        groups: parse_groups(&input.transformers),
+        host_names: host.transformer_names,
+    };
+    let (output, segments) = match check_instrs(&input.program.instructions, &caps) {
+        Some(message) => (format!("stem_native error: {message}"), Vec::new()),
         None => render_mapped(&input.program.instructions, &root_ctx(&input.data, host)),
     };
     serde_json::to_string(&json!({ "output": output, "segments": segments })).unwrap_or_default()
@@ -473,8 +609,10 @@ struct Caps<'a> {
 
 // Walk a program for the first construct the native core cannot render with
 // byte-parity, or the first transformer call the caller has not enabled,
-// returning the full error string (no source span: the render input carries the
-// compiled program, not the original template).
+// returning a bare message (no source span: the render input carries the
+// compiled program, not the original template). The JSON boundary prefixes
+// these with "stem_native error: "; the typed [`Program::render`] surfaces them
+// in a [`RenderError`] verbatim.
 fn check_instrs(instrs: &[Instr], caps: &Caps) -> Option<String> {
     instrs.iter().find_map(|instr| check_instr(instr, caps))
 }
@@ -484,9 +622,7 @@ fn check_instr(instr: &Instr, caps: &Caps) -> Option<String> {
         Instr::Text { .. } => None,
         Instr::Emit { value, escape, .. } => {
             if !SUPPORTED_ESCAPES.contains(&escape.as_str()) {
-                Some(format!(
-                    "stem_native error: unsupported escape mode '{escape}'"
-                ))
+                Some(format!("unsupported escape mode '{escape}'"))
             } else {
                 check_op(value, caps)
             }
@@ -531,11 +667,11 @@ fn check_op(op: &Op, caps: &Caps) -> Option<String> {
             } else if let Some(provides) = builtin_groups(name) {
                 if !kwargs.is_empty() {
                     Some(format!(
-                        "stem_native error: keyword arguments to transformer '{name}' are not supported"
+                        "keyword arguments to transformer '{name}' are not supported"
                     ))
                 } else if provides & caps.groups == 0 {
                     Some(format!(
-                        "stem_native error: transformer '{name}' requires the {} capability group, \
+                        "transformer '{name}' requires the {} capability group, \
                          which is not enabled. Add it to the request \"transformers\" list.",
                         group_phrase(provides)
                     ))
@@ -548,17 +684,17 @@ fn check_op(op: &Op, caps: &Caps) -> Option<String> {
                 // front rather than rendering to null.
                 if caps.groups & GROUP_I18N == 0 {
                     Some(format!(
-                        "stem_native error: transformer '{name}' requires the i18n capability group, \
+                        "transformer '{name}' requires the i18n capability group, \
                          which is not enabled. Add it to the request \"transformers\" list."
                     ))
                 } else {
                     Some(format!(
-                        "stem_native error: transformer '{name}' requires a host translator; \
+                        "transformer '{name}' requires a host translator; \
                          supply one through the transformer resolver."
                     ))
                 }
             } else {
-                Some(format!("stem_native error: unknown transformer '{name}'"))
+                Some(format!("unknown transformer '{name}'"))
             }
         }
         Op::Get { base, .. } => check_op(base, caps),
@@ -1447,6 +1583,107 @@ fn value_cmp(a: &Value, b: &Value) -> std::cmp::Ordering {
         (Value::String(x), Value::String(y)) => x.cmp(y),
         (Value::Bool(x), Value::Bool(y)) => x.cmp(y),
         _ => rank(a).cmp(&rank(b)),
+    }
+}
+
+#[cfg(test)]
+mod typed_api_tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn compile_and_render_round_trip() {
+        let program = compile("Hello {{ name }}!").unwrap();
+        let out = program
+            .render(&json!({ "name": "Ada" }), &RenderOptions::new())
+            .unwrap();
+        assert_eq!(out, "Hello Ada!");
+    }
+
+    #[test]
+    fn compile_error_is_typed() {
+        let err = compile("{{ unterminated").unwrap_err();
+        // CompileError is a real error with a span and a Display impl.
+        assert!(err.end >= err.start);
+        assert!(!format!("{err}").is_empty());
+    }
+
+    #[test]
+    fn loading_a_group_enables_its_transformers() {
+        let program = compile("{{ name |> upcase }}").unwrap();
+        let data = json!({ "name": "ada" });
+
+        // Minimum-only: refused, as a typed RenderError.
+        let err = program.render(&data, &RenderOptions::new()).unwrap_err();
+        assert!(err
+            .message
+            .contains("requires the strings capability group"));
+
+        // Strings loaded: renders.
+        let opts = RenderOptions::new().with_group(Group::Strings);
+        assert_eq!(program.render(&data, &opts).unwrap(), "ADA");
+    }
+
+    #[test]
+    fn host_transformer_via_options() {
+        fn shout(call: &TransformerCall) -> Option<Value> {
+            Some(Value::from(format!(
+                "{}!",
+                call.args.first().and_then(Value::as_str).unwrap_or("")
+            )))
+        }
+        let program = compile("{{ name |> shout }}").unwrap();
+        let opts = RenderOptions::new().with_host(Host {
+            transform: shout,
+            transformer_names: &["shout"],
+            ..Host::default()
+        });
+        assert_eq!(
+            program.render(&json!({ "name": "ada" }), &opts).unwrap(),
+            "ada!"
+        );
+    }
+
+    #[test]
+    fn from_wire_reconstructs_a_program() {
+        let wire = r#"{"version":"stem-bc/v1","instructions":[
+            {"t":"emit","escape":"html","value":{"t":"assign","name":"x"}}]}"#;
+        let program = Program::from_wire(wire).unwrap();
+        assert_eq!(
+            program
+                .render(&json!({ "x": "ok" }), &RenderOptions::new())
+                .unwrap(),
+            "ok"
+        );
+    }
+
+    // Drift guard: the typed core and the JSON `handle*` boundary must agree, so
+    // the Elixir seam can never diverge from the Rust API.
+    #[test]
+    fn typed_and_json_paths_agree() {
+        let source = "{{ tags |> sort |> join(\", \") }} / {{ name |> upcase }}";
+        let data = json!({ "tags": ["b", "a"], "name": "ada" });
+        let program = compile(source).unwrap();
+
+        let typed = program
+            .render(
+                &data,
+                &RenderOptions::new().with_groups([Group::Strings, Group::Collections]),
+            )
+            .unwrap();
+
+        // The JSON path takes the wire program directly (its `version` field is
+        // ignored on deserialize).
+        let wire = compile::compile_to_wire(source, &compile::Partials::new()).unwrap();
+        let request = json!({
+            "program": wire,
+            "data": data,
+            "transformers": ["strings", "collections"]
+        });
+        let json_out = handle(&request.to_string());
+
+        assert_eq!(typed, json_out);
+        assert_eq!(typed, "a, b / ADA");
     }
 }
 

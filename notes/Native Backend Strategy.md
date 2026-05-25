@@ -13,6 +13,15 @@ Stem's native backend ships templates as portable bytecode run by one small inte
 - The interpreter boundary is bytes-in / bytes-out: `render(program_bytes, data_msgpack, caps) -> utf8_bytes`. No per-node host callbacks, no shared pointers, no `unsafe` FFI, no per-template native compilation.
 - The goal is **parity and portability** — render the same template identically off-BEAM (browser, edge worker, Python/Node) — **not** beating the BEAM, which wins locally.
 
+### Update — 2026-05-25: Rust as a first-class host
+
+The original framing treated the native core as gated, portability-only ([[Native Backend Phase 2 Gate]]). That gate is now **lifted**: Rust is a first-class Stem host/ecosystem alongside the BEAM. Concretely:
+
+- The **bytes-in / bytes-out JSON boundary is demoted to the Elixir conformance seam** (`handle`/`handle_with_host`, the `stem_native error:` sentinel, the C ABI). It stays byte-identical there as the oracle interface.
+- **In-process Rust uses a typed, idiomatic API**: `compile() -> Result<Program, CompileError>`, `Program::render(&Value, &RenderOptions) -> Result<String, RenderError>`, capabilities via `Group`, host extensions via `RenderOptions::with_host`. The JSON `handle*` path is now a thin wrapper over this same core (a drift-guard test asserts they agree).
+- The "no per-node host callbacks" tenet was always partial for the rlib — getters and custom transformers are host `fn` pointers (`Host`). That is intentional for trusted in-process embedding; the untrusted/WASM path still goes through the byte boundary.
+- Next: **compile-time macros** (a `stem!` proc-macro compiling templates to bytecode at Rust build time) and **leaner WASM/JS interop** (wasm-bindgen / serde-wasm-bindgen instead of the hand-rolled `stem_alloc`/`stem_render` marshalling).
+
 ## Why
 
 - Transpiling an AST to a high-level language's *source text* is string codegen with its own escaping hazards, couples two implementations forever, and drags `rustc`/LLVM into the build pipeline (per-template native artifacts, nondeterministic builds, larger supply-chain surface).

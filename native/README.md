@@ -111,6 +111,35 @@ Generates random templates over the matchable grammar, renders each on the BEAM
 and the native engine (one batched wasm process), and asserts byte-for-byte
 equality. The seed is printed so any failure is reproducible.
 
+## Idiomatic Rust API
+
+In-process Rust hosts use the typed, `Result`-returning surface — not the JSON
+string protocol, which is reserved for the Elixir conformance harness (`handle*`
+and the C ABI) and is a thin wrapper over this same core:
+
+```rust
+use serde_json::json;
+use stem_native::{compile, Group, RenderOptions};
+
+let program = compile("{{ name |> upcase }}")?;            // -> Result<Program, CompileError>
+let opts = RenderOptions::new().with_group(Group::Strings); // Minimum is always on
+let out = program.render(&json!({ "name": "ada" }), &opts)?; // -> Result<String, RenderError>
+assert_eq!(out, "ADA");
+```
+
+- `compile` / `compile_with_partials` return a typed [`Program`]; a syntax error
+  is a `CompileError` (with a byte span).
+- `Program::render(&Value, &RenderOptions)` returns `Result<String, RenderError>`.
+  An unloaded group, unknown transformer, or i18n-without-translator is an
+  `Err(RenderError)` — never smuggled into the output string.
+- `RenderOptions` is a builder: `.with_group(s)` load capability groups,
+  `.with_host(Host { … })` supplies getters and custom transformers.
+- `Program::from_wire(&str)` reconstructs a program from bytecode (the path a
+  compile-time macro or the Elixir bridge uses).
+
+The `stem_examples` crate is written entirely against this API; see
+[`stem_examples/`](stem_examples/).
+
 ## Capability groups
 
 Transformers are gated by capability group, mirroring the BEAM's

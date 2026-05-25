@@ -62,6 +62,14 @@ pub struct CompileError {
     pub end: usize,
 }
 
+impl std::fmt::Display for CompileError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{} (bytes {}..{})", self.message, self.start, self.end)
+    }
+}
+
+impl std::error::Error for CompileError {}
+
 // Compiles template source to the wire program `{"version", "instructions"}`,
 // expanding any `{{> name}}` partials from the given map.
 pub fn compile_to_wire(source: &str, partials: &Partials) -> Result<Value, CompileError> {
