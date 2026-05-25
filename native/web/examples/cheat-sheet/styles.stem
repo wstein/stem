@@ -16,9 +16,18 @@ h1 {
   margin-bottom: 20px;
 }
 h1 span { font-weight: 400; opacity: .45; font-size: 12px; letter-spacing: .06em; margin-left: 8px; }
-.sheet { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.sheet {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: auto auto auto;
+  gap: 14px;
+}
 .group { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px #0001; }
-.group.wide { grid-column: span 2; }
+/* Explicit placement: DEFAULT full-width row 1, FORMAT/EVAL side-by-side row 2, TRANSFORM full-width row 3 */
+.group.default   { grid-column: 1 / span 2; grid-row: 1; }
+.group.format    { grid-column: 1;           grid-row: 2; }
+.group.eval      { grid-column: 2;           grid-row: 2; }
+.group.transform { grid-column: 1 / span 2; grid-row: 3; }
 .group-head {
   display: flex; align-items: center; gap: 8px;
   padding: 8px 14px;
@@ -36,7 +45,7 @@ h1 span { font-weight: 400; opacity: .45; font-size: 12px; letter-spacing: .06em
 .group tr:hover { background: #fafafa; }
 td { padding: 5px 12px; vertical-align: middle; line-height: 1.5; }
 .col-expr { width: 52%; border-right: 1px solid #f0f0f0; }
-.col-result { width: 48%; color: #555; }
+.col-result { width: 48%; }
 code {
   font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
   font-size: 11px;
