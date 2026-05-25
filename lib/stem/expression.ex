@@ -57,7 +57,7 @@ defmodule Stem.Expression do
       single_quoted_chunk,
       lookahead_not(
         choice([
-          string("|>"),
+          string("|"),
           string(","),
           string("="),
           string(":"),
@@ -77,40 +77,16 @@ defmodule Stem.Expression do
     |> reduce({List, :to_string, []})
     |> unwrap_and_tag(:text)
 
-  stage_text_part =
-    choice([
-      double_quoted_chunk,
-      single_quoted_chunk,
-      lookahead_not(choice([string("\""), string("'"), string("("), string(")")]))
-      |> utf8_char([])
-    ])
-
-  stage_text_token =
-    stage_text_part
-    |> repeat(stage_text_part)
-    |> reduce({List, :to_string, []})
-    |> unwrap_and_tag(:text)
-
   defparsecp(
     :do_splitter_tokens,
     repeat(
       choice([
-        string("|>") |> unwrap_and_tag(:pipe),
+        string("|") |> unwrap_and_tag(:pipe),
         string(",") |> unwrap_and_tag(:comma),
         string("=") |> unwrap_and_tag(:eq),
         string(":") |> unwrap_and_tag(:colon),
         ascii_char([9, 10, 13, 32]) |> reduce({List, :to_string, []}) |> unwrap_and_tag(:ws),
         top_level_text_token
-      ])
-    )
-  )
-
-  defparsecp(
-    :do_stage_tokens,
-    repeat(
-      choice([
-        parsec(:paren_chunk) |> unwrap_and_tag(:paren),
-        stage_text_token
       ])
     )
   )
@@ -269,37 +245,16 @@ defmodule Stem.Expression do
     do: Enum.map_join(segments, ".", &format_segment/1)
 
   def format({:transformer, name, args}) do
-    formatted_args =
-      Enum.map(args, fn
-        {:kw, key, {:transformer, _, _} = value} -> "#{key}=(#{format(value)})"
-        {:kw, key, {:pipeline, _, _} = value} -> "#{key}=(#{format(value)})"
-        {:kw, key, value} -> "#{key}=#{format(value)}"
-        {:transformer, _, _} = value -> "(#{format(value)})"
-        {:pipeline, _, _} = value -> "(#{format(value)})"
-        value -> format(value)
-      end)
-
-    Enum.join([name | formatted_args], " ")
+    Enum.join([name | Enum.map(args, &format_call_arg/1)], " ")
   end
 
   def format({:pipeline, lhs, stages}) do
     segments =
       Enum.map(stages, fn {:stage, name, args} ->
-        case args do
-          [] ->
-            name
-
-          _ ->
-            formatted_args =
-              args
-              |> Enum.map(&format_pipeline_arg/1)
-              |> Enum.join(", ")
-
-            "#{name}(#{formatted_args})"
-        end
+        Enum.join([name | Enum.map(args, &format_call_arg/1)], " ")
       end)
 
-    Enum.join([format(lhs) | segments], " |> ")
+    Enum.join([format(lhs) | segments], " | ")
   end
 
   def format({:elixir, raw}), do: String.trim(raw)
@@ -358,8 +313,12 @@ defmodule Stem.Expression do
     "Stem.Transformers.invoke(:#{name}, [#{compiled_args}], #{helper_context_expression(context)})"
   end
 
-  defp format_pipeline_arg({:kw, key, value}), do: "#{key}=#{format(value)}"
-  defp format_pipeline_arg(value), do: format(value)
+  defp format_call_arg({:kw, key, {:transformer, _, _} = value}), do: "#{key}=(#{format(value)})"
+  defp format_call_arg({:kw, key, {:pipeline, _, _} = value}), do: "#{key}=(#{format(value)})"
+  defp format_call_arg({:kw, key, value}), do: "#{key}=#{format(value)}"
+  defp format_call_arg({:transformer, _, _} = value), do: "(#{format(value)})"
+  defp format_call_arg({:pipeline, _, _} = value), do: "(#{format(value)})"
+  defp format_call_arg(value), do: format(value)
 
   defp parse_pipeline(trimmed) do
     case split_top_level_pipe(trimmed) do
@@ -411,88 +370,22 @@ defmodule Stem.Expression do
         {:ok, {:stage, trimmed, []}}
 
       true ->
-        case pipeline_stage_call_parts(trimmed) do
-          {:ok, name, args_source} ->
-            with :ok <- validate_pipeline_stage_source(trimmed),
-                 {:ok, args} <- parse_pipeline_call_args(args_source) do
-              {:ok, {:stage, name, args}}
+        # Prefix-style stage `name arg arg..` (space-separated args), the same
+        # call form as a standalone transformer. The piped value is prepended as
+        # the implicit first positional argument during lowering.
+        case split_top_level(trimmed) do
+          [name | args] when args != [] ->
+            if helper_name?(name) do
+              with {:ok, parsed_args} <- parse_helper_args(args) do
+                {:ok, {:stage, name, parsed_args}}
+              end
+            else
+              {:error, "pipeline stage helper names must be simple identifiers"}
             end
 
           _ ->
             {:error,
-             "pipeline stages must be helper names or helper calls like trim or truncate(20)"}
-        end
-    end
-  end
-
-  defp validate_pipeline_stage_source(source) do
-    if balanced_call_parentheses?(source) do
-      :ok
-    else
-      {:error, "pipeline helper calls must use balanced parentheses"}
-    end
-  end
-
-  defp parse_pipeline_call_args(args_source) do
-    args_source
-    |> split_top_level_by_char(?,)
-    |> Enum.map(&String.trim/1)
-    |> Enum.reject(&(&1 == ""))
-    |> Enum.reduce_while({:ok, []}, fn token, {:ok, acc} ->
-      case pipeline_argument_expression(token) do
-        {:ok, expr} -> {:cont, {:ok, [expr | acc]}}
-        {:error, _message} = error -> {:halt, error}
-      end
-    end)
-    |> case do
-      {:ok, args} -> {:ok, Enum.reverse(args)}
-      {:error, _message} = error -> error
-    end
-  end
-
-  defp pipeline_argument_expression(token) do
-    case keyword_argument_parts(token) do
-      {:ok, key, value} ->
-        with {:ok, parsed_value} <- strict_expression(String.trim(value)) do
-          {:ok, {:kw, key, parsed_value}}
-        end
-
-      :no_keyword ->
-        strict_expression(token)
-
-      {:error, _message} = error ->
-        error
-    end
-  end
-
-  defp keyword_argument_parts(token) do
-    token = String.trim(token)
-
-    cond do
-      token == "" ->
-        {:error, "pipeline helper arguments cannot be empty"}
-
-      true ->
-        case split_top_level_once(token, ?=) || split_top_level_once(token, ?:) do
-          [key, value] ->
-            key = String.trim(key)
-
-            cond do
-              key == "" ->
-                :no_keyword
-
-              helper_name?(key) ->
-                {:ok, key, value}
-
-              true ->
-                {:error, "pipeline keyword arguments must use simple identifier keys"}
-            end
-
-          nil ->
-            :no_keyword
-
-          _ ->
-            {:error, "pipeline helper arguments must be expressions or keyword arguments"}
+             "pipeline stages must be a helper name followed by space-separated arguments"}
         end
     end
   end
@@ -798,51 +691,8 @@ defmodule Stem.Expression do
     |> split_by_token(:pipe)
   end
 
-  defp split_top_level_by_char(expr, delimiter) do
-    expr
-    |> splitter_tokens()
-    |> split_by_token(delimiter_token(delimiter))
-  end
-
-  defp balanced_call_parentheses?(source) do
-    String.ends_with?(source, ")") and
-      String.contains?(source, "(") and
-      balanced_wrapped_parentheses?(
-        String.replace_prefix(source, hd(String.split(source, "(", parts: 2)), "")
-      )
-  end
-
-  defp pipeline_stage_call_parts(source) do
-    case stage_tokens(source) do
-      [{:text, name}, {:paren, args}] ->
-        if helper_name?(name) do
-          {:ok, name, strip_outer_parens(args)}
-        else
-          :error
-        end
-
-      _ ->
-        :error
-    end
-  end
-
-  defp strip_outer_parens("(" <> rest) do
-    if String.ends_with?(rest, ")") do
-      binary_part(rest, 0, byte_size(rest) - 1)
-    else
-      rest
-    end
-  end
-
   defp splitter_tokens(source) do
     case do_splitter_tokens(source) do
-      {:ok, tokens, "", _, _, _} -> tokens
-      _ -> [{:text, source}]
-    end
-  end
-
-  defp stage_tokens(source) do
-    case do_stage_tokens(source) do
       {:ok, tokens, "", _, _, _} -> tokens
       _ -> [{:text, source}]
     end
