@@ -31,7 +31,6 @@ defmodule Stem.Compiler do
       escape: Keyword.get(opts, :escape, :html),
       in_each: false,
       locals: %{},
-      allow_elixir_expressions: Keyword.get(opts, :allow_elixir_expressions, false),
       region_stack: [],
       regions: %{}
     }
@@ -190,18 +189,6 @@ defmodule Stem.Compiler do
   end
 
   defp compile_expression(expr_ast, meta, state) do
-    if not state.allow_elixir_expressions and match?({:elixir, _}, expr_ast) do
-      raise CompileError,
-        file: state.file,
-        line: meta.line,
-        description:
-          "arbitrary Elixir expressions are not allowed in Stem tags. " <>
-            "Templates accept only structured Stem syntax — assigns, dotted paths, " <>
-            "literals, and transformer pipelines (e.g. `{{name |> upcase}}`). " <>
-            "Move logic into the controller, or, for fully trusted templates only, " <>
-            "set allow_elixir_expressions: true."
-    end
-
     source = Expression.to_source(expr_ast, %{in_each: state.in_each, locals: state.locals})
 
     if String.contains?(source, "../") do

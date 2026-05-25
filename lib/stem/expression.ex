@@ -102,7 +102,6 @@ defmodule Stem.Expression do
           | {:path, :implicit | :this, [binary()]}
           | {:transformer, binary(), [helper_arg_t()]}
           | {:pipeline, expr_t(), [pipeline_stage_t()]}
-          | {:elixir, binary()}
 
   @spec parse(binary()) :: {:ok, expr_t()} | {:error, binary()}
   def parse(raw) when is_binary(raw) do
@@ -117,8 +116,13 @@ defmodule Stem.Expression do
 
       :no_pipeline ->
         case structured_expression(trimmed) do
-          {:ok, expr} -> {:ok, expr}
-          :error -> {:ok, {:elixir, raw}}
+          {:ok, expr} ->
+            {:ok, expr}
+
+          :error ->
+            {:error,
+             "expression must be an assign, dotted path, literal, or transformer call " <>
+               "(e.g. `name`, `user.email`, `\"text\"`, `upcase name`, or `name | upcase`)"}
         end
     end
   end
@@ -227,8 +231,6 @@ defmodule Stem.Expression do
     end)
   end
 
-  def to_source({:elixir, raw}, context), do: rewrite_assigns_in_expression(raw, context)
-
   @spec format(expr_t()) :: binary()
   def format({:literal, source}), do: source
   def format({:identifier, name}), do: format_segment(name)
@@ -257,8 +259,6 @@ defmodule Stem.Expression do
     Enum.join([format(lhs) | segments], " | ")
   end
 
-  def format({:elixir, raw}), do: String.trim(raw)
-
   @spec references_identifier?(expr_t(), binary()) :: boolean()
   def references_identifier?({:literal, _}, _name), do: false
   def references_identifier?({:special, _}, _name), do: false
@@ -282,10 +282,6 @@ defmodule Stem.Expression do
           value -> references_identifier?(value, name)
         end)
       end)
-  end
-
-  def references_identifier?({:elixir, raw}, name) do
-    Regex.match?(~r/(^|[^@\w.])#{Regex.escape(name)}(?=$|[^\w.])/, raw)
   end
 
   defp parse!(raw) do
@@ -441,21 +437,6 @@ defmodule Stem.Expression do
           :no_reference -> helper_invocation_ast(trimmed)
         end
     end
-  end
-
-  defp rewrite_assigns_in_expression(expr, context) do
-    Regex.replace(~r/(?<![@\w.])([a-z_][a-zA-Z0-9_]*)(?![\w.])/, expr, fn token ->
-      case token do
-        keyword when keyword in ~w(and or not true false nil this) ->
-          keyword
-
-        _ ->
-          case local_source(context, token) do
-            {:ok, source} -> source
-            :error -> if(context.in_each, do: "this.#{token}", else: "@#{token}")
-          end
-      end
-    end)
   end
 
   defp local_source(context, name) do

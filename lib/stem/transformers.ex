@@ -130,9 +130,7 @@ defmodule Stem.Transformers do
           "which is not loaded. Enable it via the transformers: option " <>
           "(transformers: #{primary}.all()), the --transformers CLI flag, or the " <>
           "\"transformers\" key in .stem.config.json." <>
-          standard_hint <>
-          " Prefer loading a capability group over allow_elixir_expressions: true — " <>
-          "mix stem.audit fails CI if that reaches production config."
+          standard_hint
     end
   end
 

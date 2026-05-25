@@ -117,7 +117,6 @@ defmodule Stem.Config do
     []
     |> maybe_add_escape(map)
     |> maybe_add_warn_on_missing_assigns(map)
-    |> maybe_add_allow_elixir_expressions(map)
     |> maybe_add_transformers(map)
   end
 
@@ -132,14 +131,6 @@ defmodule Stem.Config do
     case Map.get(map, "warn_on_missing_assigns") do
       nil -> acc
       value when is_boolean(value) -> Keyword.put(acc, :warn_on_missing_assigns, value)
-      _ -> acc
-    end
-  end
-
-  defp maybe_add_allow_elixir_expressions(acc, map) do
-    case Map.get(map, "allow_elixir_expressions") do
-      nil -> acc
-      value when is_boolean(value) -> Keyword.put(acc, :allow_elixir_expressions, value)
       _ -> acc
     end
   end

@@ -6,11 +6,10 @@ defmodule Stem.Bytecode.UnsupportedError do
   target.
 
   The bytecode backend (`Stem.Bytecode`) covers the structured Stem language —
-  text, expressions, block helpers, regions, and yields. The remaining
-  exclusion is **arbitrary Elixir expressions** (`allow_elixir_expressions:
-  true`), which depend on the BEAM compiler; such templates raise this error
-  rather than emit a program that would silently diverge. Render them with the
-  default backend (`Stem.compile_string/2`).
+  text, expressions, block helpers, regions, and yields — which is the whole
+  language. This error is reserved for constructs a future backend has not yet
+  lowered; render such templates with the default backend
+  (`Stem.compile_string/2`).
   """
 
   defexception [:message]
@@ -67,10 +66,9 @@ defmodule Stem.Bytecode do
   and `{{{ }}}` expressions, assign/dotted-path/parent-path resolution, block
   helpers (`{{#if}}`, `{{#unless}}`, `{{#each}}`, `{{#with}}`) with block
   parameters and `{{else}}`, block-scoped references (`this`, `@index`, `@key`),
-  regions, and `{{yield}}`. Arbitrary Elixir expressions
-  (`allow_elixir_expressions: true`) are out of scope and raise
-  `Stem.Bytecode.UnsupportedError` at compile time; a top-level `this` reference
-  (which the compiled backend rejects as unbound) raises the same error.
+  regions, and `{{yield}}` — the whole structured language. A top-level `this`
+  reference (which the compiled backend rejects as unbound) raises
+  `Stem.Bytecode.UnsupportedError`.
 
   ## Transformers and capabilities
 
@@ -418,10 +416,6 @@ defmodule Stem.Bytecode do
       {positional, keyword} = split_args(args, scope)
       {:call, name, [acc | positional], keyword}
     end)
-  end
-
-  defp compile_value({:elixir, raw}, _scope) do
-    unsupported("arbitrary Elixir expression #{inspect(String.trim(raw))}")
   end
 
   defp unsupported(detail) do

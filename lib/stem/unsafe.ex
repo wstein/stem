@@ -8,10 +8,9 @@ defmodule Stem.Unsafe do
   can be dangerous when templates come from untrusted sources, as users could exploit
   template syntax to execute arbitrary code.
 
-  Both `eval_string/3` and `eval_file/3` default to `allow_elixir_expressions: false`,
-  which allows only structured Stem expressions (variable paths, transformer calls, literals).
-  Pass `allow_elixir_expressions: true` explicitly to allow arbitrary Elixir expressions
-  inside tags — only do this when the template source is fully controlled by your team.
+  Templates accept only structured Stem expressions — variable paths, transformer
+  calls, and literals. There is no arbitrary-code escape hatch; the risk here is
+  rendering an attacker-controlled *template* (SSTI), not arbitrary Elixir.
 
   ## Functions
 

@@ -29,7 +29,6 @@ defmodule Stem.CLI do
           help: :boolean,
           version: :boolean,
           strict: :boolean,
-          allow_elixir_expressions: :boolean,
           transformers: :string,
           escape: :string
         ],
@@ -246,8 +245,7 @@ defmodule Stem.CLI do
         Stem.function_from_string(:def, :render, unquote(template), unquote(args),
           file: unquote(file),
           warn_on_missing_assigns: unquote(options[:warn_on_missing_assigns] || false),
-          escape: unquote(options[:escape] || :html),
-          allow_elixir_expressions: unquote(options[:allow_elixir_expressions] || false)
+          escape: unquote(options[:escape] || :html)
         )
       end
 
@@ -338,13 +336,6 @@ defmodule Stem.CLI do
       warn_on_missing_assigns: !!opts[:strict],
       escape: parse_escape_mode(opts[:escape])
     ]
-
-    cli_opts =
-      if opts[:allow_elixir_expressions] do
-        Keyword.put(cli_opts, :allow_elixir_expressions, true)
-      else
-        cli_opts
-      end
 
     cli_opts =
       if opts[:transformers] do
