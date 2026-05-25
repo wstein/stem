@@ -438,7 +438,7 @@ defmodule Stem.Expression do
         {:ok, {:literal, "null"}}
 
       literal_source?(trimmed) ->
-        {:ok, {:literal, trimmed}}
+        {:ok, {:literal, normalize_literal_source(trimmed)}}
 
       trimmed == "null" ->
         {:ok, {:literal, "null"}}
@@ -535,7 +535,7 @@ defmodule Stem.Expression do
         {:ok, {:literal, "null"}}
 
       literal_source?(trimmed) ->
-        {:ok, {:literal, trimmed}}
+        {:ok, {:literal, normalize_literal_source(trimmed)}}
 
       trimmed == "null" ->
         {:ok, {:literal, "null"}}
@@ -655,6 +655,26 @@ defmodule Stem.Expression do
       String.match?(arg, ~r/^"(?:\\.|[^"])*"$/) or
       String.match?(arg, ~r/^'(?:\\.|[^'])*'$/)
   end
+
+  # Single- and double-quoted literals both denote string values. Rewrite a
+  # single-quoted source to its double-quoted equivalent so lowering treats it
+  # as a binary, not a charlist (which Elixir's parser deprecates). Other literal
+  # sources pass through unchanged.
+  defp normalize_literal_source(<<?', rest::binary>>) do
+    inner = binary_part(rest, 0, byte_size(rest) - 1)
+    ~s(") <> requote(inner, "") <> ~s(")
+  end
+
+  defp normalize_literal_source(source), do: source
+
+  # Re-escape single-quoted content for a double-quoted context: drop the
+  # backslash before an escaped single quote, escape bare double quotes, and
+  # preserve every other escape so Elixir resolves it identically.
+  defp requote(<<>>, acc), do: acc
+  defp requote(<<?\\, ?', rest::binary>>, acc), do: requote(rest, acc <> "'")
+  defp requote(<<?\\, c::utf8, rest::binary>>, acc), do: requote(rest, acc <> <<?\\, c::utf8>>)
+  defp requote(<<?", rest::binary>>, acc), do: requote(rest, acc <> "\\\"")
+  defp requote(<<c::utf8, rest::binary>>, acc), do: requote(rest, acc <> <<c::utf8>>)
 
   defp wrapped_subexpression?(token) do
     String.starts_with?(token, "(") and String.ends_with?(token, ")") and

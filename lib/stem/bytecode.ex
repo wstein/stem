@@ -462,7 +462,6 @@ defmodule Stem.Bytecode do
        when is_number(term) or is_binary(term) or is_boolean(term) or is_nil(term),
        do: true
 
-  defp literal_term?(term) when is_list(term), do: Enum.all?(term, &is_integer/1)
   defp literal_term?({:-, _meta, [number]}) when is_number(number), do: true
   defp literal_term?(_term), do: false
 

@@ -85,6 +85,10 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "{{x | wrap tag=\"b\"}}",
     "{{#each items}}{{this.name | upcase}}{{/each}}",
     "{{42}} {{-3}} {{true}} {{null}}",
+    # Single-quoted strings lower to the same value as double-quoted ones.
+    "{{'single'}}",
+    "{{'a quoted phrase'}}",
+    "{{default missing 'fallback'}}",
     # Comments and whitespace-control trim markers
     "a {{~ x ~}} b",
     "a {{! c }} b",
@@ -96,8 +100,9 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "{{yield undefined}}",
     "{{#region row}}{{this.name}}{{/region}}{{#each rows}}{{yield row}};{{/each}}",
     # Not yet ported — should be reported as pending, not mismatched.
-    # (Still compiles on the BEAM, so it exercises the pending bucket.)
-    "{{'single'}}"
+    # (A string with escape sequences still compiles on the BEAM, so it
+    # exercises the pending bucket.)
+    "{{\"a\\tb\"}}"
   ]
 
   # `{entry, %{name => source}}` cases exercising `{{> partial}}` expansion,

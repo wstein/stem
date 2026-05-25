@@ -76,6 +76,19 @@ defmodule Stem.Conformance do
       data: %{},
       transformers: [:minimum]
     },
+    # Single-quoted literals denote the same string value as double-quoted ones.
+    %{
+      name: "single-quoted literal",
+      template: "[{{'hi there'}}]",
+      data: %{},
+      transformers: []
+    },
+    %{
+      name: "single-quoted literal helper argument",
+      template: "{{default missing 'fallback'}}",
+      data: %{},
+      transformers: [:minimum]
+    },
     %{
       name: "builtin subexpression",
       template: "{{upcase (downcase name)}}",

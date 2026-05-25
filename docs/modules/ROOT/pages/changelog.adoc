@@ -23,6 +23,9 @@ Breaking changes since `0.2.0`. There is no compatibility shim for any of these.
   aborting the engine.
 * *`eval` transformer* — now renders a full Stem template string (braces
   included), not a bare inner expression.
+* *Single-quoted literals* are now string literals, equal to their
+  double-quoted form (`{{default missing 'N/A'}}`). They previously compiled to
+  Elixir charlists, emitting a deprecation warning and rendering incorrectly.
 * *Renamed* `Stem.Runtime.is_truthy/1,2` to `Stem.Runtime.truthy?/1,2`.
 
 === Removed

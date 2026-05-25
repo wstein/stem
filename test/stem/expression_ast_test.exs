@@ -96,6 +96,18 @@ defmodule Stem.ExpressionAstTest do
     assert Expression.to_source({:path, :implicit, ["item", "title"]}, context) == "current.title"
   end
 
+  test "single-quoted literals normalize to the double-quoted string form" do
+    assert {:ok, {:literal, ~s("single")}} = Expression.parse("'single'")
+    assert {:ok, {:literal, ~s("with spaces")}} = Expression.parse("'with spaces'")
+
+    # An embedded double quote is escaped for the double-quoted form.
+    assert {:ok, {:literal, ~s("a\\"b")}} = Expression.parse(~s('a"b'))
+
+    # As a helper argument, single quotes read the same as double quotes.
+    assert {:ok, {:transformer, "default", [{:identifier, "x"}, {:literal, ~s("fallback")}]}} =
+             Expression.parse("default x 'fallback'")
+  end
+
   test "parse handles escaped quoted helper arguments" do
     assert {:ok, {:transformer, "say", [{:literal, "\"a\\\"b\""}]}} =
              Expression.parse("say \"a\\\"b\"")

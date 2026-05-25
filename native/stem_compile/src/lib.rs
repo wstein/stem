@@ -22,10 +22,10 @@
 //   * literal variable keys: bracketed segments (`[first-name]`, `[a.b]`) and
 //     uppercase block params (`as |Item|`), so keys/params that are not valid
 //     identifiers resolve by name, mirroring `Stem.Expression`;
-//   * transformer calls and `|>` pipelines, with positional and `key=value` /
+//   * transformer calls and `|` pipelines, with positional and `key=value` /
 //     `key: value` keyword args and parenthesised sub-expressions;
-//   * literals: integers, `true`/`false`, `null`/`nil`, and simple
-//     double-quoted strings;
+//   * literals: integers, `true`/`false`, `null`/`nil`, and simple double- and
+//     single-quoted strings;
 //   * `{{! .. }}` / `{{!-- .. --}}` comments and `{{~ .. ~}}` trim markers.
 //   * `{{> name}}` partials, expanded inline from a caller-supplied
 //     name->source map with the same recursion guard as `Stem.Parser`;
@@ -34,8 +34,8 @@
 //     context) merged with the hash, mirroring `Stem.Bytecode`.
 //
 // Not yet ported (raise a spanned `CompileError`, so the playground shows "not
-// yet supported" rather than miscompiling): single-quoted charlists and
-// escaped/interpolated strings, and `{{& .. }}` tags.
+// yet supported" rather than miscompiling): escaped/interpolated strings, and
+// `{{& .. }}` tags.
 
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
@@ -1260,8 +1260,8 @@ fn is_wrapped_paren(t: &str) -> bool {
 
 enum Literal {
     Value(Value),
-    // Looks like a literal the BEAM accepts, but not yet ported (single-quoted
-    // charlists, strings with escapes): reported as "not yet supported".
+    // Looks like a literal the BEAM accepts, but not yet ported (strings with
+    // escape sequences): reported as "not yet supported".
     Pending,
 }
 
@@ -1280,7 +1280,7 @@ fn literal_kind(t: &str) -> Option<Literal> {
         "false" => Some(Literal::Value(Value::Bool(false))),
         "nil" | "null" => Some(Literal::Value(Value::Null)),
         _ if t.starts_with('"') => Some(double_quoted_literal(t)),
-        _ if t.starts_with('\'') => Some(Literal::Pending),
+        _ if t.starts_with('\'') => Some(single_quoted_literal(t)),
         _ if is_number(t) => Some(number_literal(t)),
         _ => None,
     }
@@ -1290,6 +1290,23 @@ fn double_quoted_literal(t: &str) -> Literal {
     if t.len() >= 2 && t.ends_with('"') {
         let content = &t[1..t.len() - 1];
         if content.contains('\\') || content.contains('"') {
+            Literal::Pending
+        } else {
+            Literal::Value(Value::String(content.to_string()))
+        }
+    } else {
+        Literal::Pending
+    }
+}
+
+// A single-quoted literal denotes the same string value as its double-quoted
+// form. Embedded double quotes need no escaping here, so only escape sequences
+// (which the BEAM resolves and this port does not yet replicate) fall back to
+// pending.
+fn single_quoted_literal(t: &str) -> Literal {
+    if t.len() >= 2 && t.ends_with('\'') {
+        let content = &t[1..t.len() - 1];
+        if content.contains('\\') {
             Literal::Pending
         } else {
             Literal::Value(Value::String(content.to_string()))
@@ -1968,6 +1985,23 @@ mod tests {
     }
 
     #[test]
+    fn single_quoted_strings_lower_like_double_quoted() {
+        // A single-quoted literal is the same string value as its double-quoted
+        // form, so both compile to identical bytecode.
+        assert_eq!(
+            wire("{{'hello world'}}").unwrap(),
+            wire(r#"{{"hello world"}}"#).unwrap()
+        );
+        // An embedded double quote needs no escaping inside single quotes.
+        assert_wire(
+            r#"{{x | default 'a"b'}}"#,
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"args":[{"name":"x","t":"assign"},{"t":"lit","value":"a\"b"}],"kwargs":{},"name":"default","t":"call"}}]}"#,
+        );
+        // Escape sequences are not ported yet — pending, like double-quoted.
+        assert!(wire(r"{{'a\nb'}}").is_err());
+    }
+
+    #[test]
     fn regions_are_inlined_at_yield_sites() {
         assert_wire(
             "{{#region head}}H{{/region}}before{{yield head}}after",
@@ -2008,7 +2042,7 @@ mod tests {
 
     #[test]
     fn unported_constructs_report_a_span() {
-        for src in ["{{'single'}}", "{{& raw}}", "{{a + b}}"] {
+        for src in [r#"{{"a\tb"}}"#, "{{& raw}}", "{{a + b}}"] {
             let err = wire(src).unwrap_err();
             assert!(
                 err.message.contains("not yet supported"),

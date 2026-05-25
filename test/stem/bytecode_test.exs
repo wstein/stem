@@ -92,12 +92,12 @@ defmodule Stem.BytecodeTest do
       assert [{:emit, {:call, "default", [{:assign, :x}, {:lit, true}], []}, :html}] =
                compile("{{default x true}}").instructions
 
-      # Single-quoted template literals are charlists; Elixir's parser emits a
-      # deprecation warning for them, captured here to keep test output clean.
-      ExUnit.CaptureIO.capture_io(:stderr, fn ->
-        assert [{:emit, {:call, "default", [{:assign, :x}, {:lit, ~c"abc"}], []}, :html}] =
-                 compile("{{default x 'abc'}}").instructions
-      end)
+      # Single- and double-quoted literals denote the same binary string value.
+      assert [{:emit, {:call, "default", [{:assign, :x}, {:lit, "abc"}], []}, :html}] =
+               compile("{{default x 'abc'}}").instructions
+
+      assert compile("{{default x 'abc'}}").instructions ==
+               compile(~s({{default x "abc"}})).instructions
     end
 
     test "maps both the null and nil literals to nil" do
