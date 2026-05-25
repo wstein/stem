@@ -11,11 +11,11 @@ defmodule Mix.Tasks.Stem.Native.Fuzz do
   reference. The BEAM is the oracle.
 
   The generator stays within the value/transformer space whose parity is
-  deterministic under random input: ASCII data, and the Strings, Collections and
-  Predicates groups. `json`/`inspect` are covered by the fixed conformance
-  corpus instead (their parity is bounded to the float-free value domain and, for
-  `inspect`, to non-map values), and `i18n` is host-delegated. So any divergence
-  here is a real engine bug, not an out-of-scope construct.
+  deterministic under random input: ASCII strings, integers, floats (across a
+  wide range of magnitudes), and the Strings, Collections and Predicates groups.
+  `json`/`inspect` are covered by the fixed conformance corpus instead (for
+  `inspect`, parity is bounded to non-map values), and `i18n` is host-delegated.
+  So any divergence here is a real engine bug, not an out-of-scope construct.
 
   ## Usage
 
@@ -99,6 +99,7 @@ defmodule Mix.Tasks.Stem.Native.Fuzz do
     data = %{
       s: maybe_special(ascii(0..10)),
       n: rand_int(0..999),
+      f: rand_float(),
       flag: Enum.random([true, false]),
       items: gen_list(0..5, fn -> ascii(1..6) end),
       nums: gen_list(0..5, fn -> rand_int(0..50) end),
@@ -112,7 +113,7 @@ defmodule Mix.Tasks.Stem.Native.Fuzz do
   end
 
   defp segment do
-    case rand_int(0..16) do
+    case rand_int(0..17) do
       0 -> literal()
       1 -> "{{s}}"
       2 -> "{{{s}}}"
@@ -130,7 +131,17 @@ defmodule Mix.Tasks.Stem.Native.Fuzz do
       14 -> "{{#each items}}{{this |> upcase}};{{/each}}"
       15 -> "{{#each rows as |r i0 i1|}}{{i0}}/{{i1}}:{{r.name}};{{/each}}"
       16 -> "{{#with obj as |o|}}{{o.k}}={{o.v}}{{/with}}"
+      # Exercises float rendering across magnitudes (the `:short` format the
+      # native core reproduces — gap G2).
+      17 -> "{{f}}"
     end
+  end
+
+  # A float spanning a wide range of magnitudes (positive and negative
+  # exponents) to stress the decimal/scientific notation boundary.
+  defp rand_float do
+    mantissa = :rand.uniform() * Enum.random([1, -1])
+    mantissa * :math.pow(10, rand_int(-8..21))
   end
 
   defp string_pipeline do

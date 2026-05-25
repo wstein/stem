@@ -33,5 +33,10 @@
   {"data":{"nums":[1,2,3]},"escape":"html","expected":"[1,2,3]","name":"json list","template":"{{{nums |> json}}}","transformers":["minimum"]},
   {"data":{"obj":{"role":"admin"}},"escape":"html","expected":"{\"role\":\"admin\"}","name":"json object","template":"{{{obj |> json}}}","transformers":["minimum"]},
   {"data":{"n":42},"escape":"html","expected":"42","name":"inspect integer","template":"{{{n |> inspect}}}","transformers":["minimum"]},
-  {"data":{"words":["a","b"]},"escape":"html","expected":"[\"a\", \"b\"]","name":"inspect list","template":"{{{words |> inspect}}}","transformers":["minimum"]}
+  {"data":{"words":["a","b"]},"escape":"html","expected":"[\"a\", \"b\"]","name":"inspect list","template":"{{{words |> inspect}}}","transformers":["minimum"]},
+  {"data":{"x":1.0},"escape":"html","expected":"1.0","name":"float integral","template":"{{x}}","transformers":[]},
+  {"data":{"x":3.14},"escape":"html","expected":"3.14","name":"float fraction","template":"{{x}}","transformers":[]},
+  {"data":{"x":1.0e8},"escape":"html","expected":"1.0e8","name":"float scientific","template":"{{x}}","transformers":[]},
+  {"data":{"x":1.0e-5},"escape":"html","expected":"1.0e-5","name":"float small","template":"{{x}}","transformers":[]},
+  {"data":{"x":1.5e10},"escape":"html","expected":"1.5e10","name":"json float","template":"{{{x |> json}}}","transformers":["minimum"]}
 ]

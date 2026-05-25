@@ -135,19 +135,17 @@ browser embed is secure by default until it opts a group in.
 The engine implements the **full** built-in transformer stdlib — Minimum,
 Strings, Collections, and Predicates — byte-for-byte against the BEAM, including
 `json` and `inspect` (over the JSON value domain) and `log` (which renders to `""`,
-its BEAM output; the stderr side effect is left to a host override). The `i18n`
-group's `t`/`translate` are **host-delegated**: they have no native built-in and
-resolve through the custom-transformer hook below, requiring both the `i18n`
-group and a host translator (mirroring the BEAM's configured translator).
+its BEAM output; the stderr side effect is left to a host override). Floats render
+byte-for-byte too (see [Floats](#floats) below). The `i18n` group's
+`t`/`translate` are **host-delegated**: they have no native built-in and resolve
+through the custom-transformer hook below, requiring both the `i18n` group and a
+host translator (mirroring the BEAM's configured translator).
 
 A few value-formatting cases stay out of byte-parity and are kept out of the
 conformance corpus and the differential fuzzer (see
 [notes/Cross-Backend Conformance Spec.md](../notes/Cross-Backend%20Conformance%20Spec.md)
 for the gap list):
 
-- **G2 — floats:** serde_json's float `Display` differs from Erlang's
-  `:erlang.float_to_binary(_, [:short])`; this also bounds `json` to non-float
-  values in the corpus.
 - **G4 — Unicode casing:** `upcase`/`downcase`/`capitalize` match for ASCII; the
   fuzzer restricts inputs accordingly.
 - **G5 — map key order:** native always sorts object keys; the BEAM iterates a
@@ -160,6 +158,26 @@ for the gap list):
   prints as `%{"k" => v}`; the conformance harness builds atom-keyed maps from
   JSON, which the BEAM prints as `%{k: v}`. `inspect` is exercised over scalars
   and lists, where the two agree.
+
+## Floats
+
+Floats render byte-for-byte with the BEAM (`String.Chars.to_string/1` →
+`:erlang.float_to_binary(f, [:short])`), for a bare emit, `json`, and `inspect`
+alike. Two pieces make this exact:
+
+- **Correctly-rounded parsing.** serde_json is built with the `float_roundtrip`
+  feature so a JSON float decodes to the same `f64` the BEAM holds (the default
+  fast parser can be a ULP off).
+- **Ryū digits + Erlang's notation policy.** The shortest digits come from the
+  `ryu` crate — the same algorithm the BEAM uses, so the digit choice and
+  round-half-to-even tie-breaking match (Rust's std `Display` can break a
+  shortest-decimal tie the other way). Those digits are then formatted with
+  Erlang's `:short` policy: scientific when the magnitude reaches `2^53` (above
+  which not every integer is representable) or when it is strictly shorter than
+  the fixed form, decimal otherwise (ties to decimal).
+
+The differential fuzzer exercises floats across a wide range of magnitudes, so
+this is verified, not assumed. (This closes the former gap G2.)
 
 ## Per-host computed getters
 

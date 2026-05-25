@@ -234,6 +234,20 @@ defmodule Stem.Conformance do
       template: "{{{words |> inspect}}}",
       data: %{words: ["a", "b"]},
       transformers: [:minimum]
+    },
+    # Floats render byte-for-byte via the Erlang `:short` format the native core
+    # now reproduces (gap G2 closed): `to_string/1` for a bare emit and
+    # `JSON.encode!/1` for `json`, both of which pick the shorter of the decimal
+    # and scientific forms.
+    %{name: "float integral", template: "{{x}}", data: %{x: 1.0}, transformers: []},
+    %{name: "float fraction", template: "{{x}}", data: %{x: 3.14}, transformers: []},
+    %{name: "float scientific", template: "{{x}}", data: %{x: 100_000_000.0}, transformers: []},
+    %{name: "float small", template: "{{x}}", data: %{x: 1.0e-5}, transformers: []},
+    %{
+      name: "json float",
+      template: "{{{x |> json}}}",
+      data: %{x: 1.5e10},
+      transformers: [:minimum]
     }
   ]
 

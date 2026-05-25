@@ -932,15 +932,84 @@ fn to_string(value: &Value) -> String {
     match value {
         Value::Null => String::new(),
         Value::Bool(b) => b.to_string(),
-        // Integers match the BEAM. Floats are a KNOWN DIVERGENCE (gap G2): the
-        // BEAM uses Erlang `:erlang.float_to_binary(f, [:short])` (e.g. `1.0e8`),
-        // while serde_json's notation/exponent rules differ. Floats are kept out
-        // of the conformance corpus until this is ported — see the "Known
-        // divergences" section of the Cross-Backend Conformance Spec note.
-        Value::Number(n) => n.to_string(),
+        Value::Number(n) => number_string(n),
         Value::String(s) => s.clone(),
         // Lists/maps are never emitted directly by the corpus; render as JSON.
         other => serde_json::to_string(other).unwrap_or_default(),
+    }
+}
+
+// Render a JSON number as the BEAM's `String.Chars.to_string/1` does: integers
+// verbatim, floats via the Erlang `:short` formatting reproduced by
+// `format_float`.
+fn number_string(n: &serde_json::Number) -> String {
+    match n.as_f64() {
+        Some(f) if n.is_f64() => format_float(f),
+        _ => n.to_string(),
+    }
+}
+
+// Format a float byte-for-byte like Erlang `:erlang.float_to_binary(f, [:short])`
+// — the BEAM's float rendering. `shortest_digits` (Ryū) yields the same shortest
+// round-trip digits the BEAM uses. Erlang's `:short` policy then chooses
+// scientific notation when the magnitude reaches 2^53 (above which not every
+// integer is representable, so a fixed integer form would mislead) or when
+// scientific is strictly shorter than the fixed form, and decimal otherwise
+// (ties to decimal). Both forms keep a decimal point with at least one
+// fractional digit; the scientific exponent carries no `+` and no leading zeros.
+fn format_float(f: f64) -> String {
+    let (digits, exp) = shortest_digits(f.abs());
+    let k = digits.len() as i32;
+
+    let decimal = if exp >= 0 {
+        if exp + 1 >= k {
+            format!("{}{}.0", digits, "0".repeat((exp + 1 - k) as usize))
+        } else {
+            let point = (exp + 1) as usize;
+            format!("{}.{}", &digits[..point], &digits[point..])
+        }
+    } else {
+        format!("0.{}{}", "0".repeat((-exp - 1) as usize), digits)
+    };
+
+    let scientific = {
+        let fraction = if digits.len() > 1 { &digits[1..] } else { "0" };
+        format!("{}.{}e{}", &digits[..1], fraction, exp)
+    };
+
+    // 2^53 is the largest f64 below which every integer is exactly representable.
+    const INTEGER_LIMIT: f64 = (1u64 << 53) as f64;
+    let use_scientific = f.abs() >= INTEGER_LIMIT || scientific.len() < decimal.len();
+    let chosen = if use_scientific { scientific } else { decimal };
+    if f.is_sign_negative() {
+        format!("-{chosen}")
+    } else {
+        chosen
+    }
+}
+
+// The shortest round-trip significant digits of a non-negative finite float and
+// the decimal exponent of its leading digit (value = d.ddd… × 10^exp). Uses the
+// Ryū crate so the digits and tie-breaking match the BEAM's `:short` (also Ryū);
+// Ryū's own notation is discarded — only the digits and exponent are taken.
+fn shortest_digits(f: f64) -> (String, i32) {
+    let mut buffer = ryu::Buffer::new();
+    let formatted = buffer.format_finite(f);
+    let (mantissa, extra_exp) = match formatted.split_once(['e', 'E']) {
+        Some((mantissa, exp)) => (mantissa, exp.parse::<i32>().unwrap_or(0)),
+        None => (formatted, 0),
+    };
+    let (int_part, frac_part) = mantissa.split_once('.').unwrap_or((mantissa, ""));
+    let all: String = format!("{int_part}{frac_part}");
+    match all.find(|c: char| c != '0') {
+        // `f` is zero: a single "0" digit at exponent 0 renders as "0.0".
+        None => ("0".to_string(), 0),
+        Some(first) => {
+            let last = all.rfind(|c: char| c != '0').unwrap();
+            let digits = all[first..=last].to_string();
+            let exp = (int_part.len() as i32 - 1) - first as i32 + extra_exp;
+            (digits, exp)
+        }
     }
 }
 
@@ -1269,24 +1338,46 @@ fn escape_json(s: &str) -> String {
         .to_string()
 }
 
-// Compact JSON, matching Elixir's `JSON.encode!/1` over the JSON value domain:
+// Compact JSON, matching Elixir's `JSON.encode!/1` over the JSON value domain.
 // serde_json sorts object keys (BTreeMap) and an Elixir ≤32-key string-keyed map
-// iterates in the same term (byte) order, so the encodings agree. Floats inherit
-// the `to_string` float divergence (gap G2) and are kept out of the corpus.
+// iterates in the same term (byte) order, so the encodings agree; multi-key map
+// order is not stable across backends (gap G5). Floats are formatted by
+// `format_float` (Elixir `JSON.encode!` renders a float exactly like
+// `float_to_binary(_, [:short])`), so they are encoded recursively here rather
+// than via serde_json's float `Display`.
 fn json_encode(value: &Value) -> String {
-    serde_json::to_string(value).unwrap_or_default()
+    match value {
+        Value::Array(items) => {
+            let inner = items.iter().map(json_encode).collect::<Vec<_>>().join(",");
+            format!("[{inner}]")
+        }
+        Value::Object(map) => {
+            let inner = map
+                .iter()
+                .map(|(key, value)| {
+                    let key = serde_json::to_string(key).unwrap_or_default();
+                    format!("{key}:{}", json_encode(value))
+                })
+                .collect::<Vec<_>>()
+                .join(",");
+            format!("{{{inner}}}")
+        }
+        Value::Number(n) => number_string(n),
+        // Strings (with escaping), booleans, and null match serde_json exactly.
+        other => serde_json::to_string(other).unwrap_or_default(),
+    }
 }
 
 // Elixir's `Kernel.inspect/1` over the JSON value domain: `nil`, booleans and
-// integers verbatim; strings quoted with escapes; lists `[a, b]`; string-keyed
-// maps `%{"k" => v}` in sorted-key order. (Floats inherit gap G2; a map's keys
-// print as quoted strings, so the atom-keyed maps the conformance harness builds
-// from JSON are exercised only via scalars and lists — see the spec note.)
+// integers verbatim; floats via `format_float`; strings quoted with escapes;
+// lists `[a, b]`; string-keyed maps `%{"k" => v}` in sorted-key order. (A map's
+// keys print as quoted strings, so the atom-keyed maps the conformance harness
+// builds from JSON are exercised only via scalars and lists — see gap G7.)
 fn inspect(value: &Value) -> String {
     match value {
         Value::Null => "nil".to_string(),
         Value::Bool(b) => b.to_string(),
-        Value::Number(n) => n.to_string(),
+        Value::Number(n) => number_string(n),
         Value::String(s) => inspect_string(s),
         Value::Array(items) => {
             let inner = items.iter().map(inspect).collect::<Vec<_>>().join(", ");
@@ -1969,6 +2060,55 @@ mod serialization_tests {
             render("inspect", json!({ "x": { "a": 1 } })),
             r#"%{"a" => 1}"#
         );
+    }
+}
+
+#[cfg(test)]
+mod float_tests {
+    use super::*;
+
+    // Reference pairs from `:erlang.float_to_binary(f, [:short])` on the BEAM.
+    #[test]
+    fn format_float_matches_the_beam_short_format() {
+        let cases: &[(f64, &str)] = &[
+            (0.0, "0.0"),
+            (-0.0, "-0.0"),
+            (1.0, "1.0"),
+            (-1.0, "-1.0"),
+            (0.5, "0.5"),
+            (3.25, "3.25"),
+            (10.0, "10.0"),
+            (100.0, "100.0"),
+            (0.0001, "0.0001"),
+            (1.0e-5, "1.0e-5"),
+            (1.23e-4, "1.23e-4"),
+            (100000000.0, "1.0e8"),
+            (1.5e10, "1.5e10"),
+            (123456.789, "123456.789"),
+            (9999999.0, "9999999.0"),
+            (1000000.0, "1.0e6"),
+            (1234567890.0, "1234567890.0"),
+            (123456789000.0, "1.23456789e11"),
+            (1.0e21, "1.0e21"),
+            // The 2^53 notation boundary: just below stays fixed, at/above goes
+            // scientific (the BEAM switches where integers stop being exact).
+            (9006199254740992.0, "9006199254740992.0"),
+            (9007199254740992.0, "9.007199254740992e15"),
+            (9.492750501338764e15, "9.492750501338764e15"),
+            (-9.91111824457831e15, "-9.91111824457831e15"),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(&format_float(*input), expected, "for {input}");
+        }
+    }
+
+    // Every f64 round-trips through `format_float` back to the same bits.
+    #[test]
+    fn format_float_round_trips() {
+        for f in [0.0, 1.0, -2.5, 12.5, 1.0e8, 1.0e-8, 6.022e23, 9.999999e6] {
+            let parsed: f64 = format_float(f).parse().unwrap();
+            assert_eq!(parsed.to_bits(), f.to_bits(), "round-trip for {f}");
+        }
     }
 }
 

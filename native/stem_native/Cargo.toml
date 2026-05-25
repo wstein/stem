@@ -19,7 +19,15 @@ path = "src/main.rs"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+# `float_roundtrip`: parse floats with a correctly-rounded algorithm so a JSON
+# float decodes to the same f64 the BEAM holds — required for byte-parity float
+# rendering (the default fast parser can be a ULP off; see gap G2).
+serde_json = { version = "1", features = ["float_roundtrip"] }
+# Ryū shortest-float digits. The BEAM's `:short` formatting is also Ryū, so this
+# matches its digit choice and round-half-to-even tie-breaking exactly (Rust's
+# std `Display` uses a different algorithm that can break shortest-decimal ties
+# the other way). We keep the digits and apply Erlang's notation policy.
+ryu = "1"
 
 [profile.release]
 opt-level = "s"
