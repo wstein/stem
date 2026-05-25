@@ -148,7 +148,7 @@
     word-break: break-word;
     overflow-wrap: anywhere;
   }
-  .expr { color: #4f53b8; position: relative; padding-right: 20px; }
+  .expr { color: #4f53b8; }
   .out  { color: #16794d; }
 
   .out.cap {
@@ -207,18 +207,6 @@
   /* ── FOCUS ─────────────────────────────────────── */
   :focus-visible { outline: 2px solid var(--g-eval); outline-offset: 2px; border-radius: 3px; }
 
-  /* ── COPY BUTTON ──────────────────────────────── */
-  .copy {
-    position: absolute; top: 50%; right: 0; transform: translateY(-50%);
-    opacity: 0; transition: opacity 0.15s, color 0.15s;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 4px; padding: 2px 4px;
-    cursor: pointer; color: var(--ink-mute); line-height: 0;
-  }
-  .copy:hover { color: var(--ink); background: var(--surface-alt); }
-  .copy.copied { color: #16a36b; opacity: 1 !important; }
-  .row:hover .copy { opacity: 1; }
-
   /* ── ANCHOR LINKS ─────────────────────────────── */
   section[id] { scroll-margin-top: 20px; }
   .anchor {
@@ -258,7 +246,6 @@
 
   @media (max-width: 600px) {
     .sheet { padding: 20px 12px 32px; }
-    .copy { opacity: 1; padding: 5px 7px; }
     .row { grid-template-columns: 1fr; gap: 2px; }
     .row .out::before { content: "↳ "; color: var(--ink-mute); }
   }
@@ -274,7 +261,7 @@
     .codeblock .f { color: #7a4a00; }
     .codeblock .k { color: #5a00a0; }
     .card { border-left-color: #999; break-inside: avoid; }
-    .copy, .anchor { display: none; }
+    .anchor { display: none; }
   }
 
   /* ── DARK MODE ─────────────────────────────────── */
