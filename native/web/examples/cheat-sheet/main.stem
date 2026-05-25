@@ -2,13 +2,13 @@
 <div class="brand">
   <svg class="mark" viewBox="0 0 48 48" fill="none" aria-hidden="true">
     <path d="M18 10 C14 10 13 12 13 16 L13 21 C13 23 12 24 10 24 C12 24 13 25 13 27 L13 32 C13 36 14 38 18 38"
-          stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+          stroke="#7c4dff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
     <path d="M30 10 C34 10 35 12 35 16 L35 21 C35 23 36 24 38 24 C36 24 35 25 35 27 L35 32 C35 36 34 38 30 38"
-          stroke="var(--accent)" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M24 14 L24 40" stroke="var(--stem-green)" stroke-width="2.4" stroke-linecap="round"/>
-    <path d="M24 24 C21 22 19 22 17 23" stroke="var(--stem-green)" stroke-width="2" stroke-linecap="round"/>
-    <path d="M24 30 C27 28 29 28 31 29" stroke="var(--stem-green)" stroke-width="2" stroke-linecap="round"/>
-    <circle cx="24" cy="14" r="2" fill="var(--stem-green)"/>
+          stroke="#7c4dff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M24 14 L24 40" stroke="#10b981" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M24 24 C21 22 19 22 17 23" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
+    <path d="M24 30 C27 28 29 28 31 29" stroke="#10b981" stroke-width="2" stroke-linecap="round"/>
+    <circle cx="24" cy="14" r="2" fill="#10b981"/>
   </svg>
   <h1>Stem Transformers <span>reference · all results rendered live</span></h1>
 </div>
