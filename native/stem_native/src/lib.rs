@@ -6,9 +6,10 @@
 // "data": <assigns>, "transformers": [<group names>]}`, or `{"batch": [...]}` —
 // and returns the rendered output. The optional `transformers` list names the
 // enabled capability groups (Minimum is always on); it defaults to Minimum-only.
-// The `stem_native` bin wraps it for WASI stdin/stdout; the C-ABI exports
-// (`stem_alloc`/`stem_dealloc`/`stem_render`) expose it to a browser via
-// `wasm32-unknown-unknown` with no WASI.
+// This JSON path is the Elixir conformance seam: the `stem_native` bin wraps it
+// for WASI stdin/stdout. In-process Rust uses the typed API ([`compile`] /
+// [`Program::render`]); the browser uses the wasm-bindgen `compile`/`render`
+// exports (`wasm32-unknown-unknown`, no WASI). All three share one render core.
 //
 // It reimplements, natively, the subset of the Stem runtime the conformance
 // corpus exercises — assign/path resolution, block helpers, the index/key/this

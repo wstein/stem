@@ -5,8 +5,9 @@ version = "0.0.1"
 edition = "2021"
 description = "PoC native (Rust/WASM) renderer for Stem portable bytecode"
 
-# Library: the rlib backs the WASI bin; the cdylib is the browser target
-# (wasm32-unknown-unknown) exporting a small C ABI via stem_alloc/stem_render.
+# Library: the rlib backs the WASI bin and in-process Rust hosts; the cdylib is
+# the browser target (wasm32-unknown-unknown), exporting compile/render via
+# wasm-bindgen.
 [lib]
 name = "stem_native"
 path = "src/lib.rs"

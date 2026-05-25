@@ -30,8 +30,8 @@ the host, escaping done natively.
 - `stem_compile/` — the Stem template compiler (source → portable bytecode),
   factored into its own crate so the macros can use it without the renderer.
 - `stem_native/` — the engine crate. `src/lib.rs` is the renderer: the typed
-  Rust API ([compile`/`Program::render`](#idiomatic-rust-api)) plus the JSON
-  `handle*` entries and the `stem_alloc`/`stem_dealloc`/`stem_render` C ABI;
+  Rust API ([`compile`/`Program::render`](#idiomatic-rust-api)), the JSON
+  `handle*` Elixir seam, and the wasm-bindgen `compile`/`render` browser exports;
   `src/main.rs` is a thin WASI bin reading stdin / writing stdout.
 - `stem_macros/` — the `stem!` compile-time macro: compiles a template literal to
   bytecode at Rust build time (syntax errors become compile errors).
