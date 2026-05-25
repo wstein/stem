@@ -295,8 +295,10 @@ pub fn handle_with_host(raw: &str, host: &Host) -> String {
 /// `Stem.Transformers.groups/0`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Group {
-    /// Dynamic expression evaluation: compiles and renders a Stem expression
-    /// string stored in data. Separate from the risk taxonomy; off by default.
+    /// Dynamic template evaluation: compiles and renders a Stem *template*
+    /// string stored in data (e.g. `"{{name |> upcase}}"`). Separate from the
+    /// risk taxonomy; off by default — never enable for untrusted templates or
+    /// untrusted data, since the data string is rendered as a template (SSTI).
     Eval,
     /// Value transforms: case, trim, truncate, replace. Bounded by string length.
     Format,
@@ -1007,13 +1009,14 @@ fn eval(op: &Op, ctx: &Ctx) -> Value {
                 .map(|(key, op)| (key.clone(), eval(op, ctx)))
                 .collect();
 
-            // eval: treat the argument as a Stem expression (what goes inside {{ }}),
-            // compile it as a one-emit template, and render against the current scope.
-            // GROUP_EVAL is cleared in the sub-context to prevent recursive eval calls.
+            // eval: treat the argument as a full Stem template string (it may
+            // contain literal text and one or more `{{ … }}` tags), compile it,
+            // and render against the current scope. The caller supplies the
+            // braces — `"{{name |> upcase}}"`, not `"name |> upcase"`. GROUP_EVAL
+            // is cleared in the sub-context to prevent recursive eval calls.
             if *name == "eval" && ctx.groups & GROUP_EVAL != 0 {
-                let expr = positional.first().and_then(Value::as_str).unwrap_or("");
-                let tmpl = format!("{{{{{expr}}}}}");
-                if let Ok(program) = compile_with_partials(&tmpl, &HashMap::new()) {
+                let tmpl = positional.first().and_then(Value::as_str).unwrap_or("");
+                if let Ok(program) = compile_with_partials(tmpl, &HashMap::new()) {
                     let sub_groups = ctx.groups & !GROUP_EVAL;
                     let sub_caps = Caps {
                         groups: sub_groups,
@@ -2214,7 +2217,7 @@ mod guard_tests {
 
     #[test]
     fn eval_requires_eval_group() {
-        // expr contains a Stem expression string (what goes inside {{ ... }})
+        // expr contains a full Stem template string (tags + optional literal text)
         let program = json!([{
             "t": "emit",
             "value": {
@@ -2224,7 +2227,7 @@ mod guard_tests {
             },
             "escape": "html"
         }]);
-        let data = json!({ "name": "world", "expr": "name" });
+        let data = json!({ "name": "world", "expr": "{{name}}" });
         let refused = render(program.clone(), data.clone());
         assert!(
             refused.contains("requires the eval capability group"),
@@ -2234,8 +2237,8 @@ mod guard_tests {
     }
 
     #[test]
-    fn eval_renders_expression_against_current_scope() {
-        // eval wraps the string in {{ }} and renders it: "greeting" → {{greeting}}
+    fn eval_renders_template_against_current_scope() {
+        // eval renders its argument as a full template against the current scope.
         let program = json!([{
             "t": "emit",
             "value": {
@@ -2245,19 +2248,29 @@ mod guard_tests {
             },
             "escape": "html"
         }]);
+        // A single tag.
         assert_eq!(
             render_groups(
                 program.clone(),
-                json!({ "greeting": "Hello!", "expr": "greeting" }),
+                json!({ "greeting": "Hello!", "expr": "{{greeting}}" }),
                 &["eval"],
             ),
             "Hello!"
         );
-        // expression pipelines work when the required group is also loaded
+        // Literal text around a tag is preserved (full template, not just an expr).
+        assert_eq!(
+            render_groups(
+                program.clone(),
+                json!({ "name": "ada", "expr": "Hi {{name}}!" }),
+                &["eval"],
+            ),
+            "Hi ada!"
+        );
+        // Pipelines work when the required group is also loaded.
         assert_eq!(
             render_groups(
                 program,
-                json!({ "name": "ada", "expr": "name |> upcase" }),
+                json!({ "name": "ada", "expr": "{{name |> upcase}}" }),
                 &["eval", "format"],
             ),
             "ADA"
@@ -2278,7 +2291,7 @@ mod guard_tests {
         }]);
         let out = render_groups(
             program,
-            json!({ "name": "x", "expr": "name |> eval" }),
+            json!({ "name": "x", "expr": "{{name |> eval}}" }),
             &["eval"],
         );
         // Inner eval is refused → null → empty output.

@@ -47,6 +47,18 @@ Stem.Unsafe.eval_string(
 
 **Never pass end-user input as the template string** to either function. Only load transformer groups when their operations are actually needed.
 
+### The `eval` transformer (native engine)
+
+Distinct from `Stem.Unsafe.eval_string`, the native engine ships an `eval` *transformer* in its own opt-in `eval` capability group (off by default; the BEAM backend has no equivalent built-in). It takes a string drawn from **data** and renders it as a full Stem template against the current scope:
+
+```text
+{{expr |> eval}}    # expr = "{{name |> upcase}}", name = "ada"  →  ADA
+```
+
+The argument is a complete template, not a bare expression — the caller supplies the braces (`"{{name |> upcase}}"`, not `"name |> upcase"`; a string with no tags renders to itself). `eval` clears its own group in the sub-render, so it cannot recurse.
+
+This widens the SSTI surface beyond the template author to the **data source**: because the rendered string comes from data, enabling `eval` over attacker-controlled data is itself a template-injection vector, even when the outer template is trusted. Enable the `eval` group only when *both* the template and the data feeding it are trusted; never for untrusted data (e.g. user-submitted fields, third-party API payloads). See [[Helper Capability Groups]] and the `eval` section of the transformers manual.
+
 ### CI enforcement
 
 Add `mix stem.audit` to your CI pipeline to fail the build if `allow_elixir_expressions: true`

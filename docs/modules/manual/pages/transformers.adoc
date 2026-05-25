@@ -22,7 +22,7 @@ All other groups must be explicitly enabled.
 | `default` | always on | Core output helpers: escaping, serialisation, inspection, collection access.
 | `format` | low | Atomic string transforms that cannot iterate or recurse.
 | `transform` | medium | Structural list operations — may traverse the full collection.
-| `eval` | dynamic, opt-in | Evaluates a string as a Stem expression at render time.
+| `eval` | dynamic, opt-in | Renders a string as a Stem template at render time.
 |===
 
 == Default Group
@@ -339,19 +339,25 @@ Groups a list of maps into a map of lists, keyed by the dot-path field value.
 
 Dynamic, opt-in only. Enable by setting the `eval` capability in the host.
 
-WARNING: The `eval` group evaluates arbitrary Stem expressions at render time.
-It must never be enabled for templates from untrusted sources.
+WARNING: The `eval` group renders an arbitrary Stem *template* drawn from a data
+value at render time. It must never be enabled for templates from untrusted
+sources — and because the rendered string comes from *data*, it must equally
+never be enabled when the data itself is untrusted (server-side template
+injection). Treat both the template and the data as trusted, or leave it off.
 
 === `eval`
-Treats the incoming value as a Stem expression string and evaluates it against
-the current assign context.
-Useful for data-driven template selection, e.g. when a CMS stores expression
-fragments.
+Treats the incoming value as a full Stem template string — including literal
+text and one or more `{{ … }}` tags — and renders it against the current assign
+context. The caller supplies the braces: pass `"{{name |> upcase}}"`, not the
+bare expression `"name |> upcase"` (a string with no tags renders to itself).
+Useful for data-driven template selection, e.g. when a CMS stores template
+fragments. `eval` is cleared inside its own sub-render, so it cannot recurse.
 
 [source,text]
 ----
-{{expr |> eval}}
+{{expr |> eval}}    <1>
 ----
+<1> With `expr = "{{name |> upcase}}"` and `name = "ada"`, this renders `ADA`.
 
 == I18n Transformers
 
