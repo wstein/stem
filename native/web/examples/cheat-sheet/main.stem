@@ -52,10 +52,11 @@
     <div class="group-head" style="border-left: 3px solid #f59e0b">
       <span class="dot" style="background:#f59e0b"></span>
       <h2>transform</h2>
-      <span class="badge" style="background:#f59e0b1a;color:#92400e">moderate risk · structural · may iterate</span>
+      <span class="badge" style="background:#f59e0b1a;color:#92400e">medium risk · structural · may iterate</span>
     </div>
     <table>
-        <td class="col-expr expr"><code>fruits |> take(3) |> join(", ")</code></td>
+        <td class="col-expr expr"><code>csv |> split(",") |> join("|")</code></td>
+        <td class="expr"><code>fruits |> take(3) |> join(", ")</code></td>
         <td class="expr"><code>fruits |> drop(3) |> join(", ")</code></td>
         <td class="expr"><code>fruits |> slice(1, 3) |> join(", ")</code></td>
         <td class="expr"><code>fruits |> take(4) |> reverse |> join(", ")</code></td>
@@ -67,6 +68,18 @@
         <td class="expr"><code>fruits |> uniq |> sort |> join(", ")</code></td>
         <td class="expr"><code>nested |> flatten |> join(", ")</code></td>
         <td class="expr"><code>people |> group_by("dept") |> json</code></td>
+      table>
+  </div>
+
+  <!-- ── EVAL ────────────────────────────────── -->
+  <div class="group">
+    <div class="group-head" style="border-left: 3px solid #a855f7">
+      <span class="dot" style="background:#a855f7"></span>
+      <h2>eval</h2>
+      <span class="badge" style="background:#a855f71a;color:#7e22ce">dynamic · opt-in</span>
+    </div>
+    <table>
+        <td class="col-expr expr"><code>expr |> eval</code></td>
       table>
   </div>
 

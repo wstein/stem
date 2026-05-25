@@ -5,6 +5,8 @@ unsafe: "<script>alert('xss')</script>"
 quote: "say \"hello\" to everyone"
 present: "I exist"
 missing: null
+csv: "a,b,c"
+expr: "title"
 
 fruits: [banana, apple, cherry, apple, date, elderberry]
 sparse: [alpha, null, beta, null, gamma]
