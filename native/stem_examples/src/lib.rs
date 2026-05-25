@@ -1,30 +1,64 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Shared glue for the example binaries. The `stem_native` engine is a JSON-in /
-// string-out renderer: you compile template source to a portable wire program
-// (`stem-bc/v1`), then render that program against some data.
+// Shared glue for the example binaries, written against `stem_native`'s
+// idiomatic Rust API: `compile` returns a typed `Program`, `Program::render`
+// returns a `Result`, and capabilities/host extensions are configured through
+// `RenderOptions`. No JSON strings cross this boundary — that shape is reserved
+// for the Elixir conformance harness.
 //
 // Two kinds of transformer are shown:
 //
-//   * Built-in transformers (`upcase`, `sort`, `join`, ...) are gated by
-//     capability group. The render request names the loaded groups; Minimum is
-//     always on. These examples load Strings, Collections, and Predicates.
+//   * Built-in transformers (`upcase`, `sort`, `join`, ...) are loaded by
+//     capability group via `RenderOptions`. These examples load Strings,
+//     Collections, and Predicates on top of the always-on Minimum.
 //   * Custom transformers are supplied through the host hook: a
-//     `TransformerResolver` the engine consults before its built-ins, so an
-//     embedder can add (or override) names. The pipeline value arrives as the
-//     first positional argument, mirroring the BEAM `transformers:` binding.
+//     `TransformerResolver` the engine consults before its built-ins. The
+//     pipeline value arrives as the first positional argument.
 
 use jsonata_core::{evaluator::Evaluator, parser, value::JValue};
-use serde_json::{json, Value};
-use stem_native::{handle_with_host, Host, TransformerCall};
-
-// Capability groups these examples load. The example author is trusted, so it
-// opts into the data-transformation groups on top of the always-on Minimum.
-const GROUPS: &[&str] = &["strings", "collections", "predicates"];
+use serde_json::Value;
+use stem_native::{
+    CompileError, Group, Host, Program, RenderError, RenderOptions, TransformerCall,
+};
 
 // The custom transformer names our resolver handles. Declared so the engine's
 // pre-check admits them (and still refuses genuinely unknown names).
 const CUSTOM_NAMES: &[&str] = &["slugify", "reading_time", "shout"];
+
+/// A failure from any stage of the example pipeline.
+#[derive(Debug)]
+pub enum StemError {
+    /// The template did not compile.
+    Compile(CompileError),
+    /// The compiled template could not be rendered (e.g. an unloaded group).
+    Render(RenderError),
+    /// The JSONata preprocessing step failed.
+    Jsonata(String),
+}
+
+impl std::fmt::Display for StemError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            StemError::Compile(err) => write!(f, "compile error: {err}"),
+            StemError::Render(err) => write!(f, "render error: {err}"),
+            StemError::Jsonata(err) => write!(f, "jsonata error: {err}"),
+        }
+    }
+}
+
+impl std::error::Error for StemError {}
+
+impl From<CompileError> for StemError {
+    fn from(err: CompileError) -> Self {
+        StemError::Compile(err)
+    }
+}
+
+impl From<RenderError> for StemError {
+    fn from(err: RenderError) -> Self {
+        StemError::Render(err)
+    }
+}
 
 /// Custom transformers, supplied to the engine through the host hook. Each
 /// receives the pipeline value as its first positional argument (the engine
@@ -56,63 +90,54 @@ pub fn custom_transformers(call: &TransformerCall) -> Option<Value> {
     }
 }
 
-fn host() -> Host {
-    Host {
-        transform: custom_transformers,
-        transformer_names: CUSTOM_NAMES,
-        ..Host::default()
-    }
+/// The render configuration these examples use: the data-transformation
+/// capability groups plus the custom transformer host.
+pub fn options() -> RenderOptions {
+    RenderOptions::new()
+        .with_groups([Group::Strings, Group::Collections, Group::Predicates])
+        .with_host(Host {
+            transform: custom_transformers,
+            transformer_names: CUSTOM_NAMES,
+            ..Host::default()
+        })
 }
 
-/// Compile template source to its portable wire program. Compilation needs no
-/// host, so it goes through the plain `handle` entry; a parse error comes back
-/// as a message rather than a panic.
-pub fn compile(source: &str) -> Result<Value, String> {
-    let request = json!({ "compile": source }).to_string();
-    let value: Value = serde_json::from_str(&stem_native::handle(&request))
-        .map_err(|err| format!("compile returned invalid JSON: {err}"))?;
-    if let Some(error) = value.get("error") {
-        let message = error
-            .get("message")
-            .and_then(Value::as_str)
-            .unwrap_or("unknown error");
-        return Err(format!("template compile error: {message}"));
-    }
-    Ok(value)
+/// Compile template source to a [`Program`].
+pub fn compile(source: &str) -> Result<Program, StemError> {
+    Ok(stem_native::compile(source)?)
 }
 
-/// Render a compiled wire program against `data`, loading the example capability
-/// groups and resolving custom transformers through the host hook.
-pub fn render(program: &Value, data: Value) -> String {
-    let request = json!({ "program": program, "data": data, "transformers": GROUPS }).to_string();
-    handle_with_host(&request, &host())
+/// Render a compiled program against `data` with the example configuration.
+pub fn render(program: &Program, data: &Value) -> Result<String, StemError> {
+    Ok(program.render(data, &options())?)
 }
 
 /// Compile and render a template in one step.
-pub fn render_template(source: &str, data: Value) -> Result<String, String> {
-    Ok(render(&compile(source)?, data))
+pub fn render_template(source: &str, data: &Value) -> Result<String, StemError> {
+    render(&compile(source)?, data)
 }
 
 /// Evaluate a JSONata expression against JSON `data`, returning JSON — the
 /// data-preprocessing stage of the `jsonata_pipeline` example. `JValue` is
 /// jsonata-core's value type; it is serde-(de)serializable, so it bridges to
 /// `serde_json::Value` cleanly.
-pub fn jsonata(expr: &str, data: &Value) -> Result<Value, String> {
-    let ast = parser::parse(expr).map_err(|err| format!("jsonata parse error: {err:?}"))?;
+pub fn jsonata(expr: &str, data: &Value) -> Result<Value, StemError> {
+    let ast = parser::parse(expr).map_err(|err| StemError::Jsonata(format!("parse: {err:?}")))?;
     let input: JValue = serde_json::from_value(data.clone())
-        .map_err(|err| format!("jsonata input error: {err}"))?;
+        .map_err(|err| StemError::Jsonata(format!("input: {err}")))?;
     let output = Evaluator::new()
         .evaluate(&ast, &input)
-        .map_err(|err| format!("jsonata eval error: {err:?}"))?;
+        .map_err(|err| StemError::Jsonata(format!("eval: {err:?}")))?;
     let encoded = output
         .to_json_string()
-        .map_err(|err| format!("jsonata output error: {err}"))?;
-    serde_json::from_str(&encoded).map_err(|err| format!("jsonata decode error: {err}"))
+        .map_err(|err| StemError::Jsonata(format!("output: {err}")))?;
+    serde_json::from_str(&encoded).map_err(|err| StemError::Jsonata(format!("decode: {err}")))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::json;
 
     #[test]
     fn custom_transformer_receives_the_pipeline_value() {
@@ -145,7 +170,7 @@ mod tests {
     fn builtin_and_custom_transformers_render_together() {
         let out = render_template(
             "{{ title |> upcase }} / {{ title |> slugify }} / {{ tags |> sort |> join(\", \") }}",
-            json!({ "title": "Hello Brave World", "tags": ["rust", "beam", "wasm"] }),
+            &json!({ "title": "Hello Brave World", "tags": ["rust", "beam", "wasm"] }),
         )
         .unwrap();
         assert_eq!(
@@ -155,8 +180,22 @@ mod tests {
     }
 
     #[test]
-    fn compile_error_is_reported_not_panicked() {
-        assert!(compile("{{ unterminated").is_err());
+    fn compile_error_is_typed() {
+        assert!(matches!(
+            compile("{{ unterminated"),
+            Err(StemError::Compile(_))
+        ));
+    }
+
+    #[test]
+    fn unknown_transformer_is_a_render_error() {
+        // A name no built-in group provides and the host did not declare is
+        // refused as a typed render error rather than smuggled into the output.
+        let program = compile("{{ name |> no_such }}").unwrap();
+        assert!(matches!(
+            render(&program, &json!({ "name": "x" })),
+            Err(StemError::Render(_))
+        ));
     }
 
     #[test]
@@ -174,6 +213,14 @@ mod tests {
         )
         .unwrap();
         assert_eq!(model["total"], json!(100));
-        assert_eq!(model["products"], json!(["widget", "gadget"]));
+        // Grouping key order is not guaranteed, so compare as a set.
+        let mut products = model["products"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect::<Vec<_>>();
+        products.sort_unstable();
+        assert_eq!(products, ["gadget", "widget"]);
     }
 }

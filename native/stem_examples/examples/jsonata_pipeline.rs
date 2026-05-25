@@ -70,7 +70,7 @@ fn main() {
 
     // Stage 2: Stem rendering, with the example's loaded capability groups and
     // custom transformers.
-    match stem_examples::render_template(TEMPLATE, view_model) {
+    match stem_examples::render_template(TEMPLATE, &view_model) {
         Ok(rendered) => print!("{rendered}"),
         Err(err) => {
             eprintln!("{err}");

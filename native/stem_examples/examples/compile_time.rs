@@ -17,7 +17,7 @@ use serde_json::json;
 /// lives in the binary and cannot be swapped at runtime.
 macro_rules! stem {
     ($source:literal, $data:expr $(,)?) => {
-        stem_examples::render_template($source, $data)
+        stem_examples::render_template($source, &$data)
     };
 }
 

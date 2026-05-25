@@ -41,7 +41,13 @@ fn main() {
     };
 
     for data in records {
-        println!("{}", stem_examples::render(&program, data));
+        match stem_examples::render(&program, &data) {
+            Ok(rendered) => println!("{rendered}"),
+            Err(err) => {
+                eprintln!("{err}");
+                std::process::exit(1);
+            }
+        }
     }
 }
 
