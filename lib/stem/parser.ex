@@ -67,6 +67,28 @@ defmodule Stem.Parser do
     {rest, args ++ [{:end_pos, line, col}], context}
   end
 
+  # Validates that the open and close names of a raw block match, then reduces
+  # the content chars to a string. Returns the same shape as `inject_end_pos`
+  # so `assemble_tokens` for `:raw_block` sees `[{:end_pos, …}, content]`.
+  @doc false
+  def validate_and_reduce_raw_block(rest, args, context, {line, line_offset}, byte_offset) do
+    col = byte_offset - line_offset + 1
+    # NimbleParsec prepends results (newest first), so args order is:
+    # [close_name, charN, …, char1, open_name]
+    [close_name | rest_args] = args
+    open_name = List.last(rest_args)
+    chars = Enum.drop(rest_args, -1)
+    content = chars |> Enum.reverse() |> List.to_string()
+
+    if open_name == close_name do
+      {rest, [content, {:end_pos, line, col}], context}
+    else
+      {:error,
+       "raw block '{{{{##{open_name}}}}}' closed by '{{{{/#{close_name}}}}}' — names must match",
+       context}
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # NimbleParsec combinators (compile-time)
   # ---------------------------------------------------------------------------
@@ -105,16 +127,20 @@ defmodule Stem.Parser do
     |> post_traverse({__MODULE__, :inject_end_pos, []})
     |> tag(:inline_comment)
 
-  # Matches `{{{{raw}}}}...{{{{/raw}}}}` — 4-brace raw block; content emitted verbatim.
+  # Matches `{{{{#name}}}}...{{{{/name}}}}` — 4-brace raw block; content emitted verbatim.
+  # The post_traverse callback validates open/close names match and reduces content.
   raw_block =
-    ignore(string("{{{{raw}}}}"))
+    ignore(string("{{{{#"))
+    |> ascii_string([?a..?z, ?A..?Z, ?0..?9, ?_, ?-], min: 1)
+    |> ignore(string("}}}}"))
     |> repeat(
-      lookahead_not(string("{{{{/raw}}}}"))
+      lookahead_not(string("{{{{/"))
       |> utf8_char([])
     )
-    |> ignore(string("{{{{/raw}}}}"))
-    |> reduce({List, :to_string, []})
-    |> post_traverse({__MODULE__, :inject_end_pos, []})
+    |> ignore(string("{{{{/"))
+    |> ascii_string([?a..?z, ?A..?Z, ?0..?9, ?_, ?-], min: 1)
+    |> ignore(string("}}}}"))
+    |> post_traverse({__MODULE__, :validate_and_reduce_raw_block, []})
     |> tag(:raw_block)
 
   # Matches `{{{ ... }}}` raw (no-escape) output.
@@ -211,26 +237,43 @@ defmodule Stem.Parser do
   end
 
   defp check_raw_blocks(source) do
-    check_raw_blocks_from(source, "{{{{raw}}}}", "{{{{/raw}}}}", 0)
+    check_raw_block_open(source, 0)
   end
 
-  defp check_raw_blocks_from(source, open, close, offset) do
-    case :binary.match(source, open, scope: {offset, byte_size(source) - offset}) do
+  defp check_raw_block_open(source, offset) do
+    remaining = byte_size(source) - offset
+
+    case :binary.match(source, "{{{{#", scope: {offset, remaining}) do
       :nomatch ->
         :ok
 
-      {open_pos, open_len} ->
-        after_open = open_pos + open_len
+      {open_prefix_pos, open_prefix_len} ->
+        name_start = open_prefix_pos + open_prefix_len
 
-        case :binary.match(source, close, scope: {after_open, byte_size(source) - after_open}) do
+        case :binary.match(source, "}}}}", scope: {name_start, byte_size(source) - name_start}) do
           :nomatch ->
-            before = binary_part(source, 0, open_pos)
+            before = binary_part(source, 0, open_prefix_pos)
             {err_line, err_col} = advance_through(before, 1, 1)
             meta = %{line: err_line, column: err_col, end_line: err_line, end_column: err_col}
-            {:error, "expected closing '{{{{/raw}}}}' for raw block", meta}
+            {:error, "unterminated raw block open tag", meta}
 
-          {close_pos, close_len} ->
-            check_raw_blocks_from(source, open, close, close_pos + close_len)
+          {close_brace_pos, close_brace_len} ->
+            name = binary_part(source, name_start, close_brace_pos - name_start)
+            open_tag_end = close_brace_pos + close_brace_len
+            close_tag = "{{{{/" <> name <> "}}}}"
+
+            case :binary.match(source, close_tag,
+                   scope: {open_tag_end, byte_size(source) - open_tag_end}
+                 ) do
+              :nomatch ->
+                before = binary_part(source, 0, open_prefix_pos)
+                {err_line, err_col} = advance_through(before, 1, 1)
+                meta = %{line: err_line, column: err_col, end_line: err_line, end_column: err_col}
+                {:error, "expected closing '{{{{/#{name}}}}}' for raw block", meta}
+
+              {close_tag_pos, close_tag_len} ->
+                check_raw_block_open(source, close_tag_pos + close_tag_len)
+            end
         end
     end
   end
@@ -374,19 +417,17 @@ defmodule Stem.Parser do
 
   defp maybe_trim_last_text(acc, true), do: acc
 
-  # Counts trailing backslashes before a `{{`. Returns {:escaped, new_acc} when
-  # N is odd (last \ escapes the tag, floor(N/2) literal backslashes emitted),
-  # or {:normal, new_acc} when N is even (N/2 literal backslashes, tag evaluates).
+  # Counts trailing backslashes before `{{`. Consumes exactly one: N=1 escapes
+  # the tag (emits literal `{{inner}}`); N≥2 emits N-1 backslashes and evaluates.
   defp escaped_mustache([{:text, text, meta} | rest_acc], inner) do
     n = count_trailing_backslashes(text, 0)
 
     if n == 0 do
       {:normal, [{:text, text, meta} | rest_acc]}
     else
-      pairs = div(n, 2)
-      base = binary_part(text, 0, byte_size(text) - n) <> String.duplicate("\\", pairs)
+      base = binary_part(text, 0, byte_size(text) - 1)
 
-      if rem(n, 2) == 1 do
+      if n == 1 do
         {:escaped, [{:text, base <> "{{" <> inner <> "}}", meta} | rest_acc]}
       else
         new_acc = if base == "", do: rest_acc, else: [{:text, base, meta} | rest_acc]
@@ -535,7 +576,7 @@ defmodule Stem.Parser do
     do: "expected closing '}}' for Stem comment"
 
   defp unterminated_error(<<"{{{{", _::binary>>),
-    do: "expected closing '{{{{/raw}}}}' for raw block"
+    do: "expected closing '{{{{/name}}}}' for raw block"
 
   defp unterminated_error(<<"{{{", _::binary>>),
     do: "expected closing '}}}' for raw Stem expression"

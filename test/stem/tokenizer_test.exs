@@ -212,25 +212,33 @@ defmodule Stem.LexerTest do
            ] = tokens(~S[\\{{name}}])
   end
 
-  test "triple backslash emits one literal backslash and escapes the tag" do
-    assert [{:text, "\\{{name}}", %{line: 1, column: 1}}, {:eof, _}] =
-             tokens(~S[\\\{{name}}])
+  test "triple backslash emits two literal backslashes and evaluates the tag" do
+    assert [
+             {:text, "\\\\", %{line: 1, column: 1}},
+             {:expr, "name", :default, _},
+             {:eof, _}
+           ] = tokens(~S[\\\{{name}}])
   end
 
   test "raw block emits its content verbatim" do
-    assert tokens("{{{{raw}}}}{{name}}{{{{/raw}}}}") == [
+    assert tokens("{{{{#raw}}}}{{name}}{{{{/raw}}}}") == [
              {:text, "{{name}}", %{line: 1, column: 1}},
-             {:eof, %{line: 1, column: 32}}
+             {:eof, %{line: 1, column: 33}}
            ]
   end
 
   test "raw block merges with surrounding text" do
     assert [{:text, "before{{name}}after", _}, {:eof, _}] =
-             tokens("before{{{{raw}}}}{{name}}{{{{/raw}}}}after")
+             tokens("before{{{{#raw}}}}{{name}}{{{{/raw}}}}after")
+  end
+
+  test "raw block accepts arbitrary names" do
+    assert [{:text, "{{name}}", _}, {:eof, _}] =
+             tokens("{{{{#mycodeblock}}}}{{name}}{{{{/mycodeblock}}}}")
   end
 
   test "unclosed raw block is a tokenizer error" do
     assert {:error, "expected closing '{{{{/raw}}}}' for raw block", _} =
-             Parser.tokenize("{{{{raw}}}}no close")
+             Parser.tokenize("{{{{#raw}}}}no close")
   end
 end
