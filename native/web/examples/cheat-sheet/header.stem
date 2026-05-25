@@ -27,8 +27,8 @@
 <div class="syntax">
   <div class="syntax-row">
     <div class="lbl">Pipe<b>value first</b></div>
-    <code>{{{{#raw}}}}{{ value |> transformer }}{{{{/raw}}}}</code>
-    <code>{{{{#raw}}}}{{ value |> transformer(arg1, arg2) }}{{{{/raw}}}}</code>
+    <code>{{{{#raw}}}}{{ value | transformer }}{{{{/raw}}}}</code>
+    <code>{{{{#raw}}}}{{ value | transformer arg1 arg2 }}{{{{/raw}}}}</code>
   </div>
   <div class="syntax-row">
     <div class="lbl">Prefix<b>name first</b></div>
@@ -37,7 +37,7 @@
   </div>
   <p class="syntax-note">
     Both styles compose and are equivalent —
-    <code>{{{{#raw}}}}{{ name |> trim |> capitalize }}{{{{/raw}}}}</code> =
+    <code>{{{{#raw}}}}{{ name | trim | capitalize }}{{{{/raw}}}}</code> =
     <code>{{{{#raw}}}}{{ capitalize (trim name) }}{{{{/raw}}}}</code>
   </p>
 </div>

@@ -3,7 +3,7 @@
     <span class="dot"></span>
     <h2>{{name}}<a href="#{{slug}}" class="anchor" aria-label="Permalink">§</a></h2>
     <span class="pill">{{pill}}</span>
-    <span class="count">{{transformers |> len}}</span>
+    <span class="count">{{transformers | len}}</span>
     <p class="desc">{{desc}}</p>
   </div>
   <div class="rows">{{#each transformers}}{{> row}}{{/each}}</div>

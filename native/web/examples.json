@@ -81,7 +81,8 @@
       "row",
       "loading",
       "footer",
-      "data"
+      "data",
+      "scripts"
     ],
     "data": "data.yaml",
     "groups": ["format", "transform", "eval"]

@@ -24,7 +24,7 @@ people:
   - { name: Bob,   age: 35, dept: Engineering, lead: true }
   - { name: Dave,  age: 28, dept: Design }
 
-capability_groups:
+main_groups:
   - name: default
     accent: "#6b7280"
     pill: "always on"
@@ -149,6 +149,8 @@ capability_groups:
     - name: group_by
       desc: "Groups a collection of maps by a field (dot-path) into a map."
       example: "{{people | group_by \"dept\" | json}}"
+
+narrow_groups:
   - name: eval
     accent: "#7c5cf0"
     pill: "dynamic · opt-in"
