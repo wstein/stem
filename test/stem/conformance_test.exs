@@ -52,7 +52,7 @@ defmodule Stem.ConformanceTest do
             pipeline <- StreamData.list_of(stages, max_length: 4)
           ) do
       vector = %{
-        template: "{{#{Enum.join(["s" | pipeline], " |> ")}}}",
+        template: "{{#{Enum.join(["s" | pipeline], " | ")}}}",
         data: %{s: value},
         transformers: [:strings],
         escape: :html

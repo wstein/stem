@@ -54,19 +54,19 @@ defmodule Stem.Conformance do
     %{name: "parent path", template: "{{../title}}", data: %{title: "Home"}, transformers: []},
     %{
       name: "string pipeline",
-      template: "{{name |> trim |> upcase}}",
+      template: "{{name | trim | upcase}}",
       data: %{name: "  nina  "},
       transformers: [:strings]
     },
     %{
       name: "collection join",
-      template: "{{tags |> join(\", \")}}",
+      template: "{{tags | join \", \"}}",
       data: %{tags: ["a", "b", "c"]},
       transformers: [:minimum]
     },
     %{
       name: "selector map",
-      template: "{{users |> map(\"name\") |> join(\", \")}}",
+      template: "{{users | map \"name\" | join \", \"}}",
       data: %{users: [%{name: "A"}, %{name: "B"}]},
       transformers: [:minimum, :collections]
     },
@@ -168,7 +168,7 @@ defmodule Stem.Conformance do
     },
     %{
       name: "each with transformer",
-      template: "{{#each names}}{{this |> upcase}} {{/each}}",
+      template: "{{#each names}}{{this | upcase}} {{/each}}",
       data: %{names: ["a", "b"]},
       transformers: [:strings]
     },
@@ -204,25 +204,25 @@ defmodule Stem.Conformance do
     # multi-key order is not cross-backend stable (gap G5).
     %{
       name: "json string",
-      template: "{{{s |> json}}}",
+      template: "{{{s | json}}}",
       data: %{s: "hi"},
       transformers: [:minimum]
     },
     %{
       name: "json list",
-      template: "{{{nums |> json}}}",
+      template: "{{{nums | json}}}",
       data: %{nums: [1, 2, 3]},
       transformers: [:minimum]
     },
     %{
       name: "json object",
-      template: "{{{obj |> json}}}",
+      template: "{{{obj | json}}}",
       data: %{obj: %{"role" => "admin"}},
       transformers: [:minimum]
     },
     %{
       name: "inspect integer",
-      template: "{{{n |> inspect}}}",
+      template: "{{{n | inspect}}}",
       data: %{n: 42},
       transformers: [:minimum]
     },
@@ -231,7 +231,7 @@ defmodule Stem.Conformance do
     # render as `%{a: 1}` on the BEAM but `%{"a" => 1}` natively — see gap G7.
     %{
       name: "inspect list",
-      template: "{{{words |> inspect}}}",
+      template: "{{{words | inspect}}}",
       data: %{words: ["a", "b"]},
       transformers: [:minimum]
     },
@@ -245,7 +245,7 @@ defmodule Stem.Conformance do
     %{name: "float small", template: "{{x}}", data: %{x: 1.0e-5}, transformers: []},
     %{
       name: "json float",
-      template: "{{{x |> json}}}",
+      template: "{{{x | json}}}",
       data: %{x: 1.5e10},
       transformers: [:minimum]
     }
