@@ -24,39 +24,22 @@ defmodule Stem.RuntimeSecurityTest do
     assert Stem.RuntimeSecurity.Compiled.render_from_string(name: "Nina") == "Hello Nina"
   end
 
-  test "default mode rejects arbitrary Elixir fallback expressions" do
-    assert_raise CompileError, ~r/arbitrary Elixir expressions are not allowed/, fn ->
+  test "arbitrary Elixir expressions are always rejected (no escape hatch)" do
+    assert_raise Stem.SyntaxError, ~r/expression must be an assign/, fn ->
       Stem.Unsafe.eval_string("{{a + b}}", assigns: [a: 1, b: 2])
     end
   end
 
-  test "allow_elixir_expressions: false rejects arbitrary Elixir fallback expressions" do
-    assert_raise CompileError, ~r/arbitrary Elixir expressions are not allowed/, fn ->
-      Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]],
-        allow_elixir_expressions: false
-      )
-    end
-  end
-
-  test "allow_elixir_expressions: true allows arbitrary Elixir fallback expressions" do
-    assert Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]],
-             allow_elixir_expressions: true
-           ) ==
-             "3"
-  end
-
-  test "allow_elixir_expressions: false still allows structured Stem expressions" do
-    assert Stem.Unsafe.eval_string("Hello {{name}}", [assigns: [name: "Nina"]],
-             allow_elixir_expressions: false
-           ) ==
+  test "structured Stem expressions still render" do
+    assert Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"]) ==
              "Hello Nina"
   end
 
-  test "allow_elixir_expressions: false allows transformer pipelines" do
+  test "transformer pipelines render" do
     assert Stem.Unsafe.eval_string(
-             "{{name |> trim}}",
-             [assigns: [name: " Nina "], transformers: Stem.Transformers.Standard.all()],
-             allow_elixir_expressions: false
+             "{{name | trim}}",
+             assigns: [name: " Nina "],
+             transformers: Stem.Transformers.Standard.all()
            ) == "Nina"
   end
 
@@ -64,11 +47,11 @@ defmodule Stem.RuntimeSecurityTest do
     # `upcase` (Strings) is not in the Minimum floor, so a bare runtime eval
     # cannot reach it — the capability must be loaded deliberately.
     assert_raise Stem.SyntaxError, ~r/unknown transformer 'upcase'/, fn ->
-      Stem.Unsafe.eval_string("{{name |> upcase}}", assigns: [name: "nina"])
+      Stem.Unsafe.eval_string("{{name | upcase}}", assigns: [name: "nina"])
     end
 
     assert Stem.Unsafe.eval_string(
-             "{{name |> upcase}}",
+             "{{name | upcase}}",
              assigns: [name: "nina"],
              transformers: Stem.Transformers.Strings.all()
            ) == "NINA"

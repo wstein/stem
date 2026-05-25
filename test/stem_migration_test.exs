@@ -52,26 +52,6 @@ defmodule Stem.StemMigrationTest do
     assert Stem.TestTemplate.eval_file(template, assigns: []) == "foo \n"
   end
 
-  test "compound truthy condition renders with Elixir semantics" do
-    template = Path.expand("fixtures/stem_template_truthy_condition.stem", __DIR__)
-
-    render_output = fn value, fallback ->
-      String.trim(
-        Stem.TestTemplate.eval_file(template, [assigns: [render: value, fallback: fallback]],
-          allow_elixir_expressions: true
-        )
-      )
-    end
-
-    assert render_output.(1, false) == "Does render!"
-    assert render_output.(0, false) == ""
-    assert render_output.(0, true) == "Does render!"
-    assert render_output.(true, false) == "Does render!"
-    assert render_output.(false, true) == "Does render!"
-    assert render_output.(nil, false) == ""
-    assert render_output.([], false) == "Does render!"
-  end
-
   test "each block helper with this context" do
     template = "{{#each items}}[{{this}}]{{/each}}"
     assert Stem.TestTemplate.eval_string(template, assigns: [items: ["a", "b"]]) == "[a][b]"

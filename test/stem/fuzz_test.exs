@@ -40,7 +40,7 @@ defmodule Stem.FuzzTest do
         {:ok, {:ok, ast}} ->
           compile_result =
             safe_result(fn ->
-              Compiler.compile(ast, file: "fuzz.stem", allow_elixir_expressions: false)
+              Compiler.compile(ast, file: "fuzz.stem")
             end)
 
           assert match?({:ok, quoted} when quoted != nil, compile_result)

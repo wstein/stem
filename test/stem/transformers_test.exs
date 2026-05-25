@@ -719,7 +719,7 @@ defmodule Stem.TransformersTest do
   describe "unknown transformer guidance" do
     test "names the capability group and how to enable it" do
       assert_raise Stem.SyntaxError,
-                   ~r/unknown transformer 'map'.*Stem\.Transformers\.Collections.*--transformers.*mix stem\.audit/s,
+                   ~r/unknown transformer 'map'.*Stem\.Transformers\.Collections.*--transformers/s,
                    fn -> Transformers.invoke(:map, [[1, 2]], []) end
     end
 

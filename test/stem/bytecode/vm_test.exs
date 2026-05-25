@@ -62,7 +62,7 @@ defmodule Stem.Bytecode.VMTest do
     test "applies built-in transformers when their group is loaded" do
       transformers = Stem.Transformers.Strings.all()
 
-      assert render("{{name |> trim |> upcase}}",
+      assert render("{{name | trim | upcase}}",
                assigns: %{name: "  nina  "},
                transformers: transformers
              ) ==
@@ -71,7 +71,7 @@ defmodule Stem.Bytecode.VMTest do
 
     test "enforces the secure capability default through the dispatcher" do
       assert_raise Stem.SyntaxError, ~r/unknown transformer 'upcase'/, fn ->
-        render("{{name |> upcase}}", assigns: %{name: "nina"})
+        render("{{name | upcase}}", assigns: %{name: "nina"})
       end
     end
 

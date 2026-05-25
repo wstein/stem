@@ -63,7 +63,7 @@ defmodule Stem.BytecodeTest do
     end
 
     test "lowers a pipeline into nested calls with the value threaded first" do
-      program = compile("{{name |> trim |> truncate(20)}}")
+      program = compile("{{name | trim | truncate 20}}")
 
       assert program.instructions == [
                {:emit,
@@ -122,19 +122,19 @@ defmodule Stem.BytecodeTest do
 
   describe "compile/2 capability metadata" do
     test "records the built-in groups a program references" do
-      assert compile("{{name |> upcase}}").capabilities == [:strings]
-      assert compile("{{items |> map(\"id\")}}").capabilities == [:collections]
+      assert compile("{{name | upcase}}").capabilities == [:strings]
+      assert compile("{{items | map \"id\"}}").capabilities == [:collections]
       assert compile("Hello {{name}}").capabilities == []
     end
 
     test "lists transformer names that belong to no built-in group as host transformers" do
-      program = compile("{{price |> currency}}")
+      program = compile("{{price | currency}}")
       assert program.host_transformers == ["currency"]
       assert program.capabilities == []
     end
 
     test "a built-in transformer is not a host transformer" do
-      program = compile("{{name |> upcase}}")
+      program = compile("{{name | upcase}}")
       assert program.host_transformers == []
     end
   end
@@ -202,11 +202,6 @@ defmodule Stem.BytecodeTest do
       end
     end
 
-    test "arbitrary Elixir expressions raise UnsupportedError" do
-      assert_raise UnsupportedError, ~r/Elixir expression/, fn ->
-        compile("{{1 + 1}}", allow_elixir_expressions: true)
-      end
-    end
   end
 
   describe "compile/2 partial arguments" do
@@ -268,7 +263,7 @@ defmodule Stem.BytecodeTest do
 
   describe "to_wire/1" do
     test "serializes text and expression ops to tagged maps" do
-      wire = "Hi {{user.name |> upcase}}" |> compile() |> Bytecode.to_wire()
+      wire = "Hi {{user.name | upcase}}" |> compile() |> Bytecode.to_wire()
 
       assert wire["version"] == "stem-bc/v1"
 
@@ -316,7 +311,7 @@ defmodule Stem.BytecodeTest do
 
   describe "disasm/1" do
     test "renders a readable, versioned listing" do
-      disasm = "Hello {{name |> upcase}}" |> compile() |> Bytecode.disasm()
+      disasm = "Hello {{name | upcase}}" |> compile() |> Bytecode.disasm()
 
       assert disasm =~ "; stem-bc/v1"
       assert disasm =~ ~s(EMIT_TEXT "Hello ")

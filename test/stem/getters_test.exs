@@ -31,7 +31,7 @@ defmodule Stem.GettersTest do
 
     test "a getter feeds a transformer pipeline" do
       assert render(
-               "{{name |> upcase}}",
+               "{{name | upcase}}",
                %{name: fn -> "ada" end},
                Stem.Transformers.Strings.all()
              ) ==
@@ -79,8 +79,8 @@ defmodule Stem.GettersTest do
     test "a leaf getter feeds a transformer pipeline" do
       assigns = %{user: %{name: fn -> "ada" end}}
       strings = Stem.Transformers.Strings.all()
-      assert render("{{user.name |> upcase}}", assigns, strings) == "ADA"
-      assert vm_render("{{user.name |> upcase}}", assigns, strings) == "ADA"
+      assert render("{{user.name | upcase}}", assigns, strings) == "ADA"
+      assert vm_render("{{user.name | upcase}}", assigns, strings) == "ADA"
     end
 
     test "a leaf getter is evaluated for block truthiness" do

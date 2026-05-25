@@ -82,8 +82,8 @@ defmodule Stem.ParserTest do
              Parser.parse("{{#each items as |item idx a b|}}{{item}}{{/each}}")
 
     assert {:error,
-            "pipeline stages must be helper names or helper calls like trim or truncate(20)", _} =
-             Parser.parse("{{#if name |> String.trim()}}ok{{/if}}")
+            "pipeline stages must be a helper name followed by space-separated arguments", _} =
+             Parser.parse("{{#if name | String.trim()}}ok{{/if}}")
   end
 
   test "invalid region names are rejected" do

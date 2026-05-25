@@ -98,8 +98,8 @@ defmodule Stem.ExpressionTest do
     assert Expression.format(expr) == "user.[first-name]"
   end
 
-  test "bare keys with non-identifier characters are not references" do
-    assert {:ok, {:elixir, "a-b"}} = p("a-b")
+  test "bare keys with non-identifier characters are rejected" do
+    assert {:error, _} = p("a-b")
   end
 
   test "helper invocation with positional, literal, and numeric args" do
@@ -127,16 +127,6 @@ defmodule Stem.ExpressionTest do
              ~s|Stem.Transformers.invoke(:wrap, [current, stem_index, @top], [this: current, key: stem_key, assigns: assigns, transformers: transformers])|
   end
 
-  test "non-helper expressions fall back to assigns rewriting" do
-    assert t("a + b") == "@a + @b"
-    assert t("a + b", true) == "this.a + this.b"
-  end
-
-  test "rewriting preserves boolean operators and literals" do
-    assert t("a or b && c") == "@a or @b && @c"
-    assert t("not a && b") == "not @a && @b"
-  end
-
   test "a bare word followed by arguments is treated as a helper call" do
     assert t("a b c") ==
              "Stem.Transformers.invoke(:a, [@b, @c], [assigns: assigns, transformers: transformers])"
@@ -147,7 +137,4 @@ defmodule Stem.ExpressionTest do
              "Stem.Transformers.invoke(:wrap, [stem_key], [this: current, key: stem_key, assigns: assigns, transformers: transformers])"
   end
 
-  test "an argument with an empty key is not a helper" do
-    assert t("foo =bar") == "@foo =@bar"
-  end
 end

@@ -78,12 +78,8 @@ defmodule StemTest do
                    end
     end
 
-    test "compound Elixir expressions resolve assigns when allow_elixir_expressions: true" do
-      assert eval("{{a + b}}", [assigns: [a: 1, b: 2]], allow_elixir_expressions: true) == "3"
-    end
-
-    test "arbitrary Elixir is rejected by default (allow_elixir_expressions: false)" do
-      assert_raise CompileError, ~r/arbitrary Elixir expressions are not allowed/, fn ->
+    test "arbitrary Elixir is rejected (no escape hatch)" do
+      assert_raise Stem.SyntaxError, ~r/expression must be an assign/, fn ->
         eval("{{a + b}}", assigns: [a: 1, b: 2])
       end
     end
@@ -117,7 +113,7 @@ defmodule StemTest do
 
     test "pipelines compose transformers in declaration order" do
       assert eval(
-               "{{name |> trim |> upcase |> truncate(4)}}",
+               "{{name | trim | upcase | truncate 4}}",
                assigns: [name: "  nina  "]
              ) == "NINA"
     end
@@ -296,13 +292,13 @@ defmodule StemTest do
         flags: [true, nil, false, true]
       ]
 
-      assert eval("{{name |> trim |> upcase |> truncate(4)}}", assigns: assigns) == "NINA"
+      assert eval("{{name | trim | upcase | truncate 4}}", assigns: assigns) == "NINA"
 
-      assert eval("{{people |> sort_by(\"name\") |> map(\"name\") |> join(\", \")}}",
+      assert eval("{{people | sort_by \"name\" | map \"name\" | join \", \"}}",
                assigns: assigns
              ) == "ada, mila, nina"
 
-      assert eval("{{flags |> compact |> uniq |> join(\",\")}}", assigns: assigns) ==
+      assert eval("{{flags | compact | uniq | join \",\"}}", assigns: assigns) ==
                "true,false"
     end
 
@@ -488,17 +484,17 @@ defmodule StemTest do
   describe "syntax errors" do
     test "invalid pipelines are rejected as Stem syntax errors" do
       assert_raise Stem.SyntaxError,
-                   ~r/pipeline stages must be helper names or helper calls like trim or truncate\(20\)/,
+                   ~r/pipeline stages must be a helper name followed by space-separated arguments/,
                    fn ->
-                     eval("{{name |> String.trim()}}", assigns: [name: "Nina"])
+                     eval("{{name | String.trim}}", assigns: [name: "Nina"])
                    end
     end
 
     test "invalid pipelines underline the full tag span" do
       assert_raise Stem.SyntaxError,
-                   ~r/1 \| \{\{name \|> String\.trim\(\)\}\}\n\s+\| \^~+/,
+                   ~r/1 \| \{\{name \| String\.trim\}\}\n\s+\| \^~+/,
                    fn ->
-                     Stem.__compile_string__("{{name |> String.trim()}}")
+                     Stem.__compile_string__("{{name | String.trim}}")
                    end
     end
 
@@ -539,15 +535,15 @@ defmodule StemTest do
       end
     end
 
-    test "invalid Elixir expression" do
-      assert_raise TokenMissingError, fn ->
-        Stem.__compile_string__("{{a + }}", allow_elixir_expressions: true)
+    test "malformed expression is rejected at compile time" do
+      assert_raise Stem.SyntaxError, fn ->
+        Stem.__compile_string__("{{a + }}")
       end
     end
 
     test "complex parent traversal is rejected at compile time" do
-      assert_raise CompileError, ~r/unsupported parent path traversal/, fn ->
-        Stem.__compile_string__("{{#each xs}}{{../a.b}}{{/each}}", allow_elixir_expressions: true)
+      assert_raise Stem.SyntaxError, fn ->
+        Stem.__compile_string__("{{#each xs}}{{../a.b}}{{/each}}")
       end
     end
 

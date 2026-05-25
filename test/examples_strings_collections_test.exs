@@ -14,7 +14,7 @@ defmodule ExamplesStringsCollectionsTest do
   test "Example 1: Reverse a simple list" do
     assigns = [items: ["apple", "banana", "cherry"]]
 
-    template = "{{items |> reverse |> join(\", \")}}"
+    template = "{{items | reverse | join \", \"}}"
 
     result =
       Stem.Unsafe.eval_string(
@@ -29,7 +29,7 @@ defmodule ExamplesStringsCollectionsTest do
   test "Example 2: Reverse list order and join" do
     assigns = [items: ["alice", "bob", "charlie"]]
 
-    template = "{{items |> reverse |> join(\" | \")}}"
+    template = "{{items | reverse | join \" | \"}}"
 
     result =
       Stem.Unsafe.eval_string(
@@ -45,7 +45,7 @@ defmodule ExamplesStringsCollectionsTest do
   test "Example 3: Reverse a string then uppercase" do
     assigns = [message: "stem"]
 
-    template = "{{message |> reverse |> upcase}}"
+    template = "{{message | reverse | upcase}}"
 
     result =
       Stem.Unsafe.eval_string(
@@ -60,7 +60,7 @@ defmodule ExamplesStringsCollectionsTest do
   test "Example 4: Sort numbers, reverse order, take top 2" do
     assigns = [numbers: [5, 2, 8, 1, 9, 3]]
 
-    template = "{{numbers |> sort |> reverse |> take(2) |> join(\", \")}}"
+    template = "{{numbers | sort | reverse | take 2 | join \", \"}}"
 
     result =
       Stem.Unsafe.eval_string(
@@ -78,7 +78,7 @@ defmodule ExamplesStringsCollectionsTest do
     assigns = [numbers: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]
 
     template =
-      "Large numbers (highest first): {{numbers |> filter |> reverse |> take(3) |> join(\", \")}}"
+      "Large numbers (highest first): {{numbers | filter | reverse | take 3 | join \", \"}}"
 
     result =
       Stem.Unsafe.eval_string(
@@ -94,7 +94,7 @@ defmodule ExamplesStringsCollectionsTest do
   test "Example 6: Reverse list order" do
     assigns = [words: ["hello", "world", "stem"]]
 
-    template = "{{words |> reverse |> join(\" \")}}"
+    template = "{{words | reverse | join \" \"}}"
 
     result =
       Stem.Unsafe.eval_string(
@@ -110,7 +110,7 @@ defmodule ExamplesStringsCollectionsTest do
   test "Example 7: Real-world — show top 3 scores" do
     assigns = [scores: [10, 45, 23, 89, 56, 12, 34]]
 
-    template = "{{scores |> sort |> reverse |> take(3) |> join(\", \")}}"
+    template = "{{scores | sort | reverse | take 3 | join \", \"}}"
 
     result =
       Stem.Unsafe.eval_string(
@@ -127,7 +127,7 @@ defmodule ExamplesStringsCollectionsTest do
   test "Example 8: Combining collections — reverse preserves whitespace" do
     assigns = [text_list: ["  hello  ", "  world  ", "  stem  "]]
 
-    template = "{{text_list |> reverse |> join(\" | \")}}"
+    template = "{{text_list | reverse | join \" | \"}}"
 
     result =
       Stem.Unsafe.eval_string(

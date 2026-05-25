@@ -61,7 +61,7 @@ defmodule Stem.StemTest do
       assert result == "---\nliteral section header\n---\nok\n"
     end
 
-    test "compile_file rejects arbitrary Elixir by default (allow_elixir_expressions: false)" do
+    test "compile_file rejects arbitrary Elixir expressions" do
       temp_dir =
         Path.join(
           System.tmp_dir!(),
@@ -75,43 +75,11 @@ defmodule Stem.StemTest do
 
       on_exit(fn -> File.rm_rf!(temp_dir) end)
 
-      assert_raise CompileError, ~r/arbitrary Elixir expressions are not allowed/, fn ->
+      assert_raise Stem.SyntaxError, ~r/expression must be an assign/, fn ->
         Stem.compile_file(template_file)
       end
     end
 
-    test "compile_file config can override to allow_elixir_expressions: true" do
-      temp_dir =
-        Path.join(
-          System.tmp_dir!(),
-          "allow_elixir_compile_#{System.unique_integer([:positive])}"
-        )
-
-      File.mkdir_p!(temp_dir)
-
-      config_file = Path.join(temp_dir, ".stem.config.json")
-      template_file = Path.join(temp_dir, "allow_elixir.stem")
-
-      File.write!(config_file, ~s({"allow_elixir_expressions":true}))
-      File.write!(template_file, "{{1 + 1}}")
-
-      original_cwd = System.get_env("EXBAR_CWD")
-      System.put_env("EXBAR_CWD", temp_dir)
-
-      try do
-        quoted = Stem.compile_file(template_file)
-        {result, _} = Code.eval_quoted(quoted, assigns: [], transformers: %{})
-        assert result == "2"
-      after
-        if original_cwd do
-          System.put_env("EXBAR_CWD", original_cwd)
-        else
-          System.delete_env("EXBAR_CWD")
-        end
-
-        File.rm_rf!(temp_dir)
-      end
-    end
   end
 
   describe "runtime evaluation" do

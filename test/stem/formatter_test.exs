@@ -33,8 +33,8 @@ defmodule Stem.FormatterTest do
   end
 
   test "formats pipeline expressions canonically" do
-    assert Stem.Formatter.format_string("{{  user.name  |> trim |> truncate( 20 )  }}") ==
-             "{{user.name |> trim |> truncate(20)}}"
+    assert Stem.Formatter.format_string("{{  user.name  | trim | truncate 20  }}") ==
+             "{{user.name | trim | truncate 20}}"
   end
 
   test "canonicalises nil to null and keeps null" do
@@ -43,14 +43,14 @@ defmodule Stem.FormatterTest do
   end
 
   test "raises on invalid pipeline expressions" do
-    assert_raise ArgumentError, ~r/pipeline stages must be helper names/, fn ->
-      Stem.Formatter.format_string("{{name |> String.trim()}}")
+    assert_raise ArgumentError, ~r/pipeline stage/, fn ->
+      Stem.Formatter.format_string("{{name | String.trim()}}")
     end
   end
 
   test "raises on an invalid expression inside a raw triple-stash tag" do
-    assert_raise ArgumentError, ~r/pipeline stages must be helper names/, fn ->
-      Stem.Formatter.format_string("{{{name |> String.trim()}}}")
+    assert_raise ArgumentError, ~r/pipeline stage/, fn ->
+      Stem.Formatter.format_string("{{{name | String.trim()}}}")
     end
   end
 
@@ -81,8 +81,8 @@ defmodule Stem.FormatterTest do
   end
 
   test "formats pipelines inside raw triple-stash tags" do
-    assert Stem.Formatter.format_string("{{{ name |> trim |> upcase }}}") ==
-             "{{{name |> trim |> upcase}}}"
+    assert Stem.Formatter.format_string("{{{ name | trim | upcase }}}") ==
+             "{{{name | trim | upcase}}}"
   end
 
   test "leaves escaped and raw tags side by side intact" do
