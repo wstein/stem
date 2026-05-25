@@ -2,152 +2,49 @@
 <h1>Stem Transformers <span>reference · all results rendered live</span></h1>
 <div class="sheet">
 
-  <!-- ── MINIMUM ─────────────────────────────── -->
+  <!-- ── DEFAULT ─────────────────────────────── -->
   <div class="group">
     <div class="group-head" style="border-left: 3px solid #6b7280">
       <span class="dot" style="background:#6b7280"></span>
-      <h2>minimum</h2>
+      <h2>default</h2>
       <span class="badge" style="background:#6b72201a;color:#6b7280">always on</span>
     </div>
     <table>
-      <tr>
-        <td class="col-name name"><code>escape_html</code></td>
         <td class="col-expr expr"><code>{{ unsafe }} |> escape_html</code></td>
-        <td class="col-result result"><code>{{ unsafe |> escape_html }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>escape_json</code></td>
         <td class="expr"><code>{{ quote }} |> escape_json</code></td>
-        <td class="result"><code>{{ quote |> escape_json }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>json</code></td>
         <td class="expr"><code>fruits |> take(3) |> json</code></td>
-        <td class="result"><code>{{ fruits |> take(3) |> json }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>inspect</code></td>
         <td class="expr"><code>fruits |> take(3) |> inspect</code></td>
-        <td class="result"><code>{{ fruits |> take(3) |> inspect }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>default</code></td>
         <td class="expr"><code>missing |> default("N/A")</code></td>
-        <td class="result"><code>{{ missing |> default("N/A") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>join</code></td>
         <td class="expr"><code>fruits |> take(3) |> join(", ")</code></td>
-        <td class="result"><code>{{ fruits |> take(3) |> join(", ") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>log</code></td>
         <td class="expr"><code>title |> log</code></td>
-        <td class="result"><em>→ "" (logs to host stderr)</em></td>
-      </tr>
-    </table>
-  </div>
-
-  <!-- ── INSPECT ─────────────────────────────── -->
-  <div class="group">
-    <div class="group-head" style="border-left: 3px solid #22c55e">
-      <span class="dot" style="background:#22c55e"></span>
-      <h2>inspect</h2>
-      <span class="badge" style="background:#22c55e1a;color:#15803d">read-only · O(n)</span>
-    </div>
-    <table>
-      <tr>
-        <td class="col-name name"><code>first</code></td>
-        <td class="col-expr expr"><code>fruits |> first</code></td>
-        <td class="col-result result"><code>{{ fruits |> first }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>last</code></td>
+        <td class="expr"><code>fruits |> first</code></td>
         <td class="expr"><code>fruits |> last</code></td>
-        <td class="result"><code>{{ fruits |> last }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>len</code></td>
         <td class="expr"><code>fruits |> len</code></td>
-        <td class="result"><code>{{ fruits |> len }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>lookup</code></td>
         <td class="expr"><code>config |> lookup("host")</code></td>
-        <td class="result"><code>{{ config |> lookup("host") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>lookup</code></td>
         <td class="expr"><code>fruits |> lookup(2)</code></td>
-        <td class="result"><code>{{ fruits |> lookup(2) }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>contains</code></td>
         <td class="expr"><code>fruits |> contains("apple")</code></td>
-        <td class="result"><code>{{ fruits |> contains("apple") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>starts_with</code></td>
         <td class="expr"><code>title |> starts_with("the")</code></td>
-        <td class="result"><code>{{ title |> starts_with("the") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>ends_with</code></td>
         <td class="expr"><code>title |> ends_with("fox")</code></td>
-        <td class="result"><code>{{ title |> ends_with("fox") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>empty?</code></td>
         <td class="expr"><code>missing |> empty?</code></td>
-        <td class="result"><code>{{ missing |> empty? }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>present?</code></td>
         <td class="expr"><code>present |> present?</code></td>
-        <td class="result"><code>{{ present |> present? }}</code></td>
-      </tr>
-    </table>
+      table>
   </div>
 
   <!-- ── FORMAT ──────────────────────────────── -->
   <div class="group">
-    <div class="group-head" style="border-left: 3px solid #eab308">
-      <span class="dot" style="background:#eab308"></span>
+    <div class="group-head" style="border-left: 3px solid #22c55e">
+      <span class="dot" style="background:#22c55e"></span>
       <h2>format</h2>
-      <span class="badge" style="background:#eab3081a;color:#854d0e">atomic value transforms</span>
+      <span class="badge" style="background:#22c55e1a;color:#15803d">low risk · atomic value transforms</span>
     </div>
     <table>
-      <tr>
-        <td class="col-name name"><code>upcase</code></td>
         <td class="col-expr expr"><code>title |> upcase</code></td>
-        <td class="col-result result"><code>{{ title |> upcase }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>downcase</code></td>
         <td class="expr"><code>blurb |> downcase</code></td>
-        <td class="result"><code>{{ blurb |> downcase }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>capitalize</code></td>
         <td class="expr"><code>title |> capitalize</code></td>
-        <td class="result"><code>{{ title |> capitalize }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>trim</code></td>
         <td class="expr"><code>str |> trim</code></td>
-        <td class="result"><code>{{ str |> trim }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>truncate</code></td>
         <td class="expr"><code>blurb |> truncate(20, "…")</code></td>
-        <td class="result"><code>{{ blurb |> truncate(20, "…") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>replace</code></td>
         <td class="expr"><code>title |> replace("quick", "lazy")</code></td>
-        <td class="result"><code>{{ title |> replace("quick", "lazy") }}</code></td>
-      </tr>
-    </table>
+      table>
   </div>
 
   <!-- ── TRANSFORM ───────────────────────────── -->
@@ -155,70 +52,22 @@
     <div class="group-head" style="border-left: 3px solid #f59e0b">
       <span class="dot" style="background:#f59e0b"></span>
       <h2>transform</h2>
-      <span class="badge" style="background:#f59e0b1a;color:#92400e">structural · may iterate</span>
+      <span class="badge" style="background:#f59e0b1a;color:#92400e">moderate risk · structural · may iterate</span>
     </div>
     <table>
-      <tr>
-        <td class="col-name name"><code>take</code></td>
         <td class="col-expr expr"><code>fruits |> take(3) |> join(", ")</code></td>
-        <td class="col-result result"><code>{{ fruits |> take(3) |> join(", ") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>drop</code></td>
         <td class="expr"><code>fruits |> drop(3) |> join(", ")</code></td>
-        <td class="result"><code>{{ fruits |> drop(3) |> join(", ") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>slice</code></td>
         <td class="expr"><code>fruits |> slice(1, 3) |> join(", ")</code></td>
-        <td class="result"><code>{{ fruits |> slice(1, 3) |> join(", ") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>reverse</code></td>
         <td class="expr"><code>fruits |> take(4) |> reverse |> join(", ")</code></td>
-        <td class="result"><code>{{ fruits |> take(4) |> reverse |> join(", ") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>sort</code></td>
         <td class="expr"><code>fruits |> sort |> join(", ")</code></td>
-        <td class="result"><code>{{ fruits |> sort |> join(", ") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>sort_by</code></td>
         <td class="expr"><code>people |> sort_by("age") |> map("name") |> join(", ")</code></td>
-        <td class="result"><code>{{ people |> sort_by("age") |> map("name") |> join(", ") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>map</code></td>
         <td class="expr"><code>people |> map("name") |> join(", ")</code></td>
-        <td class="result"><code>{{ people |> map("name") |> join(", ") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>filter</code></td>
         <td class="expr"><code>people |> filter("lead") |> map("name") |> join(", ")</code></td>
-        <td class="result"><code>{{ people |> filter("lead") |> map("name") |> join(", ") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>compact</code></td>
         <td class="expr"><code>sparse |> compact |> join(", ")</code></td>
-        <td class="result"><code>{{ sparse |> compact |> join(", ") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>uniq</code></td>
         <td class="expr"><code>fruits |> uniq |> sort |> join(", ")</code></td>
-        <td class="result"><code>{{ fruits |> uniq |> sort |> join(", ") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>flatten</code></td>
         <td class="expr"><code>nested |> flatten |> join(", ")</code></td>
-        <td class="result"><code>{{ nested |> flatten |> join(", ") }}</code></td>
-      </tr>
-      <tr>
-        <td class="name"><code>group_by</code></td>
         <td class="expr"><code>people |> group_by("dept") |> json</code></td>
-        <td class="result"><code>{{ people |> group_by("dept") |> json }}</code></td>
-      </tr>
-    </table>
+      table>
   </div>
 
 </div>

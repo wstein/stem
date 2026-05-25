@@ -94,7 +94,7 @@ pub fn custom_transformers(call: &TransformerCall) -> Option<Value> {
 /// capability groups plus the custom transformer host.
 pub fn options() -> RenderOptions {
     RenderOptions::new()
-        .with_groups([Group::Inspect, Group::Format, Group::Transform])
+        .with_groups([Group::Format, Group::Transform])
         .with_host(Host {
             transform: custom_transformers,
             transformer_names: CUSTOM_NAMES,

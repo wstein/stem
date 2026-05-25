@@ -288,29 +288,31 @@ pub fn handle_with_host(raw: &str, host: &Host) -> String {
 // agree.
 
 /// A capability group of built-in transformers, loaded via [`RenderOptions`].
-/// The Minimum group is always available and needs no opt-in. Groups are
-/// ordered by risk: Inspect (read-only) < Format (value transforms) <
-/// Transform (structural/iterative). Mirrors `Stem.Transformers.groups/0`.
+/// The Minimum group (and its Inspect alias) is always available and needs no
+/// opt-in. Groups are ordered by risk: Default (read-only) < Format (value
+/// transforms) < Transform (structural/iterative). Mirrors
+/// `Stem.Transformers.groups/0`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Group {
-    /// Read-only inspection: `first`, `lookup`, slicing, predicates, `len`, `last`. Bounded O(n), no mutation.
+    /// Alias for Minimum — inspect ops (first, lookup, predicates, len, last)
+    /// are part of the default group and need no opt-in.
     Inspect,
     /// Value transforms: case, trim, truncate, replace. Bounded by string length.
     Format,
     /// Structural transforms: map, filter, sort, group_by, flatten, … May iterate unboundedly.
     Transform,
     I18n,
-    /// The Minimum + Inspect + Format convenience bundle.
+    /// The Minimum + Format convenience bundle.
     Standard,
 }
 
 fn group_bit(group: Group) -> u8 {
     match group {
-        Group::Inspect    => GROUP_INSPECT,
+        Group::Inspect    => GROUP_MINIMUM,  // merged into default
         Group::Format     => GROUP_FORMAT,
         Group::Transform  => GROUP_TRANSFORM,
         Group::I18n       => GROUP_I18N,
-        Group::Standard   => GROUP_MINIMUM | GROUP_INSPECT | GROUP_FORMAT,
+        Group::Standard   => GROUP_MINIMUM | GROUP_FORMAT,
     }
 }
 
@@ -580,31 +582,30 @@ const SUPPORTED_ESCAPES: &[&str] = &["none", "html", "xml", "json"];
 
 // ── Capability groups (mirror Stem.Transformers.groups/0) ───────────────────
 //
-// Minimum is the always-on floor; Strings, Collections, Predicates, and I18n
-// are opt-in via the request "transformers" list. A built-in transformer is
-// callable only when one of the groups that provide it is enabled, so an
-// untrusted template can never reach a more powerful transformer than the
-// caller loaded — the same secure-by-default model as the BEAM dispatcher.
+// Minimum is the always-on floor; Format, Transform, and I18n are opt-in via
+// the request "transformers" list. Inspect ops (read-only, O(n) bounded) are
+// merged into Minimum — they need no opt-in. A built-in transformer is
+// callable only when the group that provides it is enabled, so an untrusted
+// template can never reach a more powerful transformer than the caller loaded —
+// the same secure-by-default model as the BEAM dispatcher.
 const GROUP_MINIMUM:   u8 = 1 << 0;
-const GROUP_INSPECT:   u8 = 1 << 1;
 const GROUP_FORMAT:    u8 = 1 << 2;
 const GROUP_TRANSFORM: u8 = 1 << 3;
 const GROUP_I18N:      u8 = 1 << 4;
 
 // Resolve the enabled-group set from the request's group names. Minimum is
 // always included; unknown names are ignored. Legacy names ("strings",
-// "collections", "predicates") are accepted as aliases for the new risk-based
-// names for backward compatibility with stored URL state.
+// "collections", "predicates", "inspect") are accepted as aliases for backward
+// compatibility with stored URL state.
 fn parse_groups(names: &[String]) -> u8 {
     let mut set = GROUP_MINIMUM;
     for name in names {
         set |= match name.as_str() {
-            "minimum"                       => GROUP_MINIMUM,
-            "inspect" | "predicates"        => GROUP_INSPECT,
-            "format"  | "strings"           => GROUP_FORMAT,
-            "transform" | "collections"     => GROUP_TRANSFORM,
-            "i18n"                          => GROUP_I18N,
-            "standard"                      => GROUP_MINIMUM | GROUP_INSPECT | GROUP_FORMAT,
+            "minimum" | "inspect" | "predicates" => GROUP_MINIMUM,
+            "format"  | "strings"                => GROUP_FORMAT,
+            "transform" | "collections"          => GROUP_TRANSFORM,
+            "i18n"                               => GROUP_I18N,
+            "standard"                           => GROUP_MINIMUM | GROUP_FORMAT,
             _ => 0,
         };
     }
@@ -612,17 +613,15 @@ fn parse_groups(names: &[String]) -> u8 {
 }
 
 // The capability group that provides a built-in transformer, or `None` if the
-// name is not a native built-in. Groups are now risk-based: inspect (read-only
-// bounded ops), format (value transforms), transform (structural/iterative ops).
-// Kept in sync with the match arms in `call`.
+// name is not a native built-in. Inspect ops (read-only, O(n)) are part of
+// the default (minimum) group; format and transform are opt-in. Kept in sync
+// with the match arms in `call`.
 fn builtin_groups(name: &str) -> Option<u8> {
     Some(match name {
-        // core — always on: escaping, encoding, essential output ops
-        "escape_html" | "escape_json" | "json" | "inspect" | "default" | "join"
-        | "log" => GROUP_MINIMUM,
-        // inspect — read-only access, no structural change
-        "first" | "lookup" | "starts_with" | "ends_with" | "contains"
-        | "empty?" | "present?" | "len" | "last" => GROUP_INSPECT,
+        // default — always on: escaping, encoding, read-only inspect ops
+        "escape_html" | "escape_json" | "json" | "inspect" | "default" | "join" | "log"
+        | "first" | "lookup" | "starts_with" | "ends_with" | "contains"
+        | "empty?" | "present?" | "len" | "last" => GROUP_MINIMUM,
         // format — atomic value transforms, bounded by string length
         "trim" | "upcase" | "downcase" | "capitalize" | "truncate" | "replace" => GROUP_FORMAT,
         // transform — structural/iterative, may loop, potential DoS
@@ -643,8 +642,7 @@ fn is_i18n_transformer(name: &str) -> bool {
 // Group names in a bitset, joined with " or " for the unloaded-group message.
 fn group_phrase(set: u8) -> String {
     [
-        (GROUP_MINIMUM, "minimum"),
-        (GROUP_INSPECT, "inspect"),
+        (GROUP_MINIMUM, "default"),
         (GROUP_FORMAT, "format"),
         (GROUP_TRANSFORM, "transform"),
         (GROUP_I18N, "i18n"),
@@ -2125,18 +2123,19 @@ mod guard_tests {
     }
 
     #[test]
-    fn inspect_group_enables_first_and_lookup() {
-        // `first` and `lookup` are in the inspect group.
+    fn inspect_ops_are_in_the_default_group() {
+        // `first`, `lookup`, and friends are merged into the default (minimum)
+        // group — they need no opt-in and are never refused.
         let program = json!([{
             "t": "emit",
             "value": { "t": "call", "name": "first", "args": [{ "t": "assign", "name": "xs" }], "kwargs": {} },
             "escape": "html"
         }]);
         let data = json!({ "xs": ["a", "b"] });
-        // inspect group enables it:
-        assert_eq!(render_groups(program.clone(), data.clone(), &["inspect"]), "a");
-        // format and transform alone do not:
-        assert!(render_groups(program, data, &["format"]).contains("requires the inspect capability group"));
+        // Works with minimum-only (no extra groups):
+        assert_eq!(render_groups(program.clone(), data.clone(), &[]), "a");
+        // "inspect" still accepted as a backward-compat alias:
+        assert_eq!(render_groups(program, data, &["inspect"]), "a");
     }
 
     fn render_if(data: Value) -> String {

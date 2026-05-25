@@ -589,9 +589,10 @@
             <div class="pane-controls" style="display:flex;align-items:center;gap:8px;font-size:11px">
               <span class="field-label" style="font-size:11px" title="Transformer capability groups — controls which built-in transformers the template may use">Groups</span>
               <span id="caps-select" role="group" aria-label="Capability groups" style="display:inline-flex;gap:8px;align-items:center;font-size:11px">
-                <label data-group="minimum" style="opacity:.55;cursor:default"><input type="checkbox" checked disabled> <span class="grp-dot" style="color:#6b7280">●</span> minimum</label>
-                <label data-group="inspect"><input type="checkbox" class="cap" value="inspect"> <span class="grp-dot" style="color:#22c55e">●</span> inspect</label>
-                <label data-group="format"><input type="checkbox" class="cap" value="format"> <span class="grp-dot" style="color:#eab308">●</span> format</label>
+                <label data-group="default" style="opacity:.55;cursor:default"><input type="checkbox" checked disabled> <span
+                    class="grp-dot" style="color:#6b7280">●</span> default</label>
+                <label data-group="format"><input type="checkbox" class="cap" value="format"> <span class="grp-dot"
+                    style="color:#22c55e">●</span> format</label>
                 <label data-group="transform"><input type="checkbox" class="cap" value="transform"> <span class="grp-dot" style="color:#f59e0b">●</span> transform</label>
                 <span style="border-left:1px solid var(--border);height:12px;margin:0 2px"></span>
                 <label data-group="eval"><input type="checkbox" class="cap" value="eval"> <span class="grp-dot" style="color:#a855f7">●</span> eval</label>
@@ -742,10 +743,10 @@
       let outputView   = "rendered";  // "rendered" | "source"
       let escapeMode   = "";
       // Opt-in capability groups loaded for rendering (Minimum is always on).
-      // Groups are risk-based: inspect (read-only), format (value transforms),
-      // transform (structural/iterative). Examples declare their own required
-      // groups; the initial page state has none enabled beyond minimum.
-      const DEFAULT_GROUPS = ["inspect", "format", "transform"];
+      // Groups are risk-based: format (low — value transforms),
+      // transform (moderate — structural/iterative). Default group is always on.
+      // Examples declare their own required groups; fresh page state has none enabled.
+      const DEFAULT_GROUPS = ["format", "transform"];
       let groups       = [];
       let focusMode    = null;
       let templateDiagnostics = [];
@@ -758,31 +759,26 @@
       let transformDirty = false;
 
       const GROUP_META = {
-        minimum: {
-          risk: "core", color: "#6b7280",
+        default: {
+          risk: "always", color: "#6b7280",
           sections: [
-            { label: "Escaping", items: [["escape_html"],["escape_json"]] },
-            { label: "Encoding", items: [["inspect"],["json"]] },
-            { label: "Utility",  items: [["default"],["join"],["log"]] },
-          ]
-        },
-        inspect: {
-          risk: "low", color: "#22c55e",
-          sections: [
+            { label: "Escaping",   items: [["escape_html"],["escape_json"]] },
+            { label: "Encoding",   items: [["inspect"],["json"]] },
+            { label: "Utility",   items: [["default"],["join"],["log"]] },
             { label: "Access",     items: [["first"],["last"],["lookup"]] },
             { label: "Predicates", items: [["contains"],["empty?"],["len"],["present?"]] },
             { label: "Strings",    items: [["ends_with"],["starts_with"]] },
           ]
         },
         format: {
-          risk: "mild", color: "#eab308",
+           risk: "low", color: "#22c55e",
           sections: [
             { label: "Case",    items: [["capitalize"],["downcase"],["upcase"]] },
             { label: "Shaping", items: [["replace"],["trim"],["truncate"]] },
           ]
         },
         transform: {
-          risk: "moderate", color: "#f59e0b",
+            risk: "medium", color: "#f59e0b",
           sections: [
             { label: "Sequences",  items: [["drop"],["reverse"],["slice"],["split"],["take"]] },
             { label: "Cleanup",    items: [["compact"],["flatten"],["uniq"]] },
@@ -1862,9 +1858,11 @@
           showDataTab();
           escapeMode = s.e ?? "";
           byId("escape-select").value = escapeMode;
-          const OLD_GROUP_NAMES = { strings: "inspect", collections: "transform", predicates: "inspect" };
+          // "strings"/"predicates" were old names for inspect (now always-on, drop from list).
+          // "inspect" itself is also always-on now. "collections" → "transform".
+          const OLD_GROUP_NAMES = { strings: null, predicates: null, inspect: null, collections: "transform" };
           groups = Array.isArray(s.g)
-            ? [...new Set(s.g.map(g => OLD_GROUP_NAMES[g] ?? g))]
+            ? [...new Set(s.g.map(g => OLD_GROUP_NAMES[g] ?? g).filter(Boolean))]
             : [...DEFAULT_GROUPS];
           syncCapsUI();
           loadedExampleIdx = -1;
