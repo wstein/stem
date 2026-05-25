@@ -201,6 +201,45 @@ fn tokenize(src: &str) -> Result<Vec<Token>, CompileError> {
         text.push_str(&src[i..i + rel]);
         let start = i + rel;
 
+        // Backslash escaping: N trailing backslashes before {{.
+        // Odd N → floor(N/2) literal backslashes + literal {{inner}}; even N → N/2 backslashes + evaluate.
+        let n = text.as_bytes().iter().rev().take_while(|&&b| b == b'\\').count();
+        if n > 0 {
+            let pairs = n / 2;
+            text.truncate(text.len() - n + pairs);
+            if n % 2 == 1 {
+                text.push_str("{{");
+                i = start + 2;
+                continue;
+            }
+            // Even: collapsed backslashes in text, fall through to normal {{ processing.
+        }
+
+        // 4-brace raw block: {{{{raw}}}}...{{{{/raw}}}} — content emitted verbatim.
+        if src[start..].starts_with("{{{{") {
+            if !src[start..].starts_with("{{{{raw}}}}") {
+                return Err(CompileError {
+                    message: "unrecognized `{{{{` block — only `{{{{raw}}}}` is supported"
+                        .to_string(),
+                    start,
+                    end: src[start..]
+                        .find("}}}}")
+                        .map_or(src.len(), |r| start + r + 4),
+                });
+            }
+            const RAW_CLOSE: &str = "{{{{/raw}}}}";
+            let content_start = start + "{{{{raw}}}}".len();
+            let content_len = src[content_start..].find(RAW_CLOSE).ok_or_else(|| CompileError {
+                message: "unclosed `{{{{raw}}}}` block — missing `{{{{/raw}}}}`".to_string(),
+                start,
+                end: src.len(),
+            })?;
+            let raw_text = &src[content_start..content_start + content_len];
+            text.push_str(raw_text);
+            i = content_start + content_len + RAW_CLOSE.len();
+            continue;
+        }
+
         // Comments (`{{! .. }}`, `{{!-- .. --}}`) are dropped without flushing
         // the text buffer, so surrounding text merges and a pending trim marker
         // carries across them, exactly like the BEAM tokenizer.
@@ -1978,5 +2017,40 @@ mod tests {
             .message
             .contains("unexpected closing"));
         assert_eq!(wire("Hi {{name").unwrap_err().start, 3);
+    }
+
+    #[test]
+    fn backslash_escape() {
+        // N=1 (odd): 0 literal backslashes + literal tag
+        assert_wire(
+            r"\{{name}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"{{name}}"}]}"#,
+        );
+        assert_wire(
+            r"before \{{name}} after",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"before {{name}} after"}]}"#,
+        );
+        // N=2 (even): 1 literal backslash + tag evaluates
+        assert_wire(
+            r"\\{{name}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"\\"},{"escape":"html","t":"emit","value":{"name":"name","t":"assign"}}]}"#,
+        );
+        // N=3 (odd): 1 literal backslash + literal tag
+        assert_wire(
+            r"\\\{{name}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"\\{{name}}"}]}"#,
+        );
+    }
+
+    #[test]
+    fn raw_block() {
+        assert_wire(
+            "{{{{raw}}}}{{name}}{{{{/raw}}}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"{{name}}"}]}"#,
+        );
+        assert_wire(
+            "before{{{{raw}}}}{{name}}{{{{/raw}}}}after",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"before{{name}}after"}]}"#,
+        );
     }
 }

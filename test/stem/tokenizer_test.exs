@@ -191,4 +191,46 @@ defmodule Stem.LexerTest do
   test "trim-left at start of string does not crash on empty acc" do
     assert [{:expr, "name", :default, %{line: 1, column: 1}}, {:eof, _}] = tokens("{{~name}}")
   end
+
+  test "backslash escapes a mustache expression as literal text" do
+    assert tokens(~S[\{{name}}]) == [
+             {:text, "{{name}}", %{line: 1, column: 1}},
+             {:eof, %{line: 1, column: 10}}
+           ]
+  end
+
+  test "backslash escape merges with surrounding text" do
+    assert [{:text, "before {{name}} after", _}, {:eof, _}] =
+             tokens(~S[before \{{name}} after])
+  end
+
+  test "double backslash emits one literal backslash and evaluates the tag" do
+    assert [
+             {:text, "\\", %{line: 1, column: 1}},
+             {:expr, "name", :default, _},
+             {:eof, _}
+           ] = tokens(~S[\\{{name}}])
+  end
+
+  test "triple backslash emits one literal backslash and escapes the tag" do
+    assert [{:text, "\\{{name}}", %{line: 1, column: 1}}, {:eof, _}] =
+             tokens(~S[\\\{{name}}])
+  end
+
+  test "raw block emits its content verbatim" do
+    assert tokens("{{{{raw}}}}{{name}}{{{{/raw}}}}") == [
+             {:text, "{{name}}", %{line: 1, column: 1}},
+             {:eof, %{line: 1, column: 32}}
+           ]
+  end
+
+  test "raw block merges with surrounding text" do
+    assert [{:text, "before{{name}}after", _}, {:eof, _}] =
+             tokens("before{{{{raw}}}}{{name}}{{{{/raw}}}}after")
+  end
+
+  test "unclosed raw block is a tokenizer error" do
+    assert {:error, "expected closing '{{{{/raw}}}}' for raw block", _} =
+             Parser.tokenize("{{{{raw}}}}no close")
+  end
 end
