@@ -164,19 +164,16 @@ struct Ctx {
     key: Value,
     in_each: bool,
     locals: HashMap<String, Value>,
-    resolve: GetterResolver,
     transform: TransformerResolver,
     groups: u8,
 }
 
-/// What a Rust embedder supplies to extend the engine: computed getters and
-/// custom transformers. Both are inert by default (the C ABI / browser use
-/// [`Host::default`]), so the shipped engine ships neither — the analogue of the
-/// BEAM, whose getters and `transformers:` binding are the caller's business.
+/// What a Rust embedder supplies to extend the engine: custom transformers.
+/// Inert by default (the C ABI / browser use [`Host::default`]), so the shipped
+/// engine ships none — the analogue of the BEAM, whose `transformers:` binding
+/// is the caller's business.
 #[derive(Clone, Copy)]
 pub struct Host {
-    /// Resolves `{"$getter": "name"}` data fields. See [`GetterResolver`].
-    pub getter: GetterResolver,
     /// Resolves custom transformer calls. See [`TransformerResolver`].
     pub transform: TransformerResolver,
     /// The transformer names `transform` handles. Declared up front so the
@@ -189,35 +186,20 @@ pub struct Host {
 impl Default for Host {
     fn default() -> Self {
         Host {
-            getter: no_getters,
             transform: no_transformers,
             transformer_names: &[],
         }
     }
 }
 
-/// Renders a JSON request with no host extensions: `{"$getter": ...}` fields are
-/// inert (null) and only built-in transformers are available. This is the entry
-/// the C ABI (and thus the browser) uses.
+/// Renders a JSON request with no host extensions: only built-in transformers
+/// are available. This is the entry the C ABI (and thus the browser) uses.
 pub fn handle(raw: &str) -> String {
     handle_with_host(raw, &Host::default())
 }
 
-/// Like [`handle`], but a Rust embedder supplies a [`GetterResolver`] for
-/// `{"$getter": "name"}` fields. Convenience for the common getters-only case;
-/// see [`handle_with_host`] for the full extension surface.
-pub fn handle_with_getters(raw: &str, resolve: GetterResolver) -> String {
-    handle_with_host(
-        raw,
-        &Host {
-            getter: resolve,
-            ..Host::default()
-        },
-    )
-}
-
-/// Renders a JSON request with a full [`Host`]: computed getters and custom
-/// transformers both supplied by the embedder.
+/// Renders a JSON request with a full [`Host`]: custom transformers supplied by
+/// the embedder.
 ///
 /// Total: malformed input yields a distinguishable error string rather than a
 /// panic or process exit. `{"batch": [{program, data}, ...]}` renders many
@@ -321,8 +303,8 @@ fn group_bit(group: Group) -> u8 {
 }
 
 /// Per-render configuration: which capability groups are loaded and which
-/// [`Host`] extensions (getters, custom transformers) are available. Minimum is
-/// always on; everything else is opt-in, secure by default.
+/// [`Host`] extensions (custom transformers) are available. Minimum is always
+/// on; everything else is opt-in, secure by default.
 #[derive(Clone, Copy)]
 pub struct RenderOptions {
     groups: u8,
@@ -358,7 +340,7 @@ impl RenderOptions {
         self
     }
 
-    /// Supply host getters and custom transformers (chainable).
+    /// Supply host custom transformers (chainable).
     pub fn with_host(mut self, host: Host) -> Self {
         self.host = host;
         self
@@ -432,7 +414,7 @@ impl Program {
 // and returning JS values directly (serde-wasm-bindgen converts JsValue ↔
 // serde_json::Value) — no hand-rolled JSON-string marshalling through linear
 // memory. The WASI conformance bin (`main.rs`) and the JSON `handle*` Elixir seam
-// are unaffected; the browser ships no host getters/transformers, as before.
+// are unaffected; the browser ships no host transformers, as before.
 #[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 mod wasm {
     use crate::{
@@ -551,7 +533,6 @@ fn root_ctx(data: &Value, host: &Host, groups: u8) -> Ctx {
         key: Value::Null,
         in_each: false,
         locals: HashMap::new(),
-        resolve: host.getter,
         transform: host.transform,
         groups,
     }
@@ -906,7 +887,6 @@ fn scope_context(ctx: &Ctx, base: &Op, hash: &HashMap<String, Op>) -> Ctx {
         key: Value::Null,
         in_each: false,
         locals: HashMap::new(),
-        resolve: ctx.resolve,
         transform: ctx.transform,
         groups: ctx.groups,
     }
@@ -945,7 +925,6 @@ fn each_context(ctx: &Ctx, params: &[String], current: Value, key: Value, index:
         key,
         in_each: true,
         locals,
-        resolve: ctx.resolve,
         transform: ctx.transform,
         groups: ctx.groups,
     }
@@ -972,7 +951,6 @@ fn clone_ctx(ctx: &Ctx) -> Ctx {
         key: ctx.key.clone(),
         in_each: ctx.in_each,
         locals: ctx.locals.clone(),
-        resolve: ctx.resolve,
         transform: ctx.transform,
         groups: ctx.groups,
     }
@@ -981,10 +959,7 @@ fn clone_ctx(ctx: &Ctx) -> Ctx {
 fn eval(op: &Op, ctx: &Ctx) -> Value {
     match op {
         Op::Lit { value } => value.clone(),
-        Op::Assign { name } => {
-            let fetched = ctx.root.get(name).cloned().unwrap_or(Value::Null);
-            resolve_getter(fetched, &ctx.root, ctx.resolve)
-        }
+        Op::Assign { name } => ctx.root.get(name).cloned().unwrap_or(Value::Null),
         Op::Local { name } => ctx.locals.get(name).cloned().unwrap_or(Value::Null),
         Op::Assigns => ctx.root.clone(),
         Op::This => ctx.this.clone(),
@@ -994,7 +969,7 @@ fn eval(op: &Op, ctx: &Ctx) -> Value {
         Op::Get { base, segments } => {
             let mut value = eval(base, ctx);
             for segment in segments {
-                value = get_field(&value, segment, ctx.resolve);
+                value = get_field(&value, segment);
             }
             value
         }
@@ -1048,53 +1023,13 @@ fn eval(op: &Op, ctx: &Ctx) -> Value {
     }
 }
 
-fn get_field(value: &Value, segment: &str, resolve: GetterResolver) -> Value {
+fn get_field(value: &Value, segment: &str) -> Value {
     match value {
-        Value::Object(map) => {
-            let fetched = map.get(segment).cloned().unwrap_or(Value::Null);
-            resolve_getter(fetched, value, resolve)
-        }
+        Value::Object(map) => map.get(segment).cloned().unwrap_or(Value::Null),
         _ => Value::Null,
     }
 }
 
-// ── Per-host computed getters ────────────────────────────────────────────────
-//
-// A field whose wire value is the sentinel `{"$getter": "name"}` is *computed*:
-// the engine hands `name` and the field's parent object (the ST4 "self") to a
-// host-supplied `GetterResolver` and renders its result. This is the native
-// analogue of the BEAM backend's zero-arity assign getters.
-//
-// The engine ships **no** getters: getter logic is the embedder's business and
-// is never part of the library or the wire. Only the field marker is data, and
-// it is inert under the default resolver ([`no_getters`], used by [`handle`] and
-// the C ABI). A Rust embedder supplies getters via [`handle_with_getters`].
-// Because the logic lives in the host, this has no cross-backend byte-parity and
-// stays out of the conformance corpus; it is covered by the tests below.
-
-const GETTER_SENTINEL: &str = "$getter";
-
-/// Resolves `{"$getter": "name"}` fields: given the getter name and the parent
-/// object as its "self", returns the computed value.
-pub type GetterResolver = fn(&str, &Value) -> Value;
-
-/// The default resolver: no getters. A `$getter` field resolves to null.
-pub fn no_getters(_name: &str, _parent: &Value) -> Value {
-    Value::Null
-}
-
-// If `value` is a getter sentinel, delegate to the host resolver with `parent`
-// as "self"; otherwise return it unchanged.
-fn resolve_getter(value: Value, parent: &Value, resolve: GetterResolver) -> Value {
-    if let Value::Object(map) = &value {
-        if map.len() == 1 {
-            if let Some(Value::String(name)) = map.get(GETTER_SENTINEL) {
-                return resolve(name, parent);
-            }
-        }
-    }
-    value
-}
 
 // ── Per-host custom transformers ─────────────────────────────────────────────
 //
@@ -1802,155 +1737,6 @@ mod typed_api_tests {
 
         assert_eq!(typed, json_out);
         assert_eq!(typed, "a, b / ADA");
-    }
-}
-
-#[cfg(test)]
-mod getter_tests {
-    use super::*;
-    use serde_json::json;
-
-    // Host getters live in the embedder's code, never the engine. These are the
-    // test embedder's: `full_name`/`initials` derived from the parent object.
-    fn demo_getters(name: &str, self_obj: &Value) -> Value {
-        let field = |key: &str| self_obj.get(key).map(to_string).unwrap_or_default();
-        match name {
-            "full_name" => Value::from(
-                format!("{} {}", field("first"), field("last"))
-                    .trim()
-                    .to_string(),
-            ),
-            "initials" => {
-                let initial = |key: &str| {
-                    field(key)
-                        .chars()
-                        .next()
-                        .map(|c| c.to_uppercase().to_string())
-                        .unwrap_or_default()
-                };
-                Value::from(format!("{}{}", initial("first"), initial("last")))
-            }
-            _ => Value::Null,
-        }
-    }
-
-    // Render through the default (no-getter) entry.
-    fn render(program: Value, data: Value) -> String {
-        let request = json!({ "program": { "instructions": program }, "data": data });
-        handle(&request.to_string())
-    }
-
-    // Render with a host getter resolver injected.
-    fn render_with(program: Value, data: Value, resolve: GetterResolver) -> String {
-        let request = json!({ "program": { "instructions": program }, "data": data });
-        handle_with_getters(&request.to_string(), resolve)
-    }
-
-    fn emit_assign(name: &str) -> Value {
-        json!([{ "t": "emit", "value": { "t": "assign", "name": name }, "escape": "html" }])
-    }
-
-    #[test]
-    fn default_path_ships_no_getters() {
-        // The C ABI / browser entry resolves `$getter` fields to null.
-        let out = render(
-            emit_assign("full_name"),
-            json!({ "first": "Ada", "last": "Lovelace", "full_name": { "$getter": "full_name" } }),
-        );
-        assert_eq!(out, "");
-    }
-
-    #[test]
-    fn top_level_getter_is_invoked_with_root_as_self() {
-        let out = render_with(
-            emit_assign("full_name"),
-            json!({ "first": "Ada", "last": "Lovelace", "full_name": { "$getter": "full_name" } }),
-            demo_getters,
-        );
-        assert_eq!(out, "Ada Lovelace");
-    }
-
-    #[test]
-    fn leaf_getter_receives_its_parent_object_as_self() {
-        let program = json!([{
-            "t": "emit",
-            "value": { "t": "get", "base": { "t": "assign", "name": "user" }, "segments": ["full_name"] },
-            "escape": "html"
-        }]);
-        let out = render_with(
-            program,
-            json!({ "user": { "first": "Grace", "last": "Hopper", "full_name": { "$getter": "full_name" } } }),
-            demo_getters,
-        );
-        assert_eq!(out, "Grace Hopper");
-    }
-
-    #[test]
-    fn getter_result_is_html_escaped_like_any_value() {
-        let out = render_with(
-            emit_assign("full_name"),
-            json!({ "first": "<b>", "last": "x", "full_name": { "$getter": "full_name" } }),
-            demo_getters,
-        );
-        assert_eq!(out, "&lt;b&gt; x");
-    }
-
-    #[test]
-    fn resolver_dispatches_distinct_getters() {
-        let out = render_with(
-            emit_assign("initials"),
-            json!({ "first": "ada", "last": "lovelace", "initials": { "$getter": "initials" } }),
-            demo_getters,
-        );
-        assert_eq!(out, "AL");
-    }
-
-    #[test]
-    fn unknown_getter_resolves_to_empty() {
-        let out = render_with(
-            emit_assign("mystery"),
-            json!({ "mystery": { "$getter": "no_such" } }),
-            demo_getters,
-        );
-        assert_eq!(out, "");
-    }
-
-    #[test]
-    fn getter_drives_block_truthiness() {
-        let program = json!([{
-            "t": "if",
-            "cond": { "t": "assign", "name": "full_name" },
-            "then": [{ "t": "text", "text": "Y" }],
-            "else": []
-        }]);
-        let on = render_with(
-            program.clone(),
-            json!({ "first": "A", "last": "B", "full_name": { "$getter": "full_name" } }),
-            demo_getters,
-        );
-        assert_eq!(on, "Y");
-
-        let off = render_with(
-            program,
-            json!({ "first": "", "last": "", "full_name": { "$getter": "full_name" } }),
-            demo_getters,
-        );
-        assert_eq!(off, "");
-    }
-
-    #[test]
-    fn plain_object_field_is_not_treated_as_a_getter() {
-        let program = json!([{
-            "t": "emit",
-            "value": { "t": "get", "base": { "t": "assign", "name": "user" }, "segments": ["name"] },
-            "escape": "html"
-        }]);
-        let out = render_with(
-            program,
-            json!({ "user": { "name": "plain" } }),
-            demo_getters,
-        );
-        assert_eq!(out, "plain");
     }
 }
 

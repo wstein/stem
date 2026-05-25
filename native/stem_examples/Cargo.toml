@@ -3,7 +3,7 @@
 name = "stem_examples"
 version = "0.0.1"
 edition = "2021"
-description = "Embedder examples for the stem_native engine: a compile-time macro and a dynamic-evaluation binary, both adding custom transformers via the host-getter hook."
+description = "Embedder examples for the stem_native engine: a compile-time macro and a dynamic-evaluation binary, both adding custom transformers via the host hook."
 publish = false
 
 [lib]
