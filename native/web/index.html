@@ -645,7 +645,7 @@
                 <option value="data">View Model</option>
               </select>
               <span class="field-label" id="out-lang-label" style="font-size:11px" hidden>Highlight</span>
-              <input id="out-lang-input" class="select" style="width:130px" list="out-lang-list" aria-label="Plain Text highlight language" title="Type to search ~140 languages" placeholder="Auto" autocomplete="off" hidden />
+              <input id="out-lang-input" class="select" style="width:130px" list="out-lang-list" aria-label="Plain Text highlight language" title="Type to search ~140 languages" placeholder="Plain text" autocomplete="off" hidden />
               <datalist id="out-lang-list"></datalist>
               <span class="field-label" style="font-size:11px">Escape</span>
               <select id="escape-select" class="select" aria-label="Escape mode">
@@ -943,8 +943,9 @@
             dataLangComp.of([yaml(), yamlHighlighting]),
             EditorView.updateListener.of((u) => {
               if (u.docChanged && !isProgrammatic(u)) {
-                if (dataTab === "transform") transformSrc = u.state.doc.toString();
-                else yamlSrc = u.state.doc.toString();
+                if (dataTab === "transform") { transformSrc = u.state.doc.toString(); transformDirty = true; }
+                else { yamlSrc = u.state.doc.toString(); yamlDirty = true; }
+                renderDataTabs();
                 scheduleRun();
               }
               if (u.selectionSet) updateStatusMeta();
@@ -1054,6 +1055,12 @@
             t.append(input);
           } else {
             t.append(document.createTextNode(i === 0 ? "main" : (tab.name || "(unnamed)")));
+            if (tab.dirty) {
+              const dirtyDot = document.createElement("span");
+              dirtyDot.style.cssText = "color:#f59e0b;font-size:8px;margin-left:3px;vertical-align:super";
+              dirtyDot.textContent = "●";
+              t.append(dirtyDot);
+            }
           }
 
           if (i !== 0) {
@@ -1086,20 +1093,25 @@
       function renderDataTabs() {
         const bar = byId("data-tabs");
         bar.innerHTML = "";
-        const mk = (name, label, badge) => {
+        const mk = (name, label, badge, dirty) => {
           const b = document.createElement("button");
           b.className = "data-tab" + (dataTab === name ? " active" : "");
-          const dot = document.createElement("span"); dot.className = "cell-dot";
-          b.append(dot, label);
+          b.append(label);
           if (badge) {
             const v = document.createElement("span"); v.className = "yaml-ver"; v.textContent = badge;
             b.append(v);
           }
+          if (dirty) {
+            const d = document.createElement("span");
+            d.style.cssText = "color:#f59e0b;font-size:8px;margin-left:3px;vertical-align:super";
+            d.textContent = "●";
+            b.append(d);
+          }
           b.addEventListener("click", () => selectDataTab(name));
           bar.append(b);
         };
-        mk("data", "data.yaml", "YAML 1.2");
-        mk("transform", "transform · JSONata");
+        mk("data", "data", "YAML 1.2", yamlDirty);
+        mk("transform", "transform · JSONata", null, transformDirty);
       }
 
       // Show the active data tab's source in the editor — YAML highlighting for
@@ -1135,7 +1147,7 @@
       function showActiveTab() {
         setEditorText(templateView, activeTab().source); // programmatic → no auto-run
         byId("sources-sub").textContent = activeTabIdx === 0
-          ? "entry template · compiled in-browser"
+          ? ""
           : `partial · referenced as {{> ${activeTab().name}}}`;
 
         renderTabs();
@@ -1209,6 +1221,14 @@
       // its grammar via desc.load() on first use (cached here), so the playground
       // stays light. (AsciiDoc has no CodeMirror grammar, so it is not listed.)
       let outLangChoice = "Auto";
+      let lastExView = "source"; // view kind of the last loaded example; survives markCustom()
+
+      function exViewLangName(view) {
+        return view === "markdown" ? "Markdown" : view === "rendered" ? "HTML" : "Plain text";
+      }
+      function updateLangPlaceholder() {
+        byId("out-lang-input").placeholder = exViewLangName(lastExView);
+      }
       const langCache = new Map(); // language name -> resolved Extension
 
       // Canonicalize a typed/picked value to "Auto", "Plain text", or a registry
@@ -1246,8 +1266,7 @@
         }
         if (outputView !== "source") return;
         if (outLangChoice === "Auto") {
-          const ex = examples[loadedExampleIdx];
-          const kind = ex ? ex.view : "rendered";
+          const kind = loadedExampleIdx !== -1 ? examples[loadedExampleIdx].view : lastExView;
           const ext = kind === "markdown" ? markdown() : kind === "source" ? [] : html();
           outputEditor.dispatch({ effects: outLangComp.reconfigure(ext) });
           return;
