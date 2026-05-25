@@ -199,10 +199,7 @@
         content: ""; position: absolute; left: 0; right: 0; top: 0;
         height: 2px; background: var(--accent);
       }
-      .tab.is-main::before {
-        content: ""; width: 6px; height: 6px; border-radius: 50%;
-        background: var(--accent); margin-right: 2px;
-      }
+      .tab.is-main::before { content: none; }
       .tab .close {
         width: 16px; height: 16px; display: grid; place-items: center;
         border-radius: 3px; color: var(--fg-faint); font-size: 12px; margin-left: 2px;
@@ -248,7 +245,6 @@
       .data-tab:hover { color: var(--fg-secondary); }
       .data-tab.active { color: var(--tok-key); background: var(--bg-pane); }
       .data-tab .yaml-ver { margin-left: 0; }
-      .cell-dot { width: 6px; height: 6px; border-radius: 2px; background: var(--tok-key); }
       .yaml-ver {
         margin-left: auto; color: var(--fg-faint);
         font-size: 10px; font-weight: bold; letter-spacing: .02em; opacity: .7;
@@ -1766,22 +1762,34 @@
         showDataTab();
         escapeMode = "";
         byId("escape-select").value = "";
-        groups = [...DEFAULT_GROUPS]; // examples assume the full trusted set
+        groups = [...(ex.groups ?? [])]; // activate only what the example needs
         syncCapsUI();
+        byId("example-select").options[0].textContent = "(custom)";
         byId("example-select").value = String(idx);
         loadedExampleIdx = idx;
-        outLangChoice = "Auto"; // each example highlights in its own output language
-        byId("out-lang-input").value = "Auto";
+        exampleModified = false;
+        tabs.forEach(t => { t.dirty = false; });
+        yamlDirty = false; transformDirty = false;
+        outLangChoice = "Auto";
+        lastExView = ex.view;
+        byId("out-lang-input").value = "";
+        updateLangPlaceholder();
         setOutputView(validView(ex.view));
         showActiveTab(); run();
       }
 
       // Once the user edits anything, the state no longer matches a shipped
-      // example: flag it custom so the dropdown and the URL state reflect that.
+      // example: flag it custom so the URL state reflects that. The dropdown
+      // keeps showing the example name but appends ● to signal modification.
       function markCustom() {
         if (loadedExampleIdx === -1) return;
+        if (exampleModified) return;
+        const prevIdx = loadedExampleIdx;
+        exampleModified = true;
         loadedExampleIdx = -1;
-        byId("example-select").value = "-1";
+        const sel = byId("example-select");
+        sel.options[0].textContent = examples[prevIdx].label;
+        sel.value = "-1";
       }
 
       // ── URL state ─────────────────────────────────────────────────────
@@ -1855,7 +1863,7 @@
             label: `Load example · ${ex.label}`, kind: "example",
             run: () => loadExample(i),
           })),
-          { label: "Open data.yaml",     kind: "sources", run: () => selectDataTab("data") },
+          { label: "Open data",           kind: "sources", run: () => selectDataTab("data") },
           { label: "Open transform",     kind: "sources", run: () => selectDataTab("transform") },
           { label: "Open main template", kind: "sources", run: () => selectTemplateTab(0) },
           { label: "Add partial",        kind: "sources", run: addPartial },
@@ -2124,22 +2132,43 @@
         escapeMode = e.target.value; run(); updateStatusMeta();
       });
 
-      // Toggling a capability group rebuilds the loaded set and re-renders;
-      // markCustom() so the change is reflected in the dropdown and URL state.
+      // Group label hover: show a tooltip listing the group's transformers by usage category.
+      {
+        const grpTip = byId("grp-tip");
+        document.querySelectorAll("[data-group]").forEach(label => {
+          label.addEventListener("mouseenter", () => {
+            const m = GROUP_META[label.dataset.group]; if (!m) return;
+            grpTip.innerHTML =
+              `<strong>${label.dataset.group}</strong> <span style="color:${m.color};font-size:10px">● ${m.risk}</span>` +
+              `<hr style="border:none;border-top:1px solid var(--border);margin:4px 0">` +
+              m.sections.map(sec =>
+                `<span style="opacity:.45;font-size:9px;text-transform:uppercase;letter-spacing:.06em">${sec.label}</span><br>` +
+                sec.items.map(([n]) => `<code style="font-size:10px">${n}</code>`).join("  ")
+              ).join("<br>");
+            const r = label.getBoundingClientRect();
+            grpTip.style.left = Math.min(r.left, window.innerWidth - 290) + "px";
+            grpTip.style.top  = (r.bottom + 6) + "px";
+            grpTip.hidden = false;
+          });
+          label.addEventListener("mouseleave", () => { grpTip.hidden = true; });
+        });
+      }
+
       byId("caps-select").addEventListener("change", () => {
         groups = [...document.querySelectorAll("#caps-select .cap")]
           .filter((box) => box.checked)
           .map((box) => box.value);
-        markCustom(); run();
+        run();
       });
 
       byId("view-select").addEventListener("change", (e) => { setOutputView(e.target.value); run(); });
 
-      // Fill the searchable highlight picker: Auto + Plain text, then every
-      // language in the CodeMirror registry (alphabetical) as <datalist> options.
+      // Fill the searchable highlight picker: Plain text, then every language in
+      // the CodeMirror registry (alphabetical) as <datalist> options. Empty input
+      // means "use the example's required language" (shown grayed as placeholder).
       {
         const dl = byId("out-lang-list");
-        const names = ["Auto", "Plain text",
+        const names = ["Plain text",
           ...cmLanguages.map((l) => l.name).sort((a, b) => a.localeCompare(b))];
         for (const name of names) {
           const opt = document.createElement("option");
