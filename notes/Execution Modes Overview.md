@@ -6,47 +6,29 @@ tags: ['security', 'execution-modes', 'architecture']
 
 ## Overview
 
-Stem provides two execution modes that govern how templates are evaluated and what code they're allowed to execute.
+> **Updated (2026-05-25).** Stem no longer has two execution modes. The
+> `allow_elixir_expressions` flag was removed; templates are always
+> structured-only.
 
-## Mode Comparison
+Templates accept only structured Stem syntax — assigns, dotted paths, literals,
+and transformer calls. An expression the parser does not recognise (e.g.
+`{{a + b}}`) raises `Stem.SyntaxError` at parse time; there is no opt-in to
+arbitrary Elixir.
 
-| Aspect | Restricted (Default) | Unrestricted |
-|--------|-----------|-----------------|
-| **Flag** | `allow_elixir_expressions: false` | `allow_elixir_expressions: true` |
-| **Default** | Yes | No |
-| **Production** | ✅ Recommended | ❌ Never |
-| **Arbitrary Code** | Forbidden | Allowed |
-| **SSTI Risk** | Protected | High |
-| **Expression Types** | Structured only | Full Elixir AST |
-| **Use Case** | All production | Dev/local only |
-| **Explicit Config** | Not required | Required as flag |
+## Why
 
-## Detailed Guides
+- **Portable**: the language is identical on the BEAM and the native engine,
+  which has no Elixir runtime.
+- **Secure by construction**: arbitrary-expression SSTI is impossible — there is
+  no flag to misconfigure.
+- **Strict separation**: logic that needs more than a transformer call belongs
+  in a registered helper or a backend service, not the template.
+
+The remaining trust boundary is the *template source* itself, which is why
+runtime evaluation lives under `Stem.Unsafe`.
+
+## Links
 
 - [[Compile-Time-Only Security Model]] — How compile-time templates are intrinsically safe
 - [[Project Configuration Defaults]] — How to configure defaults via `.stem.config.json`
-
-## Core Architectural Principle
-
-**All production templates should use `allow_elixir_expressions: false` (the default).**
-
-This enforces a hard boundary between the view layer and business logic, preventing Server-Side Template Injection (SSTI) vulnerabilities. The requirement to explicitly set `allow_elixir_expressions: true` in application config serves as a **highly visible code-review flag**, making it difficult to accidentally ship unsafe templates to production.
-
-If a developer feels forced to use `allow_elixir_expressions: true` in production, this indicates an **architectural flaw**: business logic is leaking into the presentation layer and should be refactored into registered helpers or backend services.
-
-## Security Principles
-
-- **Secure by default**: `false` is the default to protect against SSTI
-- **Opt-in unsafe**: `true` must be explicitly chosen and visibly configured
-- **Clear naming**: using `Stem.Unsafe` namespace makes security implications explicit to developers
-- **Development-only use**: `allow_elixir_expressions: true` is reserved for local experiments and rapid development
-
-## Implementation Notes
-
-Both modes are enforced during compilation:
-- `allow_elixir_expressions: false` raises `CompileError` if arbitrary expressions are detected
-- `allow_elixir_expressions: true` allows those expressions to pass through as Elixir AST
-
-The choice affects APIs like `Stem.Unsafe.eval_string/3` and `Stem.Unsafe.eval_file/3`, as well as configuration via `.stem.config.json` and the CLI `--allow-elixir-expressions` flag.
-
-## Links
+- [[Runtime Evaluation and Sandboxing]] — The runtime API and its trust boundary

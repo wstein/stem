@@ -25,7 +25,7 @@ Register global transformers with `Stem.Transformers.register/2` or pass local t
 
 ## Runtime Templates
 
-Runtime templates default to `allow_elixir_expressions: false`, so only structured Stem expressions (variable paths, helper calls, literals, pipelines) are allowed inside tags. Pass `allow_elixir_expressions: true` to opt in to arbitrary Elixir expressions when the template source is fully trusted:
+Runtime templates accept only structured Stem expressions (variable paths, helper calls, literals, pipelines) inside tags. There is no arbitrary-Elixir escape hatch; an unrecognised expression raises `Stem.SyntaxError`:
 
 ```elixir
 import Stem
@@ -33,8 +33,8 @@ import Stem
 Stem.Unsafe.eval_string("{{name}}", assigns: [name: "nina"])
 #=> "nina"
 
-Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], allow_elixir_expressions: true)
-#=> "3"
+Stem.Unsafe.eval_string("{{name | upcase}}", assigns: [name: "nina"], transformers: Stem.Transformers.Strings.all())
+#=> "NINA"
 ```
 
 ## Links

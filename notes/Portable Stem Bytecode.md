@@ -13,7 +13,7 @@ A second `Stem.AST` backend (`Stem.Bytecode`) lowers templates to a versioned, c
 - Partial arguments (`{{> name ctx key=value}}`) lower to `{:scope, base, hash, body}`: `base` is the context `value_op` (`{:this}` inside an each, else `{:assigns}`), `hash` the keyword pairs. The VM merges them via `Stem.Runtime.partial_scope/2` and renders `body` with assigns rebound and block state reset, matching the compiled backend (see [[Helper and Partial Resolution]]). An argument-less partial expands inline, emitting no `:scope`.
 - Regions are extracted before their siblings compile, and a `{{yield}}` inlines the region's compiled instructions at the yield site (with a recursion guard), so no runtime yield instruction is needed.
 - The program records `:capabilities` (built-in groups it references) and `:host_transformers` (referenced names in no group) so a non-BEAM consumer can confirm support (see [[Helper Capability Groups]]).
-- Two constructs raise `Stem.Bytecode.UnsupportedError`: arbitrary Elixir (`allow_elixir_expressions: true`) and a top-level `this` (also rejected by the compiled backend as unbound).
+- A top-level `this` reference raises `Stem.Bytecode.UnsupportedError` (the compiled backend also rejects it as unbound).
 
 ## Why
 

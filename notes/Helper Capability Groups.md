@@ -17,8 +17,6 @@ An SSTI attacker with access to powerful helpers can chain operations to extract
 - **Explicit opt-in**: complex data transformation must be deliberately declared in code or config
 - **Auditable surface**: enabling a capability group is a visible review flag
 
-This mirrors the `allow_elixir_expressions` flag: intentional friction makes dangerous choices visible.
-
 ## How
 
 ### Capability Groups
@@ -34,12 +32,12 @@ Runtime APIs take a flat `transformers:` function map; call `.all()` on each gro
 
 ```elixir
 # Explicit opt-in for Strings
-Stem.Unsafe.eval_string("{{name |> trim |> upcase}}",
+Stem.Unsafe.eval_string("{{name | trim | upcase}}",
   assigns: [name: "nina"],
   transformers: Stem.Transformers.Strings.all())
 
 # Multiple groups
-Stem.Unsafe.eval_string("{{items |> map(author) |> take(5)}}",
+Stem.Unsafe.eval_string("{{items | map author | take 5}}",
   assigns: [items: books],
   transformers: Map.merge(Stem.Transformers.Collections.all(), Stem.Transformers.Strings.all()))
 ```
@@ -52,7 +50,7 @@ Pin defaults in `.stem.config.json` as comma-separated module names:
 
 ### Discovering the right group
 
-`Stem.Transformers.Standard.all/0` bundles Minimum + Strings (no Collections) for common string work. When a template uses a transformer from an unloaded group, `invoke/3` raises a `Stem.SyntaxError` naming the providing group(s) and how to enable them — so the fix is loading a group, never `allow_elixir_expressions: true`. Each group exposes a side-effect-free `names/0` that powers this lookup.
+`Stem.Transformers.Standard.all/0` bundles Minimum + Strings (no Collections) for common string work. When a template uses a transformer from an unloaded group, `invoke/3` raises a `Stem.SyntaxError` naming the providing group(s) and how to enable them — so the fix is loading a group. Each group exposes a side-effect-free `names/0` that powers this lookup.
 
 ### Auditing Collections usage
 
@@ -72,8 +70,8 @@ To adopt: add `transformers: SomeGroup.all()` (or a `Map.merge/2` of groups) to 
 
 ## Links
 
-- [[Execution Modes Overview]] - allow_elixir_expressions alongside capability groups
+- [[Execution Modes Overview]] - The structured-only execution model
 - [[Compile-Time-Only Security Model]] - Why compile-time templates are safer
 - [[Runtime Evaluation and Sandboxing]] - Runtime API details
 - [[Universal Architecture Principles]] - Capability management as a portable design principle
-- [[CI Security Gates]] - Using `mix stem.audit` to enforce no allow_elixir_expressions in production
+- [[CI Security Gates]] - Why the audit task was removed

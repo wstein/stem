@@ -11,7 +11,7 @@ Stem compiles `{{ }}` templates through a native three-stage pipeline that produ
 Compilation flows `source -> Stem.Parser -> Stem.AST -> Stem.Compiler -> quoted Elixir`.
 `Stem.Parser` performs both lexing (via NimbleParsec combinators) and structural parsing (block nesting, partial expansion, region and yield resolution) in a single module, producing `Stem.AST` nodes.
 The compiler lowers that AST into quoted Elixir while `Stem.Expression` parses tag contents into its own expression AST.
-That expression AST owns helper-pipeline nodes, so `lhs |> trim |> truncate(20)` stays structured until the compiler lowers it into nested helper calls.
+That expression AST owns helper-pipeline nodes, so `lhs | trim | truncate 20` stays structured until the compiler lowers it into nested helper calls.
 
 The pipeline was originally four stages (`source -> Stem.Tokenizer -> Stem.Parser -> Stem.AST -> Stem.Compiler`).
 `Stem.Tokenizer` was deleted when lexing was fused into `Stem.Parser`: the NimbleParsec combinators and the recursive-descent block parser now share a single module boundary.

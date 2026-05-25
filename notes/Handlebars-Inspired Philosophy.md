@@ -7,7 +7,7 @@ Stem is "Handlebars-inspired" rather than fully compatible because it prioritize
 
 ## What
 
-Stem adopts the Handlebars tag syntax and aligns with Handlebars truthiness semantics, while integrating Elixir paradigms like the pipe operator (`|>`) for transformations. It uses a native four-stage pipeline that emits Elixir AST and supports both compile-time macros and runtime compile/eval APIs.
+Stem adopts the Handlebars tag syntax and aligns with Handlebars truthiness semantics, while chaining transformations with a left-to-right `|` pipe operator. It uses a native four-stage pipeline that emits Elixir AST and supports both compile-time macros and runtime compile/eval APIs.
 
 ## Why
 
@@ -15,7 +15,7 @@ Full compatibility would require simulating a JavaScript-like environment, carry
 
 ## How
 
-When authoring templates, expect Handlebars-style truthiness for conditional blocks and empty collections. Use Elixir-style helper pipelines (`{{ value |> trim |> upcase }}`) to format data declaratively instead of relying on implicit engine mutations.
+When authoring templates, expect Handlebars-style truthiness for conditional blocks and empty collections. Use helper pipelines (`{{ value | trim | upcase }}`) to format data declaratively instead of relying on implicit engine mutations.
 
 ## Links
 

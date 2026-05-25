@@ -52,7 +52,7 @@ Running `mix format` now normalises all listed `.stem` files automatically.
 - Removes extra whitespace inside `{{ }}` tags: `{{  name  }}` → `{{name}}`
 - Normalises spaces around whitespace-trim tildes: `{{ ~ name ~ }}` → `{{~name~}}`
 - Canonicalises helper subexpressions: `{{  format ( uppercase   name )  }}` → `{{format (uppercase name)}}`
-- Normalises pipeline expressions: `{{  user.name  |> trim |> truncate( 20 )  }}` → `{{user.name |> trim |> truncate(20)}}`
+- Normalises pipeline expressions: `{{  user.name  | trim | truncate 20  }}` → `{{user.name | trim | truncate 20}}`
 - Normalises block open tags: `{{ #if  ok }}` → `{{#if ok}}`
 - Normalises closing and partial tags: `{{ / if }}` → `{{/if}}`, `{{ > partial }}` → `{{> partial}}`
 

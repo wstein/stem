@@ -7,7 +7,7 @@ tags: [compiler, semantics]
 
 ## What
 
-A bare identifier resolves to an assign at the top level and to the current item inside `{{#each}}`. Keys that are not valid identifiers — dashes, spaces, dots, leading digits, or reserved words — are written as **bracketed literal segments**: `{{[first-name]}}`, `{{user.[first-name]}}`, `{{[a.b]}}`. Bare names may also use any leading letter case (`{{Item1}}`). Stem supports nested subexpressions `(helper arg)` and Elixir-style helper pipelines (`lhs |> helper(a, b)`). Anything else is treated as an Elixir expression with its identifiers rewritten to assigns.
+A bare identifier resolves to an assign at the top level and to the current item inside `{{#each}}`. Keys that are not valid identifiers — dashes, spaces, dots, leading digits, or reserved words — are written as **bracketed literal segments**: `{{[first-name]}}`, `{{user.[first-name]}}`, `{{[a.b]}}`. Bare names may also use any leading letter case (`{{Item1}}`). Stem supports nested subexpressions `(helper arg)` and helper pipelines (`lhs | helper a b`). Anything else is rejected as a `Stem.SyntaxError` — there is no arbitrary-Elixir fallback.
 
 ## Why
 
