@@ -32,6 +32,14 @@ serde_json = { version = "1", features = ["float_roundtrip"] }
 # the other way). We keep the digits and apply Erlang's notation policy.
 ryu = "1"
 
+# Browser interop: wasm-bindgen + serde-wasm-bindgen let JS pass and receive
+# values (objects/arrays) directly instead of marshalling JSON strings through
+# linear memory by hand. Scoped to wasm32-unknown-unknown (the browser target)
+# so host builds and the wasm32-wasip1 conformance bin are unaffected.
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+wasm-bindgen = "0.2"
+serde-wasm-bindgen = "0.6"
+
 [profile.release]
 opt-level = "s"
 lto = true

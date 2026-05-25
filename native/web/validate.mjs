@@ -15,7 +15,7 @@ import { createRenderer } from "./stem.mjs";
 import { load as loadYaml } from "./vendor/js-yaml.mjs";
 import jsonata from "./vendor/jsonata.mjs";
 
-const WASM = "native/stem_native/target/wasm32-unknown-unknown/release/stem_native.wasm";
+const WASM = "native/web/wasm/stem_native_bg.wasm";
 
 const expected = {
   // A data-driven infographic: a JSONata transform turns raw stats into

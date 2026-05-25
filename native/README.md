@@ -314,33 +314,36 @@ paths) with native-only unit tests.
 ## Browser / edge (no WASI)
 
 The same engine compiles to `wasm32-unknown-unknown` and renders in a browser
-with a ~30-line glue module — no WASI, no server, no Elixir at runtime:
+via **wasm-bindgen** — no WASI, no server, no Elixir at runtime. JS passes and
+receives values (objects/arrays) directly through serde-wasm-bindgen, so there is
+no hand-rolled JSON-string marshalling.
 
 ```sh
-rustup target add wasm32-unknown-unknown          # one-time
-cd native/stem_native
-cargo build --release --target wasm32-unknown-unknown --lib
+rustup target add wasm32-unknown-unknown            # one-time
+cargo install wasm-bindgen-cli --version 0.2.122    # one-time; match the crate
+
+# build the engine and generate web/wasm/{stem_native.js, stem_native_bg.wasm}:
+native/web/build.sh
 
 # browserless check of the module + glue (Node uses the same WebAssembly API):
 node native/web/validate.mjs
-# => browser glue: 4/4 examples render correctly
+# => browser glue: 11/11 examples compile + render correctly
 
 # utility tests for state encoding and UTF-8 span mapping:
 node native/web/playground_utils.test.mjs
 
-# live demo (must be served over HTTP so fetch() can load the .wasm):
+# live demo (must be served over HTTP so the module can load the .wasm):
 python3 -m http.server   # then open http://localhost:8000/native/web/
 ```
 
-When deploying the page, the host must serve `.mjs` files with a JavaScript MIME
-type (`text/javascript`) — browsers refuse to evaluate ES modules sent as
-`application/octet-stream`. The bundled `python3 -m http.server` already does
-this; some static hosts need an explicit `.mjs -> text/javascript` mapping (e.g.
-a `Content-Type` header rule or `_headers`/`netlify.toml` entry).
+The generated `web/wasm/` directory is a build artifact (git-ignored);
+`build.sh` regenerates it. When deploying the page, serve `.mjs` files with a
+JavaScript MIME type (`text/javascript`) — browsers refuse ES modules sent as
+`application/octet-stream`.
 
-The host writes the request JSON into wasm memory via `stem_alloc`, calls
-`stem_render(ptr, len)` (returns a packed `out_ptr<<32 | out_len`), reads the
-UTF-8 output, and frees both buffers with `stem_dealloc`. See `web/stem.mjs`.
+The browser glue ([web/stem.mjs](web/stem.mjs)) is a thin wrapper over the
+wasm-bindgen module's `compile(source, partials, map)` and `render(program,
+data, groups, map)` exports.
 
 ## Try it directly
 

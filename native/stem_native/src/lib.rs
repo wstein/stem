@@ -412,44 +412,88 @@ impl Program {
     }
 }
 
-// ── C ABI for wasm32-unknown-unknown (browser) ───────────────────────────────
+// ── Browser interop (wasm-bindgen) ───────────────────────────────────────────
 //
-// The host writes the request JSON into linear memory at `stem_alloc(len)`,
-// calls `stem_render(ptr, len)` which returns a packed `(out_ptr << 32) | out_len`,
-// reads the UTF-8 output, then frees both buffers with `stem_dealloc`.
+// The browser target exports `compile` and `render` through wasm-bindgen, taking
+// and returning JS values directly (serde-wasm-bindgen converts JsValue ↔
+// serde_json::Value) — no hand-rolled JSON-string marshalling through linear
+// memory. The WASI conformance bin (`main.rs`) and the JSON `handle*` Elixir seam
+// are unaffected; the browser ships no host getters/transformers, as before.
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+mod wasm {
+    use crate::{
+        check_instrs, parse_groups, render_mapped, root_ctx, Caps, Host, Program, RenderOptions,
+    };
+    use serde::Serialize;
+    use serde_json::Value;
+    use std::collections::HashMap;
+    use wasm_bindgen::prelude::*;
 
-/// Allocates `len` bytes in wasm linear memory and returns the pointer.
-#[no_mangle]
-pub extern "C" fn stem_alloc(len: usize) -> *mut u8 {
-    let layout = std::alloc::Layout::from_size_align(len.max(1), 1).unwrap();
-    unsafe { std::alloc::alloc(layout) }
-}
-
-/// Frees a buffer previously returned by `stem_alloc`/`stem_render`.
-///
-/// # Safety
-/// `ptr`/`len` must come from this module's allocator.
-#[no_mangle]
-pub unsafe extern "C" fn stem_dealloc(ptr: *mut u8, len: usize) {
-    if !ptr.is_null() {
-        let layout = std::alloc::Layout::from_size_align(len.max(1), 1).unwrap();
-        std::alloc::dealloc(ptr, layout);
+    // Serialize to a JS value with objects (not ES Maps) and plain numbers, so
+    // the playground can walk `program.instructions` and read `error.message`.
+    fn to_js(value: &impl Serialize) -> Result<JsValue, JsValue> {
+        Ok(value.serialize(&serde_wasm_bindgen::Serializer::json_compatible())?)
     }
-}
 
-/// Renders the UTF-8 request at `ptr`/`len`, returning `(out_ptr << 32) | out_len`.
-///
-/// # Safety
-/// `ptr`/`len` must describe a valid UTF-8 buffer in this module's memory.
-#[no_mangle]
-pub unsafe extern "C" fn stem_render(ptr: *const u8, len: usize) -> u64 {
-    let input = std::slice::from_raw_parts(ptr, len);
-    let raw = std::str::from_utf8(input).unwrap_or("");
-    let bytes = handle(raw).into_bytes();
-    let out_len = bytes.len();
-    let out_ptr = stem_alloc(out_len);
-    std::ptr::copy_nonoverlapping(bytes.as_ptr(), out_ptr, out_len);
-    ((out_ptr as u64) << 32) | (out_len as u64)
+    /// Compiles template source (plus an optional `{name: source}` partials map)
+    /// to a wire program, returned as a JS value. With `map`, the program carries
+    /// `src` provenance for the source-map view. Throws `{message, start, end}`
+    /// on a compile error so the editor can underline the span.
+    #[wasm_bindgen]
+    pub fn compile(source: &str, partials: JsValue, map: bool) -> Result<JsValue, JsValue> {
+        let partials: HashMap<String, String> =
+            serde_wasm_bindgen::from_value(partials).unwrap_or_default();
+        let compiled = if map {
+            crate::compile::compile_to_wire_with_spans(source, &partials)
+        } else {
+            crate::compile::compile_to_wire(source, &partials)
+        };
+        match compiled {
+            Ok(wire) => to_js(&wire),
+            Err(err) => Err(to_js(&serde_json::json!({
+                "message": err.message, "start": err.start, "end": err.end,
+            }))?),
+        }
+    }
+
+    /// Renders a wire `program` against `data` with the named capability
+    /// `groups`. With `map`, returns `{ output, segments }` (the source map);
+    /// otherwise the output string. A refusal surfaces as a `stem_native error:`
+    /// string in the output, the sentinel the playground already detects.
+    #[wasm_bindgen]
+    pub fn render(
+        program: JsValue,
+        data: JsValue,
+        groups: JsValue,
+        map: bool,
+    ) -> Result<JsValue, JsValue> {
+        let program: Program = serde_wasm_bindgen::from_value(program)
+            .map_err(|err| JsValue::from_str(&format!("invalid program: {err}")))?;
+        let data: Value = serde_wasm_bindgen::from_value(data).unwrap_or(Value::Null);
+        let groups: Vec<String> = serde_wasm_bindgen::from_value(groups).unwrap_or_default();
+        let options = RenderOptions {
+            groups: parse_groups(&groups),
+            host: Host::default(),
+        };
+
+        if map {
+            let caps = Caps {
+                groups: options.groups,
+                host_names: &[],
+            };
+            let (output, segments) = match check_instrs(&program.instructions, &caps) {
+                Some(message) => (format!("stem_native error: {message}"), Vec::new()),
+                None => render_mapped(&program.instructions, &root_ctx(&data, &options.host)),
+            };
+            to_js(&serde_json::json!({ "output": output, "segments": segments }))
+        } else {
+            let output = match program.render(&data, &options) {
+                Ok(out) => out,
+                Err(err) => format!("stem_native error: {}", err.message),
+            };
+            Ok(JsValue::from_str(&output))
+        }
+    }
 }
 
 // Compile one template to its wire program, or an `{"error": {message, span}}`

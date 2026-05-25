@@ -34,12 +34,14 @@ jobs:
       - name: Fetch deps
         run: mix deps.get
 
-      - name: Rust engine — format, lint, and unit tests
-        working-directory: native/stem_native
+      - name: Rust crates — format, lint, and unit tests
         run: |
-          cargo fmt --check
-          cargo clippy --all-targets -- -D warnings
-          cargo test
+          for crate in stem_compile stem_native stem_macros stem_examples; do
+            ( cd "native/$crate" \
+              && cargo fmt --check \
+              && cargo clippy --all-targets -- -D warnings \
+              && cargo test )
+          done
 
       - name: Build native engine (wasip1 + browser)
         working-directory: native/stem_native
@@ -55,6 +57,13 @@ jobs:
 
       - name: Differential fuzz (fixed seed for reproducibility)
         run: mix stem.native.fuzz --count 1000 --seed 12345
+
+      # wasm-bindgen CLI version must match the wasm-bindgen crate.
+      - name: Install wasm-bindgen CLI
+        run: cargo install wasm-bindgen-cli --version 0.2.122 --locked
+
+      - name: Generate browser bindings (wasm-bindgen)
+        run: native/web/build.sh
 
       - name: Browser glue renders correctly (no WASI)
         run: node native/web/validate.mjs
