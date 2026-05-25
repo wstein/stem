@@ -1,0 +1,48 @@
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+  background: #f8f9fa;
+  color: #1a1a2e;
+  padding: 24px;
+}
+h1 {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: #1a1a2e;
+  margin-bottom: 20px;
+}
+h1 span { font-weight: 400; opacity: .45; font-size: 12px; letter-spacing: .06em; margin-left: 8px; }
+.sheet { display: grid; gap: 16px; }
+.group { background: #fff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px #0001; }
+.group-head {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid #eee;
+}
+.group-head h2 { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.badge {
+  font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em;
+  padding: 1px 5px; border-radius: 3px; opacity: .7; margin-left: 2px;
+}
+.group table { width: 100%; border-collapse: collapse; }
+.group tr { border-bottom: 1px solid #f0f0f0; }
+.group tr:last-child { border-bottom: none; }
+.group tr:hover { background: #fafafa; }
+td { padding: 6px 14px; vertical-align: top; line-height: 1.6; }
+.col-name { width: 120px; }
+.col-expr { width: 46%; }
+.col-result { }
+code {
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  font-size: 11.5px;
+}
+.name code { font-weight: 600; }
+.expr code { color: #5c6bc0; }
+.result code { color: #333; }
+.result em { font-style: normal; opacity: .4; font-size: 11px; }
+</style>

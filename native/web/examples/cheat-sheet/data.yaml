@@ -1,0 +1,21 @@
+str: "  Hello, World!  "
+title: "the quick brown fox"
+blurb: "Template engines are powerful"
+unsafe: "<script>alert('xss')</script>"
+quote: "say \"hello\" to everyone"
+present: "I exist"
+missing: null
+
+fruits: [banana, apple, cherry, apple, date, elderberry]
+sparse: [alpha, null, beta, null, gamma]
+nested: [[x, y], [p, q], [r]]
+
+config:
+  host: localhost
+  port: 5432
+
+people:
+  - { name: Carol, age: 32, dept: Engineering, lead: true }
+  - { name: Alice, age: 28, dept: Design }
+  - { name: Bob,   age: 35, dept: Engineering, lead: true }
+  - { name: Dave,  age: 28, dept: Design }

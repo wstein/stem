@@ -1566,8 +1566,11 @@ fn get(base: Value, segments: &[String]) -> Value {
 
 // `^[a-z_][a-zA-Z0-9_]*$`
 fn is_identifier(s: &str) -> bool {
+    // Allow a single trailing `?` (Elixir-style predicate convention: empty?, present?).
+    let s = s.strip_suffix('?').unwrap_or(s);
     let mut chars = s.chars();
-    matches!(chars.next(), Some(c) if c.is_ascii_lowercase() || c == '_')
+    !s.is_empty()
+        && matches!(chars.next(), Some(c) if c.is_ascii_lowercase() || c == '_')
         && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 

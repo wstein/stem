@@ -68,5 +68,14 @@
     "partials": ["styles", "donut", "bars", "bar", "waffle", "spark"],
     "data": "data.yaml",
     "transform": "transform.jsonata"
+  },
+  {
+    "id": "cheat-sheet",
+    "label": "Reference - Transformer cheat sheet",
+    "view": "rendered",
+    "main": "main.stem",
+    "partials": ["styles"],
+    "data": "data.yaml",
+    "groups": ["inspect", "format", "transform"]
   }
 ]
