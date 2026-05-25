@@ -828,7 +828,14 @@ struct Stage {
 
 fn parse_expr(raw: &str, span: Span) -> Result<Expr, CompileError> {
     let t = raw.trim();
-    let segments = split_pipes(&scan_top_level(t));
+    let tokens = scan_top_level(t);
+    if let Some(op) = reserved_op(&tokens) {
+        return Err(unsupported(
+            format!("the '{op}' operator is not supported"),
+            span,
+        ));
+    }
+    let segments = split_pipes(&tokens);
     if segments.len() > 1 {
         let lhs = parse_expr(&segments[0], span)?;
         let stages = segments[1..]
@@ -1020,6 +1027,12 @@ fn parse_subexpression(t: &str, span: Span) -> Result<Expr, CompileError> {
 // lowering.
 fn parse_stage(stage: &str, span: Span) -> Result<Stage, CompileError> {
     let t = stage.trim();
+    if t.is_empty() {
+        return Err(unsupported(
+            "pipeline stages cannot be empty".to_string(),
+            span,
+        ));
+    }
     let parts = split_whitespace(&scan_top_level(t));
     match parts.split_first() {
         Some((name, args)) if is_identifier(name) => {
@@ -1044,6 +1057,9 @@ fn parse_stage(stage: &str, span: Span) -> Result<Stage, CompileError> {
 
 enum Tok {
     Pipe,
+    // A boolean operator (`||`, `&&`) reserved for future use. Lexed by maximal
+    // munch so it never splits into pipe stages; the parser rejects it.
+    Reserved(&'static str),
     Comma,
     Eq,
     Colon,
@@ -1055,6 +1071,7 @@ impl Tok {
     fn value(&self) -> String {
         match self {
             Tok::Pipe => "|".to_string(),
+            Tok::Reserved(s) => s.to_string(),
             Tok::Comma => ",".to_string(),
             Tok::Eq => "=".to_string(),
             Tok::Colon => ":".to_string(),
@@ -1062,6 +1079,14 @@ impl Tok {
             Tok::Text(s) => s.clone(),
         }
     }
+}
+
+// The first reserved boolean operator in a token stream, if any.
+fn reserved_op(tokens: &[Tok]) -> Option<&'static str> {
+    tokens.iter().find_map(|t| match t {
+        Tok::Reserved(s) => Some(*s),
+        _ => None,
+    })
 }
 
 fn scan_top_level(s: &str) -> Vec<Tok> {
@@ -1075,8 +1100,19 @@ fn scan_top_level(s: &str) -> Vec<Tok> {
         match c {
             '"' | '\'' => consume_quoted(&chars, &mut k, &mut text),
             '(' => consume_parens(&chars, &mut k, &mut text),
-            // Pipe separator: `value | transformer arg`. `|>` is no longer a
-            // pipe token. (A future boolean-or `||` will need maximal-munch.)
+            // Reserved boolean operators: maximal munch so `||` is never two
+            // pipe stages and `&&` never leaks through as text.
+            '|' if chars.get(k + 1) == Some(&'|') => {
+                flush(&mut text, &mut out);
+                out.push(Tok::Reserved("||"));
+                k += 2;
+            }
+            '&' if chars.get(k + 1) == Some(&'&') => {
+                flush(&mut text, &mut out);
+                out.push(Tok::Reserved("&&"));
+                k += 2;
+            }
+            // Pipe separator: `value | transformer arg`.
             '|' => {
                 flush(&mut text, &mut out);
                 out.push(Tok::Pipe);
@@ -1981,6 +2017,34 @@ mod tests {
             );
             assert!(err.end > err.start, "for {src:?}");
         }
+    }
+
+    #[test]
+    fn reserved_boolean_operators_are_rejected_with_a_clear_message() {
+        // Maximal munch: `||`/`&&` never split into pipe stages, spaced or not.
+        for (src, op) in [
+            ("{{ a || b }}", "||"),
+            ("{{a||b}}", "||"),
+            ("{{ a && b }}", "&&"),
+            ("{{ x | a && b }}", "&&"),
+        ] {
+            let err = wire(src).unwrap_err();
+            assert_eq!(
+                err.message,
+                format!("the '{op}' operator is not supported"),
+                "for {src:?}"
+            );
+        }
+        // A single `|` remains the pipe separator.
+        assert!(wire("{{ name | upcase }}").is_ok());
+    }
+
+    #[test]
+    fn empty_pipeline_stages_report_a_clear_error() {
+        assert_eq!(
+            wire("{{ x |  | trim }}").unwrap_err().message,
+            "pipeline stages cannot be empty"
+        );
     }
 
     #[test]

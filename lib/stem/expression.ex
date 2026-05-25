@@ -58,6 +58,7 @@ defmodule Stem.Expression do
       lookahead_not(
         choice([
           string("|"),
+          string("&&"),
           string(","),
           string("="),
           string(":"),
@@ -81,6 +82,10 @@ defmodule Stem.Expression do
     :do_splitter_tokens,
     repeat(
       choice([
+        # Reserved boolean operators, matched before `|` so `||` never splits
+        # into pipe stages (maximal munch); the parser rejects them.
+        string("||") |> unwrap_and_tag(:reserved),
+        string("&&") |> unwrap_and_tag(:reserved),
         string("|") |> unwrap_and_tag(:pipe),
         string(",") |> unwrap_and_tag(:comma),
         string("=") |> unwrap_and_tag(:eq),
@@ -317,16 +322,33 @@ defmodule Stem.Expression do
   defp format_call_arg(value), do: format(value)
 
   defp parse_pipeline(trimmed) do
-    case split_top_level_pipe(trimmed) do
-      [_single] ->
-        :no_pipeline
+    case reserved_operator(trimmed) do
+      nil ->
+        case split_top_level_pipe(trimmed) do
+          [_single] ->
+            :no_pipeline
 
-      [head | stages] ->
-        with {:ok, initial} <- parse_pipeline_input(head),
-             {:ok, parsed_stages} <- parse_pipeline_stages(stages) do
-          {:ok, {:pipeline, initial, parsed_stages}}
+          [head | stages] ->
+            with {:ok, initial} <- parse_pipeline_input(head),
+                 {:ok, parsed_stages} <- parse_pipeline_stages(stages) do
+              {:ok, {:pipeline, initial, parsed_stages}}
+            end
         end
+
+      op ->
+        {:error, "the '#{op}' operator is not supported"}
     end
+  end
+
+  # The first reserved boolean operator (`||`, `&&`) in the expression, if any.
+  # Lexed by maximal munch so it never masquerades as a `|` pipe.
+  defp reserved_operator(source) do
+    source
+    |> splitter_tokens()
+    |> Enum.find_value(fn
+      {:reserved, op} -> op
+      _ -> nil
+    end)
   end
 
   defp parse_pipeline_input(source) do

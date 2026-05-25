@@ -143,6 +143,17 @@ defmodule Stem.ExpressionAstTest do
              Expression.parse("name | default 1=2")
   end
 
+  test "reserved boolean operators are rejected with a clear message" do
+    # Maximal munch: `||`/`&&` never split into pipe stages, spaced or not.
+    assert {:error, "the '||' operator is not supported"} = Expression.parse("a || b")
+    assert {:error, "the '||' operator is not supported"} = Expression.parse("a||b")
+    assert {:error, "the '&&' operator is not supported"} = Expression.parse("a && b")
+    assert {:error, "the '&&' operator is not supported"} = Expression.parse("name | a && b")
+    # A single `|` remains the pipe separator.
+    assert {:ok, {:pipeline, {:identifier, "name"}, [{:stage, "upcase", []}]}} =
+             Expression.parse("name | upcase")
+  end
+
   test "translate raises for invalid pipelines" do
     assert_raise ArgumentError, ~r/pipeline stages must be a helper name/, fn ->
       Expression.translate("name | String.trim()", %{in_each: false, locals: %{}})
