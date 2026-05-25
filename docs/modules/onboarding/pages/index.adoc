@@ -34,7 +34,7 @@ Jinja2 relies on a runtime sandbox to evaluate complex inline math (`{{ 1 + 1 }}
 Handlebars allows developers to register dynamic block helpers that dictate execution flow at runtime. This dynamic nature has historically led to severe XSS vulnerabilities when helpers return unescaped HTML.
 
 * *The Stem Difference:* Stem hardcodes structural blocks (`#if`, `#unless`, `#each`, `#with`, `#region`) into the Elixir AST at compile time for zero-overhead performance and security. All standard `{{ }}` output is HTML-escaped by default.
-* *The Solution:* Separate data transformation from structure. Use standard blocks for layout, and use Transformer Capability Groups to shape the data first (`{{#each users |> active_only}}`).
+* *The Solution:* Separate data transformation from structure. Use standard blocks for layout, and use Transformer Capability Groups to shape the data first (`{{#each users | active_only}}`).
 
 === Coming from StringTemplate 4 (ST4)
 

@@ -237,7 +237,7 @@ Stem.Unsafe.eval_string(template, assigns: [users: users],
 ----
 [source,handlebars]
 ----
-{{#each users |> filter("active")}}
+{{#each users | filter "active"}}
   <li>{{this.name}}</li>
 {{/each}}
 ----
