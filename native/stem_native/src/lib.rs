@@ -296,7 +296,7 @@ pub fn handle_with_host(raw: &str, host: &Host) -> String {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Group {
     /// Dynamic template evaluation: compiles and renders a Stem *template*
-    /// string stored in data (e.g. `"{{name |> upcase}}"`). Separate from the
+    /// string stored in data (e.g. `"{{name | upcase}}"`). Separate from the
     /// risk taxonomy; off by default — never enable for untrusted templates or
     /// untrusted data, since the data string is rendered as a template (SSTI).
     Eval,
@@ -1012,7 +1012,7 @@ fn eval(op: &Op, ctx: &Ctx) -> Value {
             // eval: treat the argument as a full Stem template string (it may
             // contain literal text and one or more `{{ … }}` tags), compile it,
             // and render against the current scope. The caller supplies the
-            // braces — `"{{name |> upcase}}"`, not `"name |> upcase"`. GROUP_EVAL
+            // braces — `"{{name | upcase}}"`, not `"name | upcase"`. GROUP_EVAL
             // is cleared in the sub-context to prevent recursive eval calls.
             if *name == "eval" && ctx.groups & GROUP_EVAL != 0 {
                 let tmpl = positional.first().and_then(Value::as_str).unwrap_or("");
@@ -1350,7 +1350,7 @@ fn call(name: &str, args: &[Value]) -> Value {
         "inspect" => Value::from(inspect(&args[0])),
         // `log` renders to "" on the BEAM (its value is the side effect); the
         // native build keeps the output parity and leaves any logging to a host
-        // transformer override. So a `{{ x |> log }}` stage is a transparent ""
+        // transformer override. So a `{{ x | log }}` stage is a transparent ""
         // pass-through here.
         "log" => Value::from(""),
 
@@ -1730,7 +1730,7 @@ mod typed_api_tests {
 
     #[test]
     fn loading_a_group_enables_its_transformers() {
-        let program = compile("{{ name |> upcase }}").unwrap();
+        let program = compile("{{ name | upcase }}").unwrap();
         let data = json!({ "name": "ada" });
 
         // Minimum-only: refused, as a typed RenderError.
@@ -1750,7 +1750,7 @@ mod typed_api_tests {
                 call.args.first().and_then(Value::as_str).unwrap_or("")
             )))
         }
-        let program = compile("{{ name |> shout }}").unwrap();
+        let program = compile("{{ name | shout }}").unwrap();
         let opts = RenderOptions::new().with_host(Host {
             transform: shout,
             transformer_names: &["shout"],
@@ -1779,7 +1779,7 @@ mod typed_api_tests {
     // the Elixir seam can never diverge from the Rust API.
     #[test]
     fn typed_and_json_paths_agree() {
-        let source = "{{ tags |> sort |> join(\", \") }} / {{ name |> upcase }}";
+        let source = "{{ tags | sort | join \", \" }} / {{ name | upcase }}";
         let data = json!({ "tags": ["b", "a"], "name": "ada" });
         let program = compile(source).unwrap();
 
@@ -2270,7 +2270,7 @@ mod guard_tests {
         assert_eq!(
             render_groups(
                 program,
-                json!({ "name": "ada", "expr": "{{name |> upcase}}" }),
+                json!({ "name": "ada", "expr": "{{name | upcase}}" }),
                 &["eval", "format"],
             ),
             "ADA"
@@ -2291,7 +2291,7 @@ mod guard_tests {
         }]);
         let out = render_groups(
             program,
-            json!({ "name": "x", "expr": "{{name |> eval}}" }),
+            json!({ "name": "x", "expr": "{{name | eval}}" }),
             &["eval"],
         );
         // Inner eval is refused → null → empty output.
@@ -2471,7 +2471,7 @@ mod serialization_tests {
     use super::*;
     use serde_json::json;
 
-    // Render `{{ x |> name }}` with no escaping so the serializer output is
+    // Render `{{ x | name }}` with no escaping so the serializer output is
     // verbatim. `json`/`inspect` are Minimum, so the default groups suffice.
     fn render(name: &str, data: Value) -> String {
         let request = json!({

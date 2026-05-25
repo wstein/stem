@@ -970,7 +970,7 @@ fn parse_transformer(t: &str, span: Span) -> Result<Expr, CompileError> {
 // expressions or parenthesised sub-calls (no bare transformer), matching
 // `Stem.Expression.helper_argument_expression/1`.
 fn parse_transformer_arg(arg: &str, span: Span) -> Result<Arg, CompileError> {
-    if let Some((key, value)) = split_once(&scan_top_level(arg), Sep::Eq) {
+    if let Some((key, value)) = split_once(&scan_top_level(arg)) {
         let key = key.trim();
         if !key.is_empty() {
             if !is_identifier(key) {
@@ -1014,58 +1014,26 @@ fn parse_subexpression(t: &str, span: Span) -> Result<Expr, CompileError> {
     }
 }
 
-// A pipeline stage: a bare helper name, or `name(arg, arg..)`.
+// A pipeline stage: a bare helper name, or `name arg arg..` (prefix-style,
+// space-separated args — the same call form as a standalone transformer). The
+// piped value is prepended as the implicit first positional argument during
+// lowering.
 fn parse_stage(stage: &str, span: Span) -> Result<Stage, CompileError> {
     let t = stage.trim();
-    if is_identifier(t) {
-        return Ok(Stage {
-            name: t.to_string(),
-            args: Vec::new(),
-        });
-    }
-    if let Some((name, args_src)) = stage_call_parts(t) {
-        let mut args = Vec::new();
-        for arg in split_commas(&scan_top_level(args_src)) {
-            let arg = arg.trim();
-            if !arg.is_empty() {
-                args.push(parse_pipeline_arg(arg, span)?);
-            }
+    let parts = split_whitespace(&scan_top_level(t));
+    match parts.split_first() {
+        Some((name, args)) if is_identifier(name) => {
+            let args = args
+                .iter()
+                .map(|arg| parse_transformer_arg(arg, span))
+                .collect::<Result<Vec<_>, _>>()?;
+            Ok(Stage {
+                name: name.clone(),
+                args,
+            })
         }
-        return Ok(Stage { name, args });
+        _ => Err(not_supported(t, span)),
     }
-    Err(not_supported(t, span))
-}
-
-fn stage_call_parts(t: &str) -> Option<(String, &str)> {
-    let open = t.find('(')?;
-    let name = &t[..open];
-    let rest = &t[open..];
-    if is_identifier(name) && is_wrapped_paren(rest) {
-        Some((name.to_string(), &rest[1..rest.len() - 1]))
-    } else {
-        None
-    }
-}
-
-// Pipeline call arguments accept `key=value` or `key: value` keywords; their
-// values are strict expressions (transformers/pipelines allowed).
-fn parse_pipeline_arg(arg: &str, span: Span) -> Result<Arg, CompileError> {
-    let tokens = scan_top_level(arg);
-    if let Some((key, value)) =
-        split_once(&tokens, Sep::Eq).or_else(|| split_once(&tokens, Sep::Colon))
-    {
-        let key = key.trim();
-        if !key.is_empty() {
-            if !is_identifier(key) {
-                return Err(not_supported(arg, span));
-            }
-            return Ok(Arg::Keyword(
-                key.to_string(),
-                parse_expr(value.trim(), span)?,
-            ));
-        }
-    }
-    Ok(Arg::Positional(parse_expr(arg.trim(), span)?))
 }
 
 // ── Top-level tokenizer (mirrors Stem.Expression's splitter) ─────────────────
@@ -1086,7 +1054,7 @@ enum Tok {
 impl Tok {
     fn value(&self) -> String {
         match self {
-            Tok::Pipe => "|>".to_string(),
+            Tok::Pipe => "|".to_string(),
             Tok::Comma => ",".to_string(),
             Tok::Eq => "=".to_string(),
             Tok::Colon => ":".to_string(),
@@ -1094,12 +1062,6 @@ impl Tok {
             Tok::Text(s) => s.clone(),
         }
     }
-}
-
-#[derive(Clone, Copy)]
-enum Sep {
-    Eq,
-    Colon,
 }
 
 fn scan_top_level(s: &str) -> Vec<Tok> {
@@ -1113,10 +1075,12 @@ fn scan_top_level(s: &str) -> Vec<Tok> {
         match c {
             '"' | '\'' => consume_quoted(&chars, &mut k, &mut text),
             '(' => consume_parens(&chars, &mut k, &mut text),
-            '|' if chars.get(k + 1) == Some(&'>') => {
+            // Pipe separator: `value | transformer arg`. `|>` is no longer a
+            // pipe token. (A future boolean-or `||` will need maximal-munch.)
+            '|' => {
                 flush(&mut text, &mut out);
                 out.push(Tok::Pipe);
-                k += 2;
+                k += 1;
             }
             ',' => push_sep(Tok::Comma, &mut text, &mut out, &mut k),
             '=' => push_sep(Tok::Eq, &mut text, &mut out, &mut k),
@@ -1193,10 +1157,6 @@ fn split_pipes(tokens: &[Tok]) -> Vec<String> {
     split_by(tokens, |t| matches!(t, Tok::Pipe))
 }
 
-fn split_commas(tokens: &[Tok]) -> Vec<String> {
-    split_by(tokens, |t| matches!(t, Tok::Comma))
-}
-
 fn split_by(tokens: &[Tok], is_sep: impl Fn(&Tok) -> bool) -> Vec<String> {
     let mut groups = Vec::new();
     let mut current = String::new();
@@ -1230,10 +1190,8 @@ fn split_whitespace(tokens: &[Tok]) -> Vec<String> {
     out
 }
 
-fn split_once(tokens: &[Tok], sep: Sep) -> Option<(String, String)> {
-    let idx = tokens
-        .iter()
-        .position(|t| matches!((t, sep), (Tok::Eq, Sep::Eq) | (Tok::Colon, Sep::Colon)))?;
+fn split_once(tokens: &[Tok]) -> Option<(String, String)> {
+    let idx = tokens.iter().position(|t| matches!(t, Tok::Eq))?;
     let left = tokens[..idx].iter().map(Tok::value).collect();
     let right = tokens[idx + 1..].iter().map(Tok::value).collect();
     Some((left, right))
@@ -1932,15 +1890,15 @@ mod tests {
     #[test]
     fn pipelines_lower_to_nested_calls() {
         assert_wire(
-            "{{name |> upcase}}",
+            "{{name | upcase}}",
             r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"args":[{"name":"name","t":"assign"}],"kwargs":{},"name":"upcase","t":"call"}}]}"#,
         );
         assert_wire(
-            "{{name |> upcase |> trim}}",
+            "{{name | upcase | trim}}",
             r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"args":[{"args":[{"name":"name","t":"assign"}],"kwargs":{},"name":"upcase","t":"call"}],"kwargs":{},"name":"trim","t":"call"}}]}"#,
         );
         assert_wire(
-            "{{text |> truncate(20)}}",
+            "{{text | truncate 20}}",
             r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"args":[{"name":"text","t":"assign"},{"t":"lit","value":20}],"kwargs":{},"name":"truncate","t":"call"}}]}"#,
         );
     }
