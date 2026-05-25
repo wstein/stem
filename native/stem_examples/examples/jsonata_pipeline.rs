@@ -35,15 +35,15 @@ const TRANSFORM: &str = r#"
 // Strings built-ins; `map`/`take`/`join` are Collections/Minimum; `contains` is
 // a Predicate; `shout` is the custom host transformer from `src/lib.rs`.
 const TEMPLATE: &str = "\
-{{ title |> upcase }} ({{ currency }})
+{{ title | upcase }} ({{ currency }})
 
-Top sellers: {{ products |> map(\"name\") |> take(2) |> join(\", \") }}
+Top sellers: {{ products | map \"name\" | take 2 | join \", \" }}
 
 {{#each products}}\
-- {{ name |> capitalize }}: {{ revenue }} {{ ../currency }}{{#if name |> contains(\"w\")}} (stock item){{/if}}
+- {{ name | capitalize }}: {{ revenue }} {{ ../currency }}{{#if name | contains \"w\"}} (stock item){{/if}}
 {{/each}}\
 Total: {{ total }} {{ currency }}
-{{ title |> shout }}
+{{ title | shout }}
 ";
 
 fn raw_data() -> Value {

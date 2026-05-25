@@ -41,12 +41,12 @@ Accepted (2026-05-21).
 
 *Consequences.* The CLI behavior is strictly file-based or pipe-based, avoiding ambiguity and reinforcing Stem's philosophy of explicit data separation and strict input boundaries.
 
-=== ADR-0004: Boolean Flag Execution Control for SSTI Protection
+=== ADR-0004: Structured-Only Expressions (No Arbitrary-Elixir Escape Hatch)
 
-Accepted (2026-05-22).
+Accepted (2026-05-25). Supersedes the original `allow_elixir_expressions` boolean-flag approach (Accepted 2026-05-22).
 
-*Context.* Runtime template evaluation introduces Server-Side Template Injection (SSTI) risk. Stem must make the trust boundary explicit and force developers to consciously opt into unsafe behavior.
+*Context.* Runtime template evaluation introduces Server-Side Template Injection (SSTI) risk. The earlier design gated arbitrary Elixir behind an `allow_elixir_expressions` flag (default off) plus a `mix stem.audit` CI gate. That escape hatch proved non-portable (it relies on the BEAM compiler; the native/Rust engine has no equivalent), and an opt-in to arbitrary code execution is a footgun even when guarded.
 
-*Decision.* Control arbitrary Elixir expression execution with the `allow_elixir_expressions` boolean flag. When `false` (default), templates are restricted to structured Stem expressions, literals, helpers, and paths. When `true`, arbitrary Elixir code is permitted. Runtime evaluation APIs (`eval_string/3`, `eval_file/3`) default to `allow_elixir_expressions: false` and require explicit `allow_elixir_expressions: true` in config or at the call site to enable unrestricted code.
+*Decision.* Remove the escape hatch entirely. Templates accept only structured Stem syntax — assigns, dotted paths, literals, and transformer calls. An unrecognised expression raises `Stem.SyntaxError` at parse time. The `allow_elixir_expressions` flag, the `{:elixir, …}` AST node, and the `mix stem.audit` task are removed.
 
-*Consequences.* Production templates are protected against SSTI by default. The requirement to explicitly set `allow_elixir_expressions: true` serves as a visible code-review flag. If a developer needs to enable arbitrary expressions in production, it signals an architectural flaw—business logic is leaking into the presentation layer and should be refactored into registered helpers or backend services.
+*Consequences.* The language is identical across backends (BEAM and native) and SSTI via arbitrary expressions is impossible by construction — there is no flag to misconfigure and no CI gate to maintain. The remaining trust boundary is the *template source* itself, which is why runtime evaluation stays under `Stem.Unsafe`. Logic that previously reached for arbitrary expressions belongs in a registered helper or a backend service.

@@ -17,16 +17,13 @@ Escape modes can be configured globally via `.stem.config.json` or per-call:
 Keeping the rendering model explicit makes security-sensitive formatting decisions visible at the call site.
 Callers must treat all dynamically selected templates and user-provided context as untrusted.
 
-== Execution Modes: Restricted vs. Unrestricted
+== Structured-Only Expressions
 
-Stem enforces control over arbitrary Elixir expression execution via the `allow_elixir_expressions` flag:
-
-* **`allow_elixir_expressions: false` (default, recommended)** — Restricts templates to structured Stem expressions, literals, helpers, and variable paths. Forbids arbitrary Elixir code. Protects against Server-Side Template Injection (SSTI). This is the required mode for all production templates.
-
-* **`allow_elixir_expressions: true`** — Allows arbitrary Elixir expressions. Maximum flexibility but should only be used for development and local experiments when the template source is entirely trusted and controlled by your team. Passing `allow_elixir_expressions: true` serves as a visible code-review flag.
-
-Runtime evaluation APIs (`Stem.Unsafe.eval_string/3` and `Stem.Unsafe.eval_file/3`) default to `allow_elixir_expressions: false`, requiring explicit opt-in to use `allow_elixir_expressions: true`.
-If you feel forced to enable arbitrary expressions in production, this indicates an architectural flaw: business logic is leaking into the presentation layer and should be refactored into helpers or backend services.
+Templates accept only structured Stem syntax — assigns, dotted paths, literals, and transformer calls.
+There is no arbitrary-Elixir escape hatch: an unrecognised expression raises `Stem.SyntaxError` rather than evaluating Elixir.
+This is portable across backends (the native engine has no Elixir runtime) and removes a Server-Side Template Injection (SSTI) vector by construction — there is no flag to misconfigure.
+The remaining risk is rendering an attacker-controlled *template*, which is why runtime evaluation lives under `Stem.Unsafe`.
+If logic seems to need arbitrary expressions, it belongs in a registered helper or a backend service, not the presentation layer.
 
 == Transformer Capability Groups
 
@@ -205,19 +202,3 @@ deftemplate :article, "{{title}}", [:assigns],
 
 Supported types: `:string`, `:integer`, `:float`, `:number`, `:boolean`, `:atom`, `:list`, `:map`, `:any`.
 
-== CI Security Gate
-
-`mix stem.audit` is a static analysis gate that scans config files for `allow_elixir_expressions: true`
-and fails the build (exit code 1) on any violation.
-Add it to CI pipelines to prevent configuration drift from accidentally re-enabling SSTI-vulnerable
-expression evaluation in production:
-
-[source,yaml]
-----
-# .github/workflows/ci.yml
-- run: mix stem.audit
-----
-
-The task scans `config/prod.exs` and `config/runtime.exs` by default.
-Use `--paths` to scan additional files.
-Each violation is reported with file path, line number, and the offending line.

@@ -45,7 +45,7 @@ single `RenderOptions`:
 - **Custom** transformers (`slugify`, `reading_time`, `shout`) come from a host
   `TransformerResolver` passed via `.with_host(Host { … })`, consulted before the
   built-ins so it can add or override names. The pipeline value arrives as the
-  first positional argument, so `{{ title |> slugify }}` calls the resolver with
+  first positional argument, so `{{ title | slugify }}` calls the resolver with
   `title`. The host declares its names so the engine admits them and still
   refuses genuinely unknown ones.
 

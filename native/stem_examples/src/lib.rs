@@ -62,7 +62,7 @@ impl From<RenderError> for StemError {
 
 /// Custom transformers, supplied to the engine through the host hook. Each
 /// receives the pipeline value as its first positional argument (the engine
-/// prepends it), so `{{ title |> slugify }}` calls `slugify(title)`. Returning
+/// prepends it), so `{{ title | slugify }}` calls `slugify(title)`. Returning
 /// `None` falls through to the built-in stdlib.
 pub fn custom_transformers(call: &TransformerCall) -> Option<Value> {
     let subject = call.args.first().and_then(Value::as_str).unwrap_or("");
@@ -169,7 +169,7 @@ mod tests {
     #[test]
     fn builtin_and_custom_transformers_render_together() {
         let out = render_template(
-            "{{ title |> upcase }} / {{ title |> slugify }} / {{ tags |> sort |> join(\", \") }}",
+            "{{ title | upcase }} / {{ title | slugify }} / {{ tags | sort | join \", \" }}",
             &json!({ "title": "Hello Brave World", "tags": ["rust", "beam", "wasm"] }),
         )
         .unwrap();
@@ -190,7 +190,7 @@ mod tests {
     #[test]
     fn compile_time_macro_yields_a_program() {
         // The template is compiled to bytecode at build time by `stem!`.
-        let program = stem_macros::stem!("Hi {{ name |> upcase }}!");
+        let program = stem_macros::stem!("Hi {{ name | upcase }}!");
         assert_eq!(
             render(&program, &json!({ "name": "ada" })).unwrap(),
             "Hi ADA!"
@@ -201,7 +201,7 @@ mod tests {
     fn unknown_transformer_is_a_render_error() {
         // A name no built-in group provides and the host did not declare is
         // refused as a typed render error rather than smuggled into the output.
-        let program = compile("{{ name |> no_such }}").unwrap();
+        let program = compile("{{ name | no_such }}").unwrap();
         assert!(matches!(
             render(&program, &json!({ "name": "x" })),
             Err(StemError::Render(_))

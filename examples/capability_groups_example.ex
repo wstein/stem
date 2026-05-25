@@ -26,7 +26,7 @@ defmodule Examples.CapabilityGroupsExample do
   def example_with_strings do
     # Add string manipulation by loading Stem.Transformers.Strings.
 
-    template = "Welcome, {{name |> trim |> upcase}}!"
+    template = "Welcome, {{name | trim | upcase}}!"
 
     Stem.Unsafe.eval_string(
       template,
@@ -43,7 +43,7 @@ defmodule Examples.CapabilityGroupsExample do
 
     template = """
     {{#each authors}}
-      - {{name |> capitalize}} ({{books |> length}} books)
+      - {{name | capitalize}} ({{books | length}} books)
     {{/each}}
     """
 
@@ -74,7 +74,7 @@ defmodule Examples.CapabilityGroupsExample do
 
     template = """
     Top authors:
-    {{authors |> sort_by(book_count) |> take(3) |> map(name)}}
+    {{authors | sort_by book_count | take 3 | map name}}
     """
 
     assigns = [
@@ -92,7 +92,7 @@ defmodule Examples.CapabilityGroupsExample do
   def example_custom_transformers do
     # Combine a group with custom transformers for domain-specific operations.
 
-    template = "{{user |> format_name}} - Rating: {{rating |> star_rating}}"
+    template = "{{user | format_name}} - Rating: {{rating | star_rating}}"
 
     custom = %{
       "star_rating" => fn [rating], _ctx ->

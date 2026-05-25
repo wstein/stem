@@ -83,15 +83,13 @@ Stem provides runtime evaluation APIs for dynamic template compilation:
 
 [source,elixir]
 ----
-# Restricted by default — structured Stem expressions only
+# Templates accept only structured Stem syntax
 Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"])
-
-# Explicit opt-in for arbitrary Elixir — development/trusted sources only
-Stem.Unsafe.eval_string("{{a + b}}", assigns: [a: 1, b: 2], allow_elixir_expressions: true)
 ----
 
-Always use `allow_elixir_expressions: false` (the default) for production templates.
-Only pass `allow_elixir_expressions: true` when the template source is entirely controlled by your team and arbitrary code execution is necessary.
+Unrecognised expressions (e.g. `{{a + b}}`) raise `Stem.SyntaxError` — there is no
+arbitrary-Elixir escape hatch. The remaining risk is rendering an
+attacker-controlled *template*, which is why runtime evaluation lives under `Stem.Unsafe`.
 
 == Helper Capability Groups
 
@@ -112,7 +110,7 @@ Complex data operations require explicit opt-in via capability groups.
 [source,elixir]
 ----
 Stem.Unsafe.eval_string(
-  "{{items |> map(author.name) |> take(5)}}",
+  "{{items | map author.name | take 5}}",
   assigns: [items: books],
   transformers: Map.merge(Stem.Transformers.Collections.all(), Stem.Transformers.Strings.all())
 )
@@ -185,28 +183,9 @@ deftemplate :article, "{{title}}", [:assigns],
   contract: MyApp.Contracts.ArticleView
 ----
 
-== CI Security Gate
-
-Run `mix stem.audit` in CI to fail the build if `allow_elixir_expressions: true` is found in any production config file:
-
-[source,sh]
-----
-mix stem.audit
-# scans config/prod.exs and config/runtime.exs by default
-
-mix stem.audit --paths config/prod.exs --paths config/releases.exs
-----
-
-Add to `.github/workflows/ci.yml`:
-
-[source,yaml]
-----
-- run: mix stem.audit
-----
-
 == Security Best Practices
 
-* **Always use `allow_elixir_expressions: false` in production.** It is the default for a reason.
+* **Templates are structured-only.** There is no arbitrary-Elixir escape hatch to disable.
 * **Never execute user-generated templates.** If you must, ensure they are validated and safe first.
 * **Use HTML escaping by default.** `{{ expression }}` is escaped; use `{{{ expression }}}` only for trusted content.
 * **Inject all data via `assigns`.** Do not allow templates to read environment variables or access global state.
@@ -269,7 +248,7 @@ Inline arithmetic (`{{ price * quantity }}`) is rejected in safe mode. Precomput
 
 *Before (Jinja2):* `{{ price * quantity }}`
 
-*After (Stem):* pass `total: price * quantity` in `assigns` and render `{{total}}`, or register a `multiply` transformer and write `{{price |> multiply(quantity)}}`.
+*After (Stem):* pass `total: price * quantity` in `assigns` and render `{{total}}`, or register a `multiply` transformer and write `{{price | multiply quantity}}`.
 
 === Recipe 4 — Mustache overloaded sections → explicit `{{#if}}` / `{{#each}}`
 
@@ -303,7 +282,7 @@ Mustache's `{{#section}}` is overloaded: it iterates a list, renders once for a 
 {{/unless}}
 ----
 
-Escaping (`{{name}}`), raw output (`{{{name}}}`), comments (`{{! ... }}`), and partials (`{{> name}}`) carry over unchanged. Mustache lambdas (functions placed in the context) have no in-template equivalent — move that logic to the Elixir controller or register a transformer and pipe the value (`{{value |> my_transformer}}`).
+Escaping (`{{name}}`), raw output (`{{{name}}}`), comments (`{{! ... }}`), and partials (`{{> name}}`) carry over unchanged. Mustache lambdas (functions placed in the context) have no in-template equivalent — move that logic to the Elixir controller or register a transformer and pipe the value (`{{value | my_transformer}}`).
 
 == Relationship To The Other Docs
 

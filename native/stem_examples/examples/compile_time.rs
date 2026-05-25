@@ -18,11 +18,11 @@ fn main() {
     // Compiled at build time. Try introducing a syntax error (e.g. `{{ title`)
     // and `cargo build` will fail pointing at this literal.
     let program = stem!(
-        "# {{ title |> upcase }}\n\n\
-         - slug: `{{ title |> slugify }}`\n\
-         - tags: {{ tags |> sort |> join(\", \") }}\n\
-         - {{ body |> reading_time }}\n\
-         - teaser: {{ body |> truncate(24, \"…\") }}\n"
+        "# {{ title | upcase }}\n\n\
+         - slug: `{{ title | slugify }}`\n\
+         - tags: {{ tags | sort | join \", \" }}\n\
+         - {{ body | reading_time }}\n\
+         - teaser: {{ body | truncate 24 \"…\" }}\n"
     );
 
     let data = json!({

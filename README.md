@@ -8,7 +8,7 @@ There is no intermediate template language.
 
 * **Handlebars Syntax**: Remains approachable and compatible with standard frontend tooling.
 * **StringTemplate Strictness**: Enforces clear separation of concerns with restricted expression evaluation by default.
-* **Jinja2 Pipelines**: Enables elegant data transformation using the Elixir-style `|>` pipe operator to chain built-in and project-specific helpers.
+* **Jinja2 Pipelines**: Enables elegant data transformation using the `|` pipe operator to chain built-in and project-specific helpers.
 * **Native Performance**: Templates become ordinary compiled functions, so rendering is fast and type-checked by the compiler.
 * **Flexibility**: Choose compile-time macros for static performance or runtime APIs for dynamic content.
 
@@ -23,7 +23,7 @@ defmodule MyView do
   import Stem.Sigil
 
   def render(assigns) do
-    ~STEM"Hello {{name |> trim |> capitalize}}"
+    ~STEM"Hello {{name | trim | capitalize}}"
   end
 end
 ```
@@ -54,9 +54,6 @@ bin/stem data.json template.stem
 
 # Or pipe JSON data into it
 echo '{"name": "Nina"}' | bin/stem template.stem
-
-# Allow arbitrary Elixir in a trusted template
-echo '{"name":"Jim","id":123}' | bin/stem examples/templates/card.stem --allow-elixir-expressions
 ```
 
 ### Presentation-Only Static Dictionaries
@@ -115,7 +112,7 @@ Stem.Unsafe.eval_string("Hello {{name}}", assigns: [name: "Nina"])
 * `{{#if}}`, `{{#unless}}`, `{{#each}}`, `{{#with}}`, and `{{#region name}}` open blocks closed by `{{/...}}`, with `{{else}}` available on conditional and iteration blocks.
 * `{{yield name}}` renders a named region from the current expanded template scope.
 * Helper calls support nested subexpressions such as `{{format (uppercase name)}}`.
-* Elixir-style helper pipelines such as `{{user.name |> trim |> upcase |> truncate(20)}}` compile to nested helper calls.
+* Helper pipelines such as `{{user.name | trim | upcase | truncate 20}}` compile to nested helper calls.
 * `{{#each items as |item key|}}` and `{{#with story as |article|}}` introduce block parameters. For `{{#each}}` the second parameter is the iteration key — the map key when iterating a map, or the index for a list. `{{#each}}` also accepts a three-parameter form `as |item i0 i1|` binding the item, zero-based index, and one-based index. Parameter names may be any case (`as |Item|`); the underscore `_` is an anonymous placeholder that skips a slot and may repeat (`as |_ _ i1|`).
 * `{{~ ... ~}}`, `{{~ ...}}`, and `{{... ~}}` trim surrounding literal whitespace around a tag on both or one side.
 
@@ -164,33 +161,17 @@ Stem.Unsafe.eval_string("{{name}}", assigns: [name: "Nina"])
 
 Stem.Unsafe.eval_string("{{name}}", assigns: [name: "Nina"], contract: [required: [:name]])
 #=> "Nina"
-
-Stem.Unsafe.eval_string("{{a + b}}", [assigns: [a: 1, b: 2]], allow_elixir_expressions: true)
-#=> "3"
 ```
 
-### Execution Modes
+### Structured-only by design
 
-Both `eval_string/3` and `eval_file/3` support two execution modes controlled by the `allow_elixir_expressions` flag:
+Templates accept only structured Stem syntax — assigns, dotted paths, literals, and transformer calls. There is **no** arbitrary-Elixir escape hatch: an expression the parser does not recognise (e.g. `{{a + b}}`) raises `Stem.SyntaxError` rather than evaluating Elixir. This keeps templates portable across backends and removes a server-side template injection (SSTI) vector by construction — there is no flag to get wrong.
 
-* **`allow_elixir_expressions: false` (default)** — Restricts templates to structured Stem expressions, literals, helpers, and variable paths. Forbids arbitrary Elixir code. This is the recommended mode for all production templates and protects against Server-Side Template Injection (SSTI). Use this for:
-  * User-generated or untrusted template sources
-  * Production environments
-  * Compliance-sensitive applications
-
-* **`allow_elixir_expressions: true`** — Allows arbitrary Elixir expressions. Provides maximum flexibility but should only be used for development and local experiments when the template source is entirely trusted and controlled by your own team. Passing `allow_elixir_expressions: true` serves as a visible code-review flag during security review.
-
-```elixir
-# Restricted by default — use in production
-Stem.Unsafe.eval_string("{{user.name |> trim |> upcase}}", assigns: [user: %{name: "nina"}])
-
-# Explicit opt-in for arbitrary code — development only
-Stem.Unsafe.eval_string("{{a + b}}", assigns: [a: 1, b: 2], allow_elixir_expressions: true)
-```
+The remaining risk is rendering an attacker-controlled *template* itself; that is why runtime evaluation lives under `Stem.Unsafe`.
 
 Additional features:
 - `contract:` lets templates declare required assigns at the call boundary
-- Transformer pipelines are allowed by default because they lower to transformer invocations instead of arbitrary Elixir
+- Transformer pipelines lower to transformer invocations, never to arbitrary Elixir
 
 ## Transformer Capability Groups
 
@@ -226,7 +207,7 @@ Or pin defaults in `.stem.config.json`:
 }
 ```
 
-For common string + escaping work, `Stem.Transformers.Standard.all()` bundles `Minimum` + `Strings` in one call (Collections is deliberately excluded). If a template uses a transformer from a group that isn't loaded, the error names the providing group and the exact way to enable it (the `transformers:` option, the `--transformers` CLI flag, or `.stem.config.json`) — so the fix never requires reaching for `allow_elixir_expressions: true`.
+For common string + escaping work, `Stem.Transformers.Standard.all()` bundles `Minimum` + `Strings` in one call (Collections is deliberately excluded). If a template uses a transformer from a group that isn't loaded, the error names the providing group and the exact way to enable it (the `transformers:` option, the `--transformers` CLI flag, or `.stem.config.json`).
 
 Selector-based transformers such as `map`, `filter`, `sort_by`, and `group_by` accept a simple dotted path string like `"author.name"` so templates can stay declarative without anonymous functions.
 
@@ -284,8 +265,7 @@ Create a `.stem.config.json` file in your project root to set default options fo
 ```json
 {
   "escape": "html",
-  "warn_on_missing_assigns": false,
-  "allow_elixir_expressions": false
+  "warn_on_missing_assigns": false
 }
 ```
 
@@ -293,7 +273,6 @@ Create a `.stem.config.json` file in your project root to set default options fo
 
 * `escape` - Default escape mode: `none`, `html` (default), `xml`, `json`, `url`
 * `warn_on_missing_assigns` - Print warnings for missing assigns: `true` or `false`
-* `allow_elixir_expressions` - Allow arbitrary Elixir expressions: `true` or `false` (default)
 
 **Config discovery**: Stem walks up the directory tree from the current working directory to find `.stem.config.json`. It stops at the project root (when `mix.exs` is found) or the filesystem root.
 

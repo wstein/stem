@@ -9,8 +9,8 @@
 // way as in the compile-time example.
 //
 //   cargo run --example dynamic_eval                          # built-in template + records
-//   cargo run --example dynamic_eval -- '{{ title |> slugify }}'
-//   cargo run --example dynamic_eval -- '{{ title |> upcase }}' records.json
+//   cargo run --example dynamic_eval -- '{{ title | slugify }}'
+//   cargo run --example dynamic_eval -- '{{ title | upcase }}' records.json
 //
 // `records.json` is a JSON array of data objects.
 
@@ -56,10 +56,10 @@ fn main() {
 /// transformers.
 fn default_template() -> String {
     [
-        "{{ title |> upcase }}",
+        "{{ title | upcase }}",
         " — ",
-        "{{ title |> slugify }}",
-        " [{{ tags |> sort |> join(\", \") }}]",
+        "{{ title | slugify }}",
+        " [{{ tags | sort | join \", \" }}]",
     ]
     .concat()
 }

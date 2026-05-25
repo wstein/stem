@@ -27,7 +27,7 @@ Understanding these strict boundaries will help you design secure templates.
 Jinja2 relies on a runtime sandbox to evaluate complex inline math (`{{ 1 + 1 }}`) and state mutations (`{% set var = "value" %}`).
 
 * *The Stem Difference:* Stem forbids inline logic and variable assignment to guarantee strict model-view separation. Templates must remain side-effect free.
-* *The Solution:* Move calculations to your Elixir controller, or use declarative data pipelines via registered transformers (e.g., `{{ value |> custom_math_transformer }}`).
+* *The Solution:* Move calculations to your Elixir controller, or use declarative data pipelines via registered transformers (e.g., `{{ value | custom_math_transformer }}`).
 
 === Coming from Handlebars
 

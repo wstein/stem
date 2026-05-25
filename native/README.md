@@ -127,7 +127,7 @@ and the C ABI) and is a thin wrapper over this same core:
 use serde_json::json;
 use stem_native::{compile, Group, RenderOptions};
 
-let program = compile("{{ name |> upcase }}")?;            // -> Result<Program, CompileError>
+let program = compile("{{ name | upcase }}")?;            // -> Result<Program, CompileError>
 let opts = RenderOptions::new().with_group(Group::Strings); // Minimum is always on
 let out = program.render(&json!({ "name": "ada" }), &opts)?; // -> Result<String, RenderError>
 assert_eq!(out, "ADA");

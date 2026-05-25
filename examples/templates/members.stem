@@ -16,7 +16,7 @@
     {{~/if~}}">
 
     <div style="font-weight: 600">
-      {{i1}}. {{member.name |> upcase}}
+      {{i1}}. {{member.name | upcase}}
     </div>
     <div style="color: #6b7280; font-size: 13px">
       {{member.role}}
