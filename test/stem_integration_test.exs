@@ -79,7 +79,6 @@ defmodule Stem.StemTest do
         Stem.compile_file(template_file)
       end
     end
-
   end
 
   describe "runtime evaluation" do

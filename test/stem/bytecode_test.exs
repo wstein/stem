@@ -201,7 +201,6 @@ defmodule Stem.BytecodeTest do
         assert_raise UnsupportedError, ~r/this/, fn -> compile(source) end
       end
     end
-
   end
 
   describe "compile/2 partial arguments" do

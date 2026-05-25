@@ -124,8 +124,7 @@ defmodule Stem.ExpressionAstTest do
   end
 
   test "parse rejects non-helper pipeline stages" do
-    assert {:error,
-            "pipeline stages must be a helper name followed by space-separated arguments"} =
+    assert {:error, "pipeline stages must be a helper name followed by space-separated arguments"} =
              Expression.parse("user.name | String.trim()")
   end
 

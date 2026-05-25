@@ -81,8 +81,8 @@ defmodule Stem.ParserTest do
     assert {:error, "{{#each}} accepts at most three block parameters", _} =
              Parser.parse("{{#each items as |item idx a b|}}{{item}}{{/each}}")
 
-    assert {:error,
-            "pipeline stages must be a helper name followed by space-separated arguments", _} =
+    assert {:error, "pipeline stages must be a helper name followed by space-separated arguments",
+            _} =
              Parser.parse("{{#if name | String.trim()}}ok{{/if}}")
   end
 

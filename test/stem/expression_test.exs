@@ -136,5 +136,4 @@ defmodule Stem.ExpressionTest do
     assert t("wrap @key", true) ==
              "Stem.Transformers.invoke(:wrap, [stem_key], [this: current, key: stem_key, assigns: assigns, transformers: transformers])"
   end
-
 end
