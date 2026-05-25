@@ -1,0 +1,400 @@
+= Built-in Transformer Reference
+:page-layout: default
+
+Transformers are pipe-chainable functions invoked inside `{{` expression tags:
+
+[source,text]
+----
+{{value |> transformer}}
+{{value |> transformer(arg1, arg2)}}
+{{value |> t1 |> t2(arg) |> t3}}
+----
+
+Transformers are organised into *capability groups*.
+The `default` group is always available.
+All other groups must be explicitly enabled.
+
+== Capability Groups
+
+[cols="1,1,3", options="header"]
+|===
+| Group | Risk | Description
+| `default` | always on | Core output helpers: escaping, serialisation, inspection, collection access.
+| `format` | low | Atomic string transforms that cannot iterate or recurse.
+| `transform` | medium | Structural list operations — may traverse the full collection.
+| `eval` | dynamic, opt-in | Evaluates a string as a Stem expression at render time.
+|===
+
+== Default Group
+
+Always active; no explicit opt-in required.
+
+=== `escape_html`
+Replaces `&`, `<`, `>`, `"`, and `'` with their HTML entities.
+Identical to the automatic HTML escaping applied by `{{ }}`.
+
+[source,text]
+----
+{{unsafe |> escape_html}}
+----
+
+=== `escape_json`
+JSON-encodes a string value without the surrounding double-quotes.
+Safe for embedding values inside a JSON string literal.
+
+[source,text]
+----
+{{quote |> escape_json}}
+----
+
+=== `json`
+Serialises any value (string, number, boolean, list, map, null) to a JSON string.
+
+[source,text]
+----
+{{fruits |> take(3) |> json}}
+----
+
+=== `inspect`
+Returns an Elixir/debug-style inspect representation of the value.
+Useful for development and diagnostics.
+
+[source,text]
+----
+{{fruits |> take(3) |> inspect}}
+----
+
+=== `default(fallback)`
+Returns the value if it is present (non-nil, non-empty string, non-empty collection),
+otherwise returns the fallback.
+
+[source,text]
+----
+{{missing |> default("N/A")}}
+----
+
+=== `join` / `join(separator)`
+Converts a list or map values to a string by concatenating items.
+The optional `separator` is inserted between items (default: `""`).
+
+[source,text]
+----
+{{fruits |> take(3) |> join(", ")}}
+----
+
+=== `lookup(key)`
+Returns the value at `key` in a map, or at integer index `key` in a list.
+Returns `nil` for unknown keys.
+
+[source,text]
+----
+{{config |> lookup("host")}}
+{{fruits |> lookup(2)}}
+----
+
+=== `log`
+Logs the value to stderr and returns an empty string so the tag produces no output.
+Use for debugging without changing rendered output.
+
+[source,text]
+----
+{{title |> log}}
+----
+
+=== `first`
+Returns the first character of a string, or the first element of a list.
+
+[source,text]
+----
+{{fruits |> first}}
+----
+
+=== `last`
+Returns the last character of a string, or the last element of a list.
+
+[source,text]
+----
+{{fruits |> last}}
+----
+
+=== `len`
+Returns the character count of a string, the element count of a list, or the key count of a map.
+
+[source,text]
+----
+{{fruits |> len}}
+----
+
+=== `contains(needle)`
+Returns `true` if a string contains the substring, a list contains the element,
+or a map contains the key.
+
+[source,text]
+----
+{{fruits |> contains("apple")}}
+{{config |> contains("host")}}
+----
+
+=== `empty?`
+Returns `true` when the value is `nil`, `""`, `[]`, or an empty map.
+
+[source,text]
+----
+{{missing |> empty?}}
+----
+
+=== `present?`
+Returns `true` when the value is not empty (the inverse of `empty?`).
+
+[source,text]
+----
+{{present |> present?}}
+----
+
+=== `starts_with(prefix)`
+Returns `true` when the string starts with the given prefix.
+
+[source,text]
+----
+{{title |> starts_with("the")}}
+----
+
+=== `ends_with(suffix)`
+Returns `true` when the string ends with the given suffix.
+
+[source,text]
+----
+{{title |> ends_with("fox")}}
+----
+
+== Format Group
+
+Low-risk atomic string transforms.
+Enable in Elixir: `transformers: Stem.Transformers.Strings.all()`.
+
+=== `upcase`
+Converts the string to uppercase.
+
+[source,text]
+----
+{{title |> upcase}}
+----
+
+=== `downcase`
+Converts the string to lowercase.
+
+[source,text]
+----
+{{blurb |> downcase}}
+----
+
+=== `capitalize`
+Uppercases the first character and lowercases the rest.
+
+[source,text]
+----
+{{title |> capitalize}}
+----
+
+=== `trim`
+Removes leading and trailing whitespace.
+
+[source,text]
+----
+{{str |> trim}}
+----
+
+=== `truncate(length)` / `truncate(length, omission)`
+Truncates the string to `length` characters.
+If an `omission` string is provided (e.g. `"…"`), it is appended and the total
+length including the omission string does not exceed `length`.
+
+[source,text]
+----
+{{blurb |> truncate(20, "…")}}
+----
+
+=== `replace(pattern, replacement)`
+Replaces every occurrence of `pattern` with `replacement`.
+
+[source,text]
+----
+{{title |> replace("quick", "lazy")}}
+----
+
+== Transform Group
+
+Medium-risk structural list operations.
+Enable in Elixir: `transformers: Stem.Transformers.Collections.all()`.
+
+NOTE: `Stem.Transformers.Collections` emits an audit event on every load.
+See xref:08-cross-cutting-concepts.adoc#transformer-capability-groups[Transformer Capability Groups].
+
+=== `split(separator)`
+Splits a string on the separator and returns a list of parts.
+
+[source,text]
+----
+{{csv |> split(",") |> join("|")}}
+----
+
+=== `take(n)`
+Returns the first `n` characters of a string, or the first `n` items of a list.
+
+[source,text]
+----
+{{fruits |> take(3) |> join(", ")}}
+----
+
+=== `drop(n)`
+Removes the first `n` characters of a string, or the first `n` items of a list.
+
+[source,text]
+----
+{{fruits |> drop(3) |> join(", ")}}
+----
+
+=== `slice(start, length)`
+Returns `length` characters/items starting at `start` (zero-based).
+
+[source,text]
+----
+{{fruits |> slice(1, 3) |> join(", ")}}
+----
+
+=== `reverse`
+Reverses a string character-by-character, or reverses the order of list items.
+
+[source,text]
+----
+{{fruits |> take(4) |> reverse |> join(", ")}}
+----
+
+=== `sort`
+Sorts a list in ascending order using default comparison.
+
+[source,text]
+----
+{{fruits |> sort |> join(", ")}}
+----
+
+=== `sort_by(field)`
+Sorts a list of maps by the value of the given dot-path field.
+
+[source,text]
+----
+{{people |> sort_by("age") |> map("name") |> join(", ")}}
+----
+
+=== `map(field)`
+Extracts the dot-path field from each item in a list of maps.
+
+[source,text]
+----
+{{people |> map("name") |> join(", ")}}
+----
+
+=== `filter` / `filter(field)`
+Filters a list to items that are truthy.
+With a `field` selector, filters to items where the dot-path field is truthy.
+
+[source,text]
+----
+{{people |> filter("lead") |> map("name") |> join(", ")}}
+----
+
+=== `compact`
+Removes `null` (nil) values from a list.
+
+[source,text]
+----
+{{sparse |> compact |> join(", ")}}
+----
+
+=== `uniq`
+Removes duplicate values from a list.
+
+[source,text]
+----
+{{fruits |> uniq |> sort |> join(", ")}}
+----
+
+=== `flatten`
+Flattens one level of nested lists into a single list.
+
+[source,text]
+----
+{{nested |> flatten |> join(", ")}}
+----
+
+=== `group_by(field)`
+Groups a list of maps into a map of lists, keyed by the dot-path field value.
+
+[source,text]
+----
+{{people |> group_by("dept") |> json}}
+----
+
+== Eval Group
+
+Dynamic, opt-in only. Enable by setting the `eval` capability in the host.
+
+WARNING: The `eval` group evaluates arbitrary Stem expressions at render time.
+It must never be enabled for templates from untrusted sources.
+
+=== `eval`
+Treats the incoming value as a Stem expression string and evaluates it against
+the current assign context.
+Useful for data-driven template selection, e.g. when a CMS stores expression
+fragments.
+
+[source,text]
+----
+{{expr |> eval}}
+----
+
+== I18n Transformers
+
+Internationalisation transformers are a separate, configurable group that
+delegates translation to a host-provided function.
+See `Stem.Transformers.I18n` for setup instructions.
+
+=== `t(msgid)` / `t(msgid, bindings)` / `translate`
+
+Resolves a translation at render time.
+Locale is read from the `:locale` assign when present, otherwise from
+`config :stem, default_locale: "en"`.
+
+[source,text]
+----
+{{t "greeting"}}
+{{t "hello_name" name=user.name}}
+{{user.title |> t}}
+----
+
+== Loading Groups in Elixir
+
+[source,elixir]
+----
+# Minimum (always active — no explicit opt-in needed)
+
+# Format group
+Stem.Unsafe.eval_string(template, assigns: data,
+  transformers: Stem.Transformers.Strings.all())
+
+# Transform group (emits audit event)
+Stem.Unsafe.eval_string(template, assigns: data,
+  transformers: Stem.Transformers.Collections.all())
+
+# Predicates (empty?, present?, contains — if needed outside default)
+Stem.Unsafe.eval_string(template, assigns: data,
+  transformers: Stem.Transformers.Predicates.all())
+
+# All Elixir groups bundled
+Stem.Unsafe.eval_string(template, assigns: data,
+  transformers: Stem.Transformers.Standard.all())
+
+# I18n
+Stem.Unsafe.eval_string(template, assigns: data,
+  transformers: Stem.Transformers.I18n.all())
+----

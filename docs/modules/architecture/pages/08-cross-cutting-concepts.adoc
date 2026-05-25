@@ -101,6 +101,45 @@ Whitespace logic allows adjusting spacing around rendered content without litter
 `Stem.Formatter` normalises the visual noise produced by these markers — spaces between the braces
 and the tilde are removed during formatting so source files stay readable without any semantic change.
 
+== Literal Output: Escaping and Raw Blocks
+
+Two mechanisms allow template source to include `{{...}}` sequences as literal text rather than
+evaluated expressions.
+
+=== Backslash escape
+
+Prefixing a tag with a backslash renders the tag literally.
+The backslash itself is consumed and does not appear in output.
+
+[source,text]
+----
+\{{name}}       → {{name}}   (literal; expression not evaluated)
+\\{{name}}      → \World     (one literal \; expression evaluates)
+\\\{{name}}     → \{{name}}  (one literal \; expression not evaluated)
+----
+
+The general rule for N consecutive backslashes immediately before `{{`:
+
+* `floor(N/2)` literal backslash characters are emitted.
+* If N is *odd*, the tag is escaped and rendered literally.
+* If N is *even*, the tag evaluates normally.
+
+=== Raw block
+
+The `{{{{raw}}}}` / `{{{{/raw}}}}` block emits all of its content verbatim.
+No Stem expressions, comments, or block tags inside are processed.
+Content merges into the surrounding text stream.
+
+[source,text]
+----
+{{{{raw}}}}{{name}} {{#if x}}yes{{/if}}{{{{/raw}}}}
+→ {{name}} {{#if x}}yes{{/if}}
+----
+
+Use raw blocks when embedding a Stem template inside a Stem template, or when
+documenting Stem syntax in a Stem-rendered page.
+An unclosed `{{{{raw}}}}` block is a compile-time error.
+
 == Template Formatter Plugin
 
 `Stem.Formatter` implements the `Mix.Tasks.Format` behaviour, making it a standard Elixir formatter

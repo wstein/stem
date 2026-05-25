@@ -128,6 +128,14 @@ defmodule Stem do
     * `{{[first-name]}}` / `{{user.[first-name]}}` bracketed literal keys for
       keys that are not valid identifiers (dashes, spaces, dots, leading digits).
     * `{{~ ... ~}}` whitespace control around any tag.
+    * `\{{expression}}` — a single backslash before `{{` escapes the tag and
+      renders it as literal text. The backslash itself is not emitted.
+      For N consecutive backslashes before `{{`: floor(N/2) literal backslashes
+      are emitted; if N is odd the tag is escaped (literal); if N is even the tag
+      evaluates normally.
+    * `{{{{raw}}}}…{{{{/raw}}}}` — everything between the four-brace open and
+      close tags is emitted verbatim without any Stem processing. Content merges
+      into the surrounding text stream. Nesting is not supported.
 
   Bare identifiers resolve to assigns: `{{name}}` reads the `:name` assign, and
   may use any case (`{{Item1}}`). A key that is not a valid identifier is wrapped
@@ -152,14 +160,14 @@ defmodule Stem do
   expanded template scope, so nested blocks can define local yields without
   prop drilling through helper arguments.
 
-  Stem ships transformers in capability groups. Only the secure `Minimum` group
+  Stem ships transformers in capability groups. The `default` group
   (`escape_html`, `escape_json`, `json`, `default`, `lookup`, `join`, `inspect`,
-  `log`) is available by default. Text transforms (`trim`, `upcase`, `truncate`,
-  …), collection transforms (`map`, `filter`, `sort_by`, `group_by`, …), and
-  predicates (`contains`, `empty?`, `present?`) must be loaded explicitly via the
-  `transformers:` binding — see `Stem.Transformers.Strings`,
-  `Stem.Transformers.Collections`, `Stem.Transformers.Predicates`, and the
-  `Stem.Transformers.Standard` bundle.
+  `log`, `first`, `last`, `len`, `contains`, `empty?`, `present?`, `starts_with`,
+  `ends_with`) is always available. Format transforms (`trim`, `upcase`,
+  `truncate`, …) and collection transforms (`map`, `filter`, `sort_by`,
+  `group_by`, `split`, …) must be loaded explicitly via the `transformers:`
+  binding — see `Stem.Transformers.Strings`, `Stem.Transformers.Collections`,
+  `Stem.Transformers.Predicates`, and the `Stem.Transformers.Standard` bundle.
 
       iex> defmodule Greeting do
       ...>   require Stem
