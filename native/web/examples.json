@@ -1,6 +1,6 @@
 [
   { "id": "greeting", "label": "Simple - Hello World!", "view": "source", "main": "main.stem", "partials": [], "data": "data.yaml" },
-  { "id": "pipeline", "label": "Simple - Transformers", "view": "source", "main": "main.stem", "partials": [], "data": "data.yaml" },
+  { "id": "pipeline", "label": "Simple - Transformers", "view": "source", "main": "main.stem", "partials": [], "data": "data.yaml", "groups": ["format"] },
   { "id": "list", "label": "Simple - HTML list", "view": "rendered", "main": "main.stem", "partials": [], "data": "data.yaml" },
   {
     "id": "table",
@@ -48,7 +48,8 @@
     "view": "rendered",
     "main": "main.stem",
     "partials": ["styles", "header", "card", "avatar", "lead_badge", "identity", "name", "role"],
-    "data": "data.yaml"
+    "data": "data.yaml",
+    "groups": ["format"]
   },
   {
     "id": "markdown",

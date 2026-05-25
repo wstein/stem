@@ -582,7 +582,24 @@
           <header class="pane-header">
             <div class="pane-title">
               <h2>Sources</h2>
-              <span class="sub" id="sources-sub">entry template · compiled in-browser</span>
+              <span class="sub" id="sources-sub"></span>
+            </div>
+            <div class="divider"></div>
+            <!-- Capability groups the engine loads for rendering. Minimum is
+                 always on; the rest are opt-in. A template that uses a
+                 transformer from an unchecked group is refused, surfacing the
+                 engine's group-naming message in the status bar — the
+                 secure-by-default model, made interactive. -->
+            <div class="pane-controls" style="display:flex;align-items:center;gap:8px;font-size:11px">
+              <span class="field-label" style="font-size:11px" title="Transformer capability groups — controls which built-in transformers the template may use">Groups</span>
+              <span id="caps-select" role="group" aria-label="Capability groups" style="display:inline-flex;gap:8px;align-items:center;font-size:11px">
+                <label data-group="minimum" style="opacity:.55;cursor:default"><input type="checkbox" checked disabled> <span class="grp-dot" style="color:#6b7280">●</span> minimum</label>
+                <label data-group="inspect"><input type="checkbox" class="cap" value="inspect"> <span class="grp-dot" style="color:#22c55e">●</span> inspect</label>
+                <label data-group="format"><input type="checkbox" class="cap" value="format"> <span class="grp-dot" style="color:#eab308">●</span> format</label>
+                <label data-group="transform"><input type="checkbox" class="cap" value="transform"> <span class="grp-dot" style="color:#f59e0b">●</span> transform</label>
+                <span style="border-left:1px solid var(--border);height:12px;margin:0 2px"></span>
+                <label data-group="eval"><input type="checkbox" class="cap" value="eval"> <span class="grp-dot" style="color:#a855f7">●</span> eval</label>
+              </span>
             </div>
             <div class="pane-actions">
               <button class="focus-toggle" data-pane="sources" title="Focus this pane (Esc to exit)">
@@ -642,18 +659,6 @@
                 <option value="json">json</option>
                 <option value="none">none</option>
               </select>
-              <!-- Capability groups the engine loads for rendering. Minimum is
-                   always on; the rest are opt-in. A template that uses a
-                   transformer from an unchecked group is refused, surfacing the
-                   engine's group-naming message in the status bar — the
-                   secure-by-default model, made interactive. -->
-              <span class="field-label" style="font-size:11px" title="Transformer capability groups (Minimum is always on)">Groups</span>
-              <span id="caps-select" role="group" aria-label="Capability groups" style="display:inline-flex;gap:8px;align-items:center;font-size:11px">
-                <label title="Always on"><input type="checkbox" checked disabled> minimum</label>
-                <label><input type="checkbox" class="cap" value="strings" checked> strings</label>
-                <label><input type="checkbox" class="cap" value="collections" checked> collections</label>
-                <label><input type="checkbox" class="cap" value="predicates" checked> predicates</label>
-              </span>
             </div>
             <div class="pane-actions">
               <button class="focus-toggle" data-pane="output" title="Focus this pane (Esc to exit)">
@@ -670,6 +675,7 @@
           </div>
           <div id="seg-tip" class="seg-tip" role="tooltip" hidden></div>
         </section>
+      <div id="grp-tip" class="seg-tip" role="tooltip" hidden style="max-width:200px;white-space:normal;line-height:1.6"></div>
       </main>
 
       <!-- ── Status bar ────────────────────────────────────────────── -->
@@ -735,12 +741,16 @@
       let tabs        = [{ name: "main", source: "" }];
       let activeTabIdx = 0;
       let loadedExampleIdx = -1;      // which example is loaded (-1 = custom/edited)
+      let exampleModified  = false;  // true when a loaded example has been edited
       let activeView   = "tmpl";      // "tmpl" | "data"
       let outputView   = "rendered";  // "rendered" | "source"
       let escapeMode   = "";
       // Opt-in capability groups loaded for rendering (Minimum is always on).
-      const DEFAULT_GROUPS = ["strings", "collections", "predicates"];
-      let groups       = [...DEFAULT_GROUPS];
+      // Groups are risk-based: inspect (read-only), format (value transforms),
+      // transform (structural/iterative). Examples declare their own required
+      // groups; the initial page state has none enabled beyond minimum.
+      const DEFAULT_GROUPS = ["inspect", "format", "transform"];
+      let groups       = [];
       let focusMode    = null;
       let templateDiagnostics = [];
       let yamlSrc      = "";
@@ -748,6 +758,49 @@
       // (the data->view-model "Controller"). Empty string = pass data through.
       let transformSrc = "";
       let dataTab      = "data";    // "data" | "transform"
+      let yamlDirty      = false;
+      let transformDirty = false;
+
+      const GROUP_META = {
+        minimum: {
+          risk: "core", color: "#6b7280",
+          sections: [
+            { label: "Escaping", items: [["escape_html"],["escape_json"]] },
+            { label: "Encoding", items: [["inspect"],["json"]] },
+            { label: "Utility",  items: [["default"],["join"],["log"]] },
+          ]
+        },
+        inspect: {
+          risk: "low", color: "#22c55e",
+          sections: [
+            { label: "Access",     items: [["first"],["last"],["lookup"]] },
+            { label: "Predicates", items: [["contains"],["empty?"],["len"],["present?"]] },
+            { label: "Strings",    items: [["ends_with"],["starts_with"]] },
+          ]
+        },
+        format: {
+          risk: "mild", color: "#eab308",
+          sections: [
+            { label: "Case",    items: [["capitalize"],["downcase"],["upcase"]] },
+            { label: "Shaping", items: [["replace"],["trim"],["truncate"]] },
+          ]
+        },
+        transform: {
+          risk: "moderate", color: "#f59e0b",
+          sections: [
+            { label: "Sequences",  items: [["drop"],["reverse"],["slice"],["split"],["take"]] },
+            { label: "Cleanup",    items: [["compact"],["flatten"],["uniq"]] },
+            { label: "Ordering",   items: [["group_by"],["sort"],["sort_by"]] },
+            { label: "Projection", items: [["filter"],["map"]] },
+          ]
+        },
+        eval: {
+          risk: "dynamic", color: "#a855f7",
+          sections: [
+            { label: "Expression", items: [["eval"]] },
+          ]
+        },
+      };
 
       const activeTab = () => tabs[activeTabIdx];
 
@@ -875,6 +928,8 @@
             EditorView.updateListener.of((u) => {
               if (u.docChanged && !isProgrammatic(u)) {
                 activeTab().source = u.state.doc.toString();
+                tabs[activeTabIdx].dirty = true;
+                renderTabs();
                 scheduleRun();
               }
               if (u.selectionSet) { updateStatusMeta(); syncOutputToCaret(); }
@@ -1768,17 +1823,22 @@
           }
           // Otherwise it is a genuine custom edit (x === -1): restore verbatim.
           tabs = Array.isArray(s.tabs) && s.tabs.length
-            ? s.tabs.map((t, i) => ({ name: i === 0 ? "main" : (t.n ?? "partial"), source: t.s ?? "" }))
-            : [{ name: "main", source: "" }];
+            ? s.tabs.map((t, i) => ({ name: i === 0 ? "main" : (t.n ?? "partial"), source: t.s ?? "", dirty: false }))
+            : [{ name: "main", source: "", dirty: false }];
           activeTabIdx = Math.max(0, Math.min(tabs.length - 1, s.ai ?? 0));
           activeView = s.av === "data" ? "data" : "tmpl";
           yamlSrc = s.d ?? "";
           transformSrc = s.t ?? "";
+          yamlDirty = false; transformDirty = false;
+          exampleModified = false;
           dataTab = "data";
           showDataTab();
           escapeMode = s.e ?? "";
           byId("escape-select").value = escapeMode;
-          groups = Array.isArray(s.g) ? s.g : [...DEFAULT_GROUPS];
+          const OLD_GROUP_NAMES = { strings: "inspect", collections: "transform", predicates: "inspect" };
+          groups = Array.isArray(s.g)
+            ? [...new Set(s.g.map(g => OLD_GROUP_NAMES[g] ?? g))]
+            : [...DEFAULT_GROUPS];
           syncCapsUI();
           loadedExampleIdx = -1;
           byId("example-select").value = "-1";
@@ -2087,12 +2147,14 @@
           dl.append(opt);
         }
         const input = byId("out-lang-input");
-        input.value = "Auto";
-        // Commit on change/Enter: snap a typed value to a known language (or revert).
+        input.value = "";
+        updateLangPlaceholder();
+        // Commit on change/Enter: snap to a known language; empty reverts to example default.
         input.addEventListener("change", () => {
           const norm = normalizeLangChoice(input.value);
-          if (norm) { outLangChoice = norm; input.value = norm; updateOutLang(); }
-          else { input.value = outLangChoice; } // unknown entry — restore the last valid pick
+          if (norm === "Auto") { outLangChoice = "Auto"; input.value = ""; updateOutLang(); }
+          else if (norm) { outLangChoice = norm; input.value = norm; updateOutLang(); }
+          else { input.value = outLangChoice === "Auto" ? "" : outLangChoice; }
         });
       }
 
