@@ -49,7 +49,7 @@ defmodule Stem.Compiler do
 
   defp compile_node({:expr, expr_ast, escape_mode, meta}, state) do
     expr = compile_expression(expr_ast, meta, state)
-    escaped = quote(do: String.Chars.to_string(Stem.Runtime.resolve(unquote(expr))))
+    escaped = quote(do: String.Chars.to_string(unquote(expr)))
     apply_escape(escaped, escape_mode, state)
   end
 
@@ -134,7 +134,7 @@ defmodule Stem.Compiler do
     body_state = %{state | locals: Map.merge(state.locals, Map.new(param_bindings))}
 
     quote do
-      unquote(this) = Stem.Runtime.resolve(unquote(subject))
+      unquote(this) = unquote(subject)
 
       if Stem.Runtime.is_truthy(
            unquote(this),

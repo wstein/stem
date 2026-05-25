@@ -71,8 +71,7 @@ defmodule Stem.Transformers do
         Map.get(default_transformers(), helper_key) ||
         raise Stem.SyntaxError, unknown_transformer_message(helper_key)
 
-    resolved_args = Enum.map(args, &Stem.Runtime.resolve/1)
-    helper.(resolved_args, %{assigns: assigns, this: this, binding: binding_env})
+    helper.(args, %{assigns: assigns, this: this, binding: binding_env})
   end
 
   @doc """

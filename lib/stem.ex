@@ -186,25 +186,6 @@ defmodule Stem do
       ...>   transformers: Stem.Transformers.Standard.all()
       ...> )
       "NINA"
-
-  ## Computed getters
-
-  A zero-arity function assign is invoked during resolution and its result
-  rendered — an ST4-style computed getter:
-
-      iex> Stem.Unsafe.eval_string("{{full_name}}",
-      ...>   assigns: [full_name: fn -> "Ada Lovelace" end]
-      ...> )
-      "Ada Lovelace"
-
-  This stays declarative: the template reads a property name the backend chose to
-  back with a function and cannot pass arguments, so a getter is just a
-  backend-authored assign with lazy evaluation. Getters work for top-level
-  assigns and dotted-path leaves (`{{user.full_name}}`), in output, pipelines,
-  and block conditions/subjects/collections. The result is escaped like any
-  value. Getters must be arity-0 and should be pure (Stem can't enforce purity),
-  and they are an Elixir-assigns convenience — JSON/CLI data can't carry
-  functions.
   """
 
   defmacro __using__(_opts) do

@@ -6,19 +6,7 @@ defmodule Stem.Runtime do
   # Runtime support invoked by compiled Stem templates.
 
   @doc """
-  Resolves a computed getter.
-
-  A zero-arity function value is invoked and its result returned; every other
-  value is returned unchanged. This is the ST4-style "computed getter": the
-  template reads a property name the backend chose to back with a function and
-  cannot pass arguments, so it stays declarative. Getters should be pure.
-  """
-  @spec resolve(term()) :: term()
-  def resolve(value) when is_function(value, 0), do: value.()
-  def resolve(value), do: value
-
-  @doc """
-  Resolves an assign by key, invoking a computed getter (see `resolve/1`).
+  Fetches an assign by key.
 
   Missing assigns return `nil`. When `warn?` is true, a missing assign also
   prints a warning naming the available assigns.
@@ -27,7 +15,7 @@ defmodule Stem.Runtime do
   def fetch_assign!(assigns, key, warn?) do
     case Access.fetch(assigns, key) do
       {:ok, value} ->
-        resolve(value)
+        value
 
       :error ->
         if warn? do
@@ -55,7 +43,6 @@ defmodule Stem.Runtime do
   @spec partial_scope(term(), map()) :: map()
   def partial_scope(base, hash) when is_map(hash) do
     base
-    |> resolve()
     |> to_scope_map()
     |> Map.merge(hash)
   end
@@ -75,7 +62,7 @@ defmodule Stem.Runtime do
   All other values are truthy.
   """
   @spec is_truthy(term()) :: boolean()
-  def is_truthy(value), do: resolve(value) not in [false, nil, 0, "", [], %{}]
+  def is_truthy(value), do: value not in [false, nil, 0, "", [], %{}]
 
   @spec is_truthy(term(), keyword()) :: boolean()
   def is_truthy(value, opts) when is_list(opts) do
