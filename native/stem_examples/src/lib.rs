@@ -188,6 +188,16 @@ mod tests {
     }
 
     #[test]
+    fn compile_time_macro_yields_a_program() {
+        // The template is compiled to bytecode at build time by `stem!`.
+        let program = stem_macros::stem!("Hi {{ name |> upcase }}!");
+        assert_eq!(
+            render(&program, &json!({ "name": "ada" })).unwrap(),
+            "Hi ADA!"
+        );
+    }
+
+    #[test]
     fn unknown_transformer_is_a_render_error() {
         // A name no built-in group provides and the host did not declare is
         // refused as a typed render error rather than smuggled into the output.

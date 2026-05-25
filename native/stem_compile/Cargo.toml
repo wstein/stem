@@ -1,0 +1,11 @@
+# SPDX-License-Identifier: Apache-2.0
+[package]
+name = "stem_compile"
+version = "0.0.1"
+edition = "2021"
+description = "Stem template compiler: lowers template source to portable bytecode (stem-bc/v1). Shared by the native engine and the compile-time macros."
+
+[dependencies]
+# `float_roundtrip` keeps float literals in templates byte-exact, matching the
+# engine's parser.
+serde_json = { version = "1", features = ["float_roundtrip"] }

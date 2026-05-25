@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: Apache-2.0
+[package]
+name = "stem_macros"
+version = "0.0.1"
+edition = "2021"
+description = "Compile-time macros for Stem: compile a template literal to bytecode at Rust build time."
+publish = false
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = "2"
+quote = "1"
+# Just the compiler (not the renderer) runs at macro-expansion (build) time to
+# turn the template literal into bytecode and surface syntax errors as Rust
+# compile errors. Depending on stem_compile rather than stem_native keeps the
+# proc-macro out of the engine's dependency graph, so its serde_json features
+# unify cleanly with the consumer's.
+stem_compile = { path = "../stem_compile" }

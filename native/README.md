@@ -27,9 +27,15 @@ the host, escaping done natively.
 
 ## Layout
 
-- `stem_native/` — the Rust crate. `src/lib.rs` is the engine (`handle/1` plus
-  the `stem_alloc`/`stem_dealloc`/`stem_render` C ABI); `src/main.rs` is a thin
-  WASI bin reading stdin / writing stdout.
+- `stem_compile/` — the Stem template compiler (source → portable bytecode),
+  factored into its own crate so the macros can use it without the renderer.
+- `stem_native/` — the engine crate. `src/lib.rs` is the renderer: the typed
+  Rust API ([compile`/`Program::render`](#idiomatic-rust-api)) plus the JSON
+  `handle*` entries and the `stem_alloc`/`stem_dealloc`/`stem_render` C ABI;
+  `src/main.rs` is a thin WASI bin reading stdin / writing stdout.
+- `stem_macros/` — the `stem!` compile-time macro: compiles a template literal to
+  bytecode at Rust build time (syntax errors become compile errors).
+- `stem_examples/` — runnable embedder examples written against the typed API.
 - `run.mjs` — a Node WASI runner that loads the wasm module and forwards stdio.
 - `web/` — the browser demo: `stem.mjs` (glue), `index.html` (live page),
   `examples.json` (a small manifest indexing the examples), `examples/<id>/`

@@ -15,11 +15,11 @@ cargo test                           # unit tests for the shared glue
 
 ## The examples
 
-- [`examples/compile_time.rs`](examples/compile_time.rs) — a `macro_rules!`
-  macro (`stem!`) takes the template as a string *literal*, so it is baked into
-  the binary and checked at Rust compile time. The Stem source is lowered to
-  portable bytecode on first render (the engine is an interpreter, not a proc
-  macro).
+- [`examples/compile_time.rs`](examples/compile_time.rs) — the
+  [`stem_macros::stem!`](../stem_macros) proc-macro compiles a template *literal*
+  to bytecode at Rust **build time**: a template syntax error becomes a compile
+  error, and the bytecode is embedded, so no Stem-syntax parsing happens at
+  runtime. The macro expands to a `Program`.
 - [`examples/dynamic_eval.rs`](examples/dynamic_eval.rs) — the template is
   assembled (or read from `argv`) at runtime, compiled to bytecode once, then
   evaluated against each data record. Optionally takes a template string and a

@@ -12,5 +12,8 @@ path = "src/lib.rs"
 
 [dependencies]
 stem_native = { path = "../stem_native" }
-serde_json = "1"
+stem_macros = { path = "../stem_macros" }
+# Match stem_native's serde_json feature so the whole graph shares one `Value`
+# type (the proc-macro dependency otherwise splits feature unification).
+serde_json = { version = "1", features = ["float_roundtrip"] }
 jsonata-core = { version = "2.1.4", default-features = false }

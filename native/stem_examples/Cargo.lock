@@ -402,12 +402,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
+name = "stem_compile"
+version = "0.0.1"
+dependencies = [
+ "serde_json",
+]
+
+[[package]]
 name = "stem_examples"
 version = "0.0.1"
 dependencies = [
  "jsonata-core",
  "serde_json",
+ "stem_macros",
  "stem_native",
+]
+
+[[package]]
+name = "stem_macros"
+version = "0.0.1"
+dependencies = [
+ "quote",
+ "stem_compile",
+ "syn",
 ]
 
 [[package]]
@@ -417,6 +434,7 @@ dependencies = [
  "ryu",
  "serde",
  "serde_json",
+ "stem_compile",
 ]
 
 [[package]]

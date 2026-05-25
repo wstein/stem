@@ -76,6 +76,14 @@ pub fn compile_to_wire(source: &str, partials: &Partials) -> Result<Value, Compi
     compile_inner(source, partials, false)
 }
 
+/// Compiles template source to its wire bytecode as a JSON string — the
+/// build-time entry a compile-time macro embeds, later reconstructed by the
+/// engine's `Program::from_wire`.
+pub fn compile_to_wire_string(source: &str) -> Result<String, CompileError> {
+    let wire = compile_to_wire(source, &Partials::new())?;
+    Ok(serde_json::to_string(&wire).expect("wire program serializes"))
+}
+
 // Same as `compile_to_wire`, but annotates each `text`/`emit` instruction with
 // a `src` provenance object (`{file, start, end}`) so a render-time segment map
 // can attribute output back to the originating template/partial. This produces a

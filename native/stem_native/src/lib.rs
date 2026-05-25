@@ -19,9 +19,12 @@ use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 
-mod compile;
+// The Stem compiler lives in its own crate so the compile-time macros can use it
+// without pulling in the renderer. Aliased to `compile` so call sites read the
+// same as when it was an internal module.
+use stem_compile as compile;
 
-pub use compile::CompileError;
+pub use compile::{compile_to_wire_string, CompileError};
 
 #[derive(Deserialize)]
 struct Input {

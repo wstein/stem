@@ -1,46 +1,39 @@
 // SPDX-License-Identifier: Apache-2.0
 //
-// Compile-time templates via a `macro_rules!` macro.
+// Compile-time templates via the `stem_macros::stem!` proc-macro.
 //
-// The `stem!` macro requires its template argument to be a string *literal*
-// (`$source:literal`), so the template is baked into the binary at Rust compile
-// time and checked at macro-expansion time. The Stem source is lowered to
-// portable bytecode on first render (the engine is an interpreter, not a proc
-// macro), then rendered with the loaded capability groups and custom
-// transformers (see `src/lib.rs`).
+// `stem!` runs the Stem compiler at Rust *build* time: the template literal is
+// lowered to bytecode during compilation (a template syntax error becomes a Rust
+// compile error), and the bytecode is embedded in the binary. At runtime only
+// the cheap wire deserialize happens — no Stem-syntax parsing. The macro expands
+// to a `stem_native::Program`, rendered here with the example's capability groups
+// and custom transformers.
 //
 //   cargo run --example compile_time
 
 use serde_json::json;
-
-/// Expands to a compile + render call. The template must be a literal, so it
-/// lives in the binary and cannot be swapped at runtime.
-macro_rules! stem {
-    ($source:literal, $data:expr $(,)?) => {
-        stem_examples::render_template($source, &$data)
-    };
-}
+use stem_macros::stem;
 
 fn main() {
-    let result = stem!(
-        // `upcase` and `truncate` are built-in (Strings); `sort`/`join` are
-        // built-in (Collections/Minimum); `slugify` and `reading_time` are
-        // custom transformers supplied by the host.
+    // Compiled at build time. Try introducing a syntax error (e.g. `{{ title`)
+    // and `cargo build` will fail pointing at this literal.
+    let program = stem!(
         "# {{ title |> upcase }}\n\n\
          - slug: `{{ title |> slugify }}`\n\
          - tags: {{ tags |> sort |> join(\", \") }}\n\
          - {{ body |> reading_time }}\n\
-         - teaser: {{ body |> truncate(24, \"…\") }}\n",
-        json!({
-            "title": "Hello Brave World",
-            "tags": ["wasm", "beam", "rust"],
-            "body": "Stem compiles a template down to portable bytecode that a tiny \
-                     Rust engine renders byte for byte like the BEAM reference does. \
-                     The same engine also runs in the browser as WebAssembly."
-        })
+         - teaser: {{ body |> truncate(24, \"…\") }}\n"
     );
 
-    match result {
+    let data = json!({
+        "title": "Hello Brave World",
+        "tags": ["wasm", "beam", "rust"],
+        "body": "Stem compiles a template down to portable bytecode that a tiny \
+                 Rust engine renders byte for byte like the BEAM reference does. \
+                 The same engine also runs in the browser as WebAssembly."
+    });
+
+    match stem_examples::render(&program, &data) {
         Ok(rendered) => print!("{rendered}"),
         Err(err) => {
             eprintln!("{err}");

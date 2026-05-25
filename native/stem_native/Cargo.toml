@@ -18,6 +18,9 @@ name = "stem_native"
 path = "src/main.rs"
 
 [dependencies]
+# The Stem compiler, factored out so the compile-time macros can use it without
+# the renderer (see native/stem_macros).
+stem_compile = { path = "../stem_compile" }
 serde = { version = "1", features = ["derive"] }
 # `float_roundtrip`: parse floats with a correctly-rounded algorithm so a JSON
 # float decodes to the same f64 the BEAM holds — required for byte-parity float
