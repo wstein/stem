@@ -139,7 +139,7 @@ assert_eq!(out, "ADA");
   An unloaded group, unknown transformer, or i18n-without-translator is an
   `Err(RenderError)` — never smuggled into the output string.
 - `RenderOptions` is a builder: `.with_group(s)` load capability groups,
-  `.with_host(Host { … })` supplies getters and custom transformers.
+  `.with_host(Host { … })` supplies custom transformers.
 - `Program::from_wire(&str)` reconstructs a program from bytecode (the path a
   compile-time macro or the Elixir bridge uses).
 
@@ -214,51 +214,6 @@ alike. Two pieces make this exact:
 The differential fuzzer exercises floats across a wide range of magnitudes, so
 this is verified, not assumed. (This closes the former gap G2.)
 
-## Per-host computed getters
-
-The BEAM backend lets an assign be a zero-arity function — a **computed getter**
-that is invoked lazily when rendered (see the project README). A closure can't
-cross the wire as JSON, so the native engine offers the same capability through
-a **host hook**: a field whose data value is the sentinel `{"$getter": "<name>"}`
-is computed by a `GetterResolver` — `fn(name, parent) -> Value` — that the
-embedder supplies. The resolver receives the getter name and the field's
-**parent object** as its "self", mirroring ST4 getter semantics.
-
-The engine ships **no** getters: getter logic is the embedder's business, never
-the library's or the wire's. The marker is only data, and it is **inert** under
-the default resolver (`no_getters`), which is what `handle` and the C ABI — and
-therefore the browser — use. So a `$getter` field renders as null unless a Rust
-embedder opts in via `handle_with_getters`:
-
-```rust
-use serde_json::Value;
-use stem_native::handle_with_getters;
-
-fn getters(name: &str, self_obj: &Value) -> Value {
-    let field = |k: &str| self_obj.get(k).and_then(Value::as_str).unwrap_or("");
-    match name {
-        "full_name" => Value::from(format!("{} {}", field("first"), field("last"))),
-        _ => Value::Null, // unknown getter -> null
-    }
-}
-
-let request = r#"{"program":{"version":"stem-bc/v1","instructions":[
-  {"t":"emit","escape":"html","value":{
-    "t":"get","base":{"t":"assign","name":"user"},"segments":["full_name"]}}]},
-  "data":{"user":{"first":"Ada","last":"Lovelace","full_name":{"$getter":"full_name"}}}}"#;
-
-assert_eq!(handle_with_getters(request, getters), "Ada Lovelace");
-```
-
-Resolution happens at every assign and dotted-path step, so a getter works at the
-top level (`{{full_name}}`, self = the root) and at a nested leaf
-(`{{user.full_name}}`, self = `user`). The result is escaped like any value.
-
-Because the getter logic lives in the host, this has no cross-backend byte-parity
-and is deliberately **out of the conformance corpus**; `src/lib.rs` covers the
-hook with native-only unit tests (which supply a `full_name`/`initials` resolver)
-and asserts the default path leaves the marker inert.
-
 ## Custom transformers (host hook)
 
 The BEAM lets a caller supply transformers via the `transformers:` binding,
@@ -271,9 +226,8 @@ the (evaluated) positional args, keyword args, the current assigns, and the bloc
 
 The host also declares the names it handles, so the pre-check can admit them and
 still refuse genuinely unknown names without invoking the resolver — the wire
-stays portable, and a browser embed (using `handle`) gets no host transformers,
-exactly like getters. The `i18n` `t`/`translate` transformers are delivered this
-way:
+stays portable, and a browser embed (using `handle`) gets no host transformers. The `i18n`
+`t`/`translate` transformers are delivered this way:
 
 ```rust
 use serde_json::Value;
@@ -306,7 +260,7 @@ let request = r#"{"program":{"version":"stem-bc/v1","instructions":[
 assert_eq!(handle_with_host(request, &host), "Hello, Ada!");
 ```
 
-Like getters, custom transformers live in the host, so they carry no
+Custom transformers live in the host, so they carry no
 cross-backend parity and stay out of the conformance corpus; `src/lib.rs` covers
 the hook (dispatch, built-in override, keyword bindings, and the i18n refusal
 paths) with native-only unit tests.

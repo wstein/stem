@@ -19,7 +19,7 @@ The original framing treated the native core as gated, portability-only ([[Nativ
 
 - The **bytes-in / bytes-out JSON boundary is demoted to the Elixir conformance seam** (`handle`/`handle_with_host`, the `stem_native error:` sentinel, the C ABI). It stays byte-identical there as the oracle interface.
 - **In-process Rust uses a typed, idiomatic API**: `compile() -> Result<Program, CompileError>`, `Program::render(&Value, &RenderOptions) -> Result<String, RenderError>`, capabilities via `Group`, host extensions via `RenderOptions::with_host`. The JSON `handle*` path is now a thin wrapper over this same core (a drift-guard test asserts they agree).
-- The "no per-node host callbacks" tenet was always partial for the rlib — getters and custom transformers are host `fn` pointers (`Host`). That is intentional for trusted in-process embedding; the untrusted/WASM path still goes through the byte boundary.
+- The "no per-node host callbacks" tenet was always partial for the rlib — custom transformers are host `fn` pointers (`Host`). That is intentional for trusted in-process embedding; the untrusted/WASM path still goes through the byte boundary.
 - Next: **compile-time macros** (a `stem!` proc-macro compiling templates to bytecode at Rust build time) and **leaner WASM/JS interop** (wasm-bindgen / serde-wasm-bindgen instead of the hand-rolled `stem_alloc`/`stem_render` marshalling).
 
 ## Why
@@ -38,7 +38,7 @@ Deliver in independently-useful phases; never build a later phase on spec:
 3. **Rust interpreter → single WASM module** — port the VM and native stdlib, run the same vectors, add differential fuzzing. *Landed* as a PoC (`native/stem_native`): the full built-in transformer stdlib gated by capability group, a host hook for custom transformers, differential fuzzing, and 35/35 conformance vectors green. See [[Native Backend Phase 2 Gate]].
 4. **Host shims** — thin Python/Node loaders plus an edge-render demo.
 
-Gate phases 3–4 on a real non-BEAM/edge demand signal and a benchmark; until then they live in a separate experimental repo, feature-gated, out of mainline. Custom host transformers *are* supported, mirroring the BEAM `transformers:` binding: a host `TransformerResolver` (consulted before the built-ins) supplies or overrides names, and `i18n`'s `t`/`translate` are delivered this way. As with computed getters, the host logic lives in the embedder, so it carries no cross-backend byte-parity and stays out of the conformance corpus.
+Gate phases 3–4 on a real non-BEAM/edge demand signal and a benchmark; until then they live in a separate experimental repo, feature-gated, out of mainline. Custom host transformers *are* supported, mirroring the BEAM `transformers:` binding: a host `TransformerResolver` (consulted before the built-ins) supplies or overrides names, and `i18n`'s `t`/`translate` are delivered this way. As with the BEAM `transformers:` binding, the host logic lives in the embedder, so it carries no cross-backend byte-parity and stays out of the conformance corpus.
 
 ## Links
 
