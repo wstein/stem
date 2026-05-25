@@ -1,7 +1,7 @@
-<section id="{{slug}}" class="card" style="--a:{{accent}}">
+<section id="{{name}}" class="card" style="--a:var(--g-{{name}})">
   <div class="head">
     <span class="dot"></span>
-    <h2>{{name}}<a href="#{{slug}}" class="anchor" aria-label="Permalink">§</a></h2>
+    <h2>{{name}}<a href="#{{name}}" class="anchor" aria-label="Permalink">§</a></h2>
     <span class="pill">{{pill}}</span>
     <span class="count">{{transformers | len}}</span>
     <p class="desc">{{desc}}</p>

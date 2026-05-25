@@ -26,7 +26,6 @@ people:
 
 main_groups:
   - name: default
-    accent: "#6b7280"
     pill: "always on"
     desc: "Output helpers, serialisation, collection access, predicates. Enabled with no opt-in."
     transformers:
@@ -82,7 +81,6 @@ main_groups:
       desc: "Returns true if the value is present (the inverse of empty?)."
       example: "{{present | present?}}"
   - name: format
-    accent: "#16a36b"
     pill: "low risk"
     desc: "Low risk — atomic string transforms that cannot iterate or recurse."
     transformers:
@@ -105,7 +103,6 @@ main_groups:
       desc: "Replaces occurrences of a substring with another."
       example: "{{title | replace \"quick\" \"lazy\"}}"
   - name: transform
-    accent: "#f29e3a"
     pill: "medium risk · audited"
     desc: "Medium risk — full-collection traversals. Loading the group emits a one-shot audit event."
     callout: "Loading this group emits a one-shot audit event on load."
@@ -152,7 +149,6 @@ main_groups:
 
 narrow_groups:
   - name: eval
-    accent: "#7c5cf0"
     pill: "dynamic · opt-in"
     desc: "Dynamic, opt-in only — renders a string from data as a full Stem template against the assign context."
     callout: "Never enable for untrusted templates OR untrusted data — eval renders an arbitrary Stem template drawn from a data value at render time (SSTI)."
@@ -163,7 +159,6 @@ narrow_groups:
       example: "{{eval expr}}"
       result: "WORLD"
   - name: escape
-    accent: "#3a7bf2"
     pill: "literal output"
     desc: "Always available — literal output via the consume-1 backslash rule and raw blocks."
     transformers:

@@ -1,7 +1,7 @@
 <div class="foot">
   <div class="legend">
-    {{#each main_groups}}<span><i aria-hidden="true" style="background:{{accent}}"></i>{{name}}</span>{{/each}}
-    {{#each narrow_groups}}<span><i aria-hidden="true" style="background:{{accent}}"></i>{{name}}</span>{{/each}}
+    {{#each main_groups}}<span><i aria-hidden="true" style="background:var(--g-{{name}})"></i>{{name}}</span>{{/each}}
+    {{#each narrow_groups}}<span><i aria-hidden="true" style="background:var(--g-{{name}})"></i>{{name}}</span>{{/each}}
     <span><i aria-hidden="true" style="background:var(--g-host)"></i>host</span>
     <span><i aria-hidden="true" style="background:var(--g-data)"></i>data</span>
   </div>
