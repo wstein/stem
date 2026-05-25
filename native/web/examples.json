@@ -76,6 +76,6 @@
     "main": "main.stem",
     "partials": ["styles"],
     "data": "data.yaml",
-    "groups": ["format", "transform"]
+    "groups": ["format", "transform", "eval"]
   }
 ]

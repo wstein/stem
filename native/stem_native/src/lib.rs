@@ -166,6 +166,7 @@ struct Ctx {
     locals: HashMap<String, Value>,
     resolve: GetterResolver,
     transform: TransformerResolver,
+    groups: u8,
 }
 
 /// What a Rust embedder supplies to extend the engine: computed getters and
@@ -288,18 +289,19 @@ pub fn handle_with_host(raw: &str, host: &Host) -> String {
 // agree.
 
 /// A capability group of built-in transformers, loaded via [`RenderOptions`].
-/// The Minimum group (and its Inspect alias) is always available and needs no
-/// opt-in. Groups are ordered by risk: Default (read-only) < Format (value
-/// transforms) < Transform (structural/iterative). Mirrors
+/// Groups are ordered by risk: Default (always-on) < Format (value transforms)
+/// < Transform (structural/iterative). `Eval` is separate — it enables dynamic
+/// expression evaluation and must be opted into explicitly. Mirrors
 /// `Stem.Transformers.groups/0`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Group {
-    /// Alias for Minimum — inspect ops (first, lookup, predicates, len, last)
-    /// are part of the default group and need no opt-in.
-    Inspect,
+    /// Dynamic expression evaluation: compiles and renders a Stem expression
+    /// string stored in data. Separate from the risk taxonomy; off by default.
+    Eval,
     /// Value transforms: case, trim, truncate, replace. Bounded by string length.
     Format,
-    /// Structural transforms: map, filter, sort, group_by, flatten, … May iterate unboundedly.
+    /// Structural transforms: map, filter, sort, group_by, flatten, split, …
+    /// May iterate unboundedly.
     Transform,
     I18n,
     /// The Minimum + Format convenience bundle.
@@ -308,11 +310,11 @@ pub enum Group {
 
 fn group_bit(group: Group) -> u8 {
     match group {
-        Group::Inspect    => GROUP_MINIMUM,  // merged into default
-        Group::Format     => GROUP_FORMAT,
-        Group::Transform  => GROUP_TRANSFORM,
-        Group::I18n       => GROUP_I18N,
-        Group::Standard   => GROUP_MINIMUM | GROUP_FORMAT,
+        Group::Eval      => GROUP_EVAL,
+        Group::Format    => GROUP_FORMAT,
+        Group::Transform => GROUP_TRANSFORM,
+        Group::I18n      => GROUP_I18N,
+        Group::Standard  => GROUP_MINIMUM | GROUP_FORMAT,
     }
 }
 
@@ -405,7 +407,7 @@ impl Program {
         };
         match check_instrs(&self.instructions, &caps) {
             Some(message) => Err(RenderError { message }),
-            None => Ok(render(&self.instructions, &root_ctx(data, &options.host))),
+            None => Ok(render(&self.instructions, &root_ctx(data, &options.host, options.groups))),
         }
     }
 
@@ -490,7 +492,7 @@ mod wasm {
             };
             let (output, segments) = match check_instrs(&program.instructions, &caps) {
                 Some(message) => (format!("stem_native error: {message}"), Vec::new()),
-                None => render_mapped(&program.instructions, &root_ctx(&data, &options.host)),
+                None => render_mapped(&program.instructions, &root_ctx(&data, &options.host, options.groups)),
             };
             to_js(&serde_json::json!({ "output": output, "segments": segments }))
         } else {
@@ -533,7 +535,7 @@ fn parse_partials(value: Option<&Value>) -> compile::Partials {
     }
 }
 
-fn root_ctx(data: &Value, host: &Host) -> Ctx {
+fn root_ctx(data: &Value, host: &Host, groups: u8) -> Ctx {
     Ctx {
         root: data.clone(),
         this: Value::Null,
@@ -543,6 +545,7 @@ fn root_ctx(data: &Value, host: &Host) -> Ctx {
         locals: HashMap::new(),
         resolve: host.getter,
         transform: host.transform,
+        groups,
     }
 }
 
@@ -572,7 +575,7 @@ fn render_input_mapped(input: &Input, host: &Host) -> String {
     };
     let (output, segments) = match check_instrs(&input.program.instructions, &caps) {
         Some(message) => (format!("stem_native error: {message}"), Vec::new()),
-        None => render_mapped(&input.program.instructions, &root_ctx(&input.data, host)),
+        None => render_mapped(&input.program.instructions, &root_ctx(&input.data, host, parse_groups(&input.transformers))),
     };
     serde_json::to_string(&json!({ "output": output, "segments": segments })).unwrap_or_default()
 }
@@ -592,6 +595,7 @@ const GROUP_MINIMUM:   u8 = 1 << 0;
 const GROUP_FORMAT:    u8 = 1 << 2;
 const GROUP_TRANSFORM: u8 = 1 << 3;
 const GROUP_I18N:      u8 = 1 << 4;
+const GROUP_EVAL:      u8 = 1 << 5;
 
 // Resolve the enabled-group set from the request's group names. Minimum is
 // always included; unknown names are ignored. Legacy names ("strings",
@@ -606,6 +610,7 @@ fn parse_groups(names: &[String]) -> u8 {
             "transform" | "collections"          => GROUP_TRANSFORM,
             "i18n"                               => GROUP_I18N,
             "standard"                           => GROUP_MINIMUM | GROUP_FORMAT,
+            "eval"                               => GROUP_EVAL,
             _ => 0,
         };
     }
@@ -625,9 +630,11 @@ fn builtin_groups(name: &str) -> Option<u8> {
         // format — atomic value transforms, bounded by string length
         "trim" | "upcase" | "downcase" | "capitalize" | "truncate" | "replace" => GROUP_FORMAT,
         // transform — structural/iterative, may loop, potential DoS
-        "drop" | "reverse" | "slice" | "take"
+        "split" | "drop" | "reverse" | "slice" | "take"
         | "map" | "filter" | "sort" | "sort_by" | "group_by" | "compact" | "uniq"
         | "flatten" => GROUP_TRANSFORM,
+        // eval — dynamic expression evaluation, separate from risk taxonomy
+        "eval" => GROUP_EVAL,
         _ => return None,
     })
 }
@@ -646,6 +653,7 @@ fn group_phrase(set: u8) -> String {
         (GROUP_FORMAT, "format"),
         (GROUP_TRANSFORM, "transform"),
         (GROUP_I18N, "i18n"),
+        (GROUP_EVAL, "eval"),
     ]
     .iter()
     .filter(|(bit, _)| set & bit != 0)
@@ -890,6 +898,7 @@ fn scope_context(ctx: &Ctx, base: &Op, hash: &HashMap<String, Op>) -> Ctx {
         locals: HashMap::new(),
         resolve: ctx.resolve,
         transform: ctx.transform,
+        groups: ctx.groups,
     }
 }
 
@@ -928,6 +937,7 @@ fn each_context(ctx: &Ctx, params: &[String], current: Value, key: Value, index:
         locals,
         resolve: ctx.resolve,
         transform: ctx.transform,
+        groups: ctx.groups,
     }
 }
 
@@ -954,6 +964,7 @@ fn clone_ctx(ctx: &Ctx) -> Ctx {
         locals: ctx.locals.clone(),
         resolve: ctx.resolve,
         transform: ctx.transform,
+        groups: ctx.groups,
     }
 }
 
@@ -987,6 +998,24 @@ fn eval(op: &Op, ctx: &Ctx) -> Value {
                 .iter()
                 .map(|(key, op)| (key.clone(), eval(op, ctx)))
                 .collect();
+
+            // eval: treat the argument as a Stem expression (what goes inside {{ }}),
+            // compile it as a one-emit template, and render against the current scope.
+            // GROUP_EVAL is cleared in the sub-context to prevent recursive eval calls.
+            if *name == "eval" && ctx.groups & GROUP_EVAL != 0 {
+                let expr = positional.first().and_then(Value::as_str).unwrap_or("");
+                let tmpl = format!("{{{{{expr}}}}}");
+                if let Ok(program) = compile_with_partials(&tmpl, &HashMap::new()) {
+                    let sub_groups = ctx.groups & !GROUP_EVAL;
+                    let sub_caps = Caps { groups: sub_groups, host_names: &[] };
+                    if check_instrs(&program.instructions, &sub_caps).is_none() {
+                        let sub_ctx = Ctx { groups: sub_groups, ..clone_ctx(ctx) };
+                        return Value::String(render(&program.instructions, &sub_ctx));
+                    }
+                }
+                return Value::Null;
+            }
+
             let host_call = TransformerCall {
                 name,
                 args: &positional,
@@ -1267,6 +1296,12 @@ fn call(name: &str, args: &[Value]) -> Value {
         "truncate" => Value::from(truncate(&args[0], &args[1], args.get(2))),
         "starts_with" => Value::from(to_string(&args[0]).starts_with(&to_string(&args[1]))),
         "ends_with" => Value::from(to_string(&args[0]).ends_with(&to_string(&args[1]))),
+
+        "split" => {
+            let s = to_string(&args[0]);
+            let sep = args.get(1).map(to_string).unwrap_or_default();
+            Value::Array(s.split(sep.as_str()).map(|p| Value::String(p.to_string())).collect())
+        }
 
         // Shared sequence ops (string- and list-aware)
         "reverse" => reverse(&args[0]),
@@ -2136,6 +2171,98 @@ mod guard_tests {
         assert_eq!(render_groups(program.clone(), data.clone(), &[]), "a");
         // "inspect" still accepted as a backward-compat alias:
         assert_eq!(render_groups(program, data, &["inspect"]), "a");
+    }
+
+    #[test]
+    fn split_requires_transform_group() {
+        let program = json!([{
+            "t": "emit",
+            "value": {
+                "t": "call", "name": "join",
+                "args": [
+                    { "t": "call", "name": "split",
+                      "args": [{ "t": "assign", "name": "s" }, { "t": "lit", "value": "," }],
+                      "kwargs": {} },
+                    { "t": "lit", "value": "|" }
+                ],
+                "kwargs": {}
+            },
+            "escape": "html"
+        }]);
+        let data = json!({ "s": "a,b,c" });
+        let refused = render(program.clone(), data.clone());
+        assert!(refused.contains("requires the transform capability group"), "got: {refused}");
+        assert_eq!(render_groups(program, data, &["transform"]), "a|b|c");
+    }
+
+    #[test]
+    fn eval_requires_eval_group() {
+        // expr contains a Stem expression string (what goes inside {{ ... }})
+        let program = json!([{
+            "t": "emit",
+            "value": {
+                "t": "call", "name": "eval",
+                "args": [{ "t": "assign", "name": "expr" }],
+                "kwargs": {}
+            },
+            "escape": "html"
+        }]);
+        let data = json!({ "name": "world", "expr": "name" });
+        let refused = render(program.clone(), data.clone());
+        assert!(refused.contains("requires the eval capability group"), "got: {refused}");
+        assert_eq!(render_groups(program, data, &["eval"]), "world");
+    }
+
+    #[test]
+    fn eval_renders_expression_against_current_scope() {
+        // eval wraps the string in {{ }} and renders it: "greeting" → {{greeting}}
+        let program = json!([{
+            "t": "emit",
+            "value": {
+                "t": "call", "name": "eval",
+                "args": [{ "t": "assign", "name": "expr" }],
+                "kwargs": {}
+            },
+            "escape": "html"
+        }]);
+        assert_eq!(
+            render_groups(
+                program.clone(),
+                json!({ "greeting": "Hello!", "expr": "greeting" }),
+                &["eval"],
+            ),
+            "Hello!"
+        );
+        // expression pipelines work when the required group is also loaded
+        assert_eq!(
+            render_groups(
+                program,
+                json!({ "name": "ada", "expr": "name |> upcase" }),
+                &["eval", "format"],
+            ),
+            "ADA"
+        );
+    }
+
+    #[test]
+    fn eval_does_not_recurse() {
+        // eval clears GROUP_EVAL in sub-renders; an inner eval is refused.
+        let program = json!([{
+            "t": "emit",
+            "value": {
+                "t": "call", "name": "eval",
+                "args": [{ "t": "assign", "name": "expr" }],
+                "kwargs": {}
+            },
+            "escape": "html"
+        }]);
+        let out = render_groups(
+            program,
+            json!({ "name": "x", "expr": "name |> eval" }),
+            &["eval"],
+        );
+        // Inner eval is refused → null → empty output.
+        assert_eq!(out, "");
     }
 
     fn render_if(data: Value) -> String {
