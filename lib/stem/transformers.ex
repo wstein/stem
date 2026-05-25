@@ -71,7 +71,68 @@ defmodule Stem.Transformers do
         Map.get(default_transformers(), helper_key) ||
         raise Stem.SyntaxError, unknown_transformer_message(helper_key)
 
+    check_builtin_arity!(helper_key, length(args))
     helper.(args, %{assigns: assigns, this: this, binding: binding_env})
+  end
+
+  # Inclusive positional-argument arity (`{min, max}`) of each built-in
+  # transformer, kept in lockstep with the native `builtin_arity` table so an
+  # arity mismatch reports the same message on both backends. The subject (the
+  # piped value, or the first argument in prefix form) is the first positional,
+  # so `title | replace "a" "b"` carries three positionals. Overriding a
+  # built-in name with a host transformer of a different arity is unsupported:
+  # arity is keyed by built-in name.
+  @builtin_arity %{
+    "replace" => {3, 3},
+    "slice" => {3, 3},
+    "default" => {2, 2},
+    "lookup" => {2, 2},
+    "starts_with" => {2, 2},
+    "ends_with" => {2, 2},
+    "take" => {2, 2},
+    "drop" => {2, 2},
+    "map" => {2, 2},
+    "sort_by" => {2, 2},
+    "group_by" => {2, 2},
+    "contains" => {2, 2},
+    "truncate" => {2, 3},
+    "join" => {1, 2},
+    "filter" => {1, 2},
+    "escape_html" => {1, 1},
+    "escape_json" => {1, 1},
+    "json" => {1, 1},
+    "inspect" => {1, 1},
+    "first" => {1, 1},
+    "last" => {1, 1},
+    "len" => {1, 1},
+    "empty?" => {1, 1},
+    "present?" => {1, 1},
+    "upcase" => {1, 1},
+    "downcase" => {1, 1},
+    "trim" => {1, 1},
+    "capitalize" => {1, 1},
+    "reverse" => {1, 1},
+    "sort" => {1, 1},
+    "compact" => {1, 1},
+    "uniq" => {1, 1},
+    "flatten" => {1, 1}
+  }
+
+  defp check_builtin_arity!(key, got) do
+    case Map.get(@builtin_arity, key) do
+      nil -> :ok
+      {min, max} when got >= min and got <= max -> :ok
+      {min, max} -> raise Stem.SyntaxError, arity_message(key, min, max, got)
+    end
+  end
+
+  defp arity_message(name, min, max, got) do
+    expected =
+      if min == max,
+        do: "#{min} argument#{if(min == 1, do: "", else: "s")}",
+        else: "#{min} to #{max} arguments"
+
+    "transformer '#{name}' takes #{expected}, got #{got}"
   end
 
   @doc """

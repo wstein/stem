@@ -115,44 +115,55 @@ defmodule Stem.TransformersTest do
   end
 
   describe "builtin transform functions" do
-    test "builtins raise helpful arity errors" do
+    test "builtins raise a uniform arity error (byte-parity with the native engine)" do
       cases = [
-        {:default, [1], ~r/default expects 2 arguments/},
-        {:join, [1, 2, 3], ~r/join expects 1 or 2 arguments/},
-        {:inspect, [], ~r/inspect expects 1 argument/},
-        {:json, [1, 2], ~r/json expects 1 argument/},
-        {:escape_json, [], ~r/escape_json expects 1 argument/},
-        {:trim, [1, 2], ~r/trim expects 1 argument/},
-        {:upcase, [1, 2], ~r/upcase expects 1 argument/},
-        {:downcase, [1, 2], ~r/downcase expects 1 argument/},
-        {:capitalize, [1, 2], ~r/capitalize expects 1 argument/},
-        {:truncate, [1], ~r/truncate expects 2 or 3 arguments/},
-        {:replace, [1, 2], ~r/replace expects 3 arguments/},
-        {:starts_with, [1], ~r/starts_with expects 2 arguments/},
-        {:ends_with, [1], ~r/ends_with expects 2 arguments/},
-        {:contains, [1], ~r/contains expects 2 arguments/},
-        {:empty?, [1, 2], ~r/empty\? expects 1 argument/},
-        {:present?, [1, 2], ~r/present\? expects 1 argument/},
-        {:compact, [1, 2], ~r/compact expects 1 argument/},
-        {:map, [1], ~r/map expects 2 arguments/},
-        {:filter, [1, 2, 3], ~r/filter expects 1 or 2 arguments/},
-        {:sort, [1, 2], ~r/sort expects 1 argument/},
-        {:sort_by, [1], ~r/sort_by expects 2 arguments/},
-        {:group_by, [1], ~r/group_by expects 2 arguments/},
-        {:take, [1], ~r/take expects 2 arguments/},
-        {:drop, [1], ~r/drop expects 2 arguments/},
-        {:slice, [1, 2], ~r/slice expects 3 arguments/},
-        {:first, [1, 2], ~r/first expects 1 argument/},
-        {:uniq, [1, 2], ~r/uniq expects 1 argument/},
-        {:flatten, [1, 2], ~r/flatten expects 1 argument/},
-        {:reverse, [1, 2], ~r/reverse expects 1 argument/}
+        {:default, [1], "transformer 'default' takes 2 arguments, got 1"},
+        {:join, [1, 2, 3], "transformer 'join' takes 1 to 2 arguments, got 3"},
+        {:inspect, [], "transformer 'inspect' takes 1 argument, got 0"},
+        {:json, [1, 2], "transformer 'json' takes 1 argument, got 2"},
+        {:escape_json, [], "transformer 'escape_json' takes 1 argument, got 0"},
+        {:trim, [1, 2], "transformer 'trim' takes 1 argument, got 2"},
+        {:upcase, [1, 2], "transformer 'upcase' takes 1 argument, got 2"},
+        {:downcase, [1, 2], "transformer 'downcase' takes 1 argument, got 2"},
+        {:capitalize, [1, 2], "transformer 'capitalize' takes 1 argument, got 2"},
+        {:truncate, [1], "transformer 'truncate' takes 2 to 3 arguments, got 1"},
+        {:replace, [1, 2], "transformer 'replace' takes 3 arguments, got 2"},
+        {:starts_with, [1], "transformer 'starts_with' takes 2 arguments, got 1"},
+        {:ends_with, [1], "transformer 'ends_with' takes 2 arguments, got 1"},
+        {:contains, [1], "transformer 'contains' takes 2 arguments, got 1"},
+        {:empty?, [1, 2], "transformer 'empty?' takes 1 argument, got 2"},
+        {:present?, [1, 2], "transformer 'present?' takes 1 argument, got 2"},
+        {:compact, [1, 2], "transformer 'compact' takes 1 argument, got 2"},
+        {:map, [1], "transformer 'map' takes 2 arguments, got 1"},
+        {:filter, [1, 2, 3], "transformer 'filter' takes 1 to 2 arguments, got 3"},
+        {:sort, [1, 2], "transformer 'sort' takes 1 argument, got 2"},
+        {:sort_by, [1], "transformer 'sort_by' takes 2 arguments, got 1"},
+        {:group_by, [1], "transformer 'group_by' takes 2 arguments, got 1"},
+        {:take, [1], "transformer 'take' takes 2 arguments, got 1"},
+        {:drop, [1], "transformer 'drop' takes 2 arguments, got 1"},
+        {:slice, [1, 2], "transformer 'slice' takes 3 arguments, got 2"},
+        {:first, [1, 2], "transformer 'first' takes 1 argument, got 2"},
+        {:uniq, [1, 2], "transformer 'uniq' takes 1 argument, got 2"},
+        {:flatten, [1, 2], "transformer 'flatten' takes 1 argument, got 2"},
+        {:reverse, [1, 2], "transformer 'reverse' takes 1 argument, got 2"}
       ]
 
       Enum.each(cases, fn {name, args, message} ->
-        assert_raise ArgumentError, message, fn ->
+        assert_raise Stem.SyntaxError, message, fn ->
           invoke_all(name, args)
         end
       end)
+    end
+
+    test "an arity mismatch in a rendered template raises (no crash), byte-equal to native" do
+      # The native engine returns the identical message body, prefixed with
+      # "stem_native error: " (asserted in native/stem_native/src/lib.rs).
+      assert_raise Stem.SyntaxError, "transformer 'replace' takes 3 arguments, got 2", fn ->
+        Stem.Unsafe.eval_string("{{ title | replace \"x\" }}",
+          assigns: [title: "hi"],
+          transformers: Stem.Transformers.Strings.all()
+        )
+      end
     end
 
     test "string transforms and defaults" do

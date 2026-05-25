@@ -630,6 +630,36 @@ fn builtin_groups(name: &str) -> Option<u8> {
     })
 }
 
+// The inclusive positional-argument arity `(min, max)` of each built-in. The
+// piped/subject value is the first positional, so `title | replace "a" "b"`
+// carries three positionals. Mirrors the BEAM `Stem.Transformers.builtin_arity/1`
+// table; the two are kept in lockstep so an arity mismatch reports the same
+// message on both backends. Returns `None` for non-built-ins (host transformers
+// declare their own arity).
+fn builtin_arity(name: &str) -> Option<(usize, usize)> {
+    Some(match name {
+        "replace" | "slice" => (3, 3),
+        "default" | "lookup" | "starts_with" | "ends_with" | "take" | "drop" | "map"
+        | "sort_by" | "group_by" | "contains" => (2, 2),
+        "truncate" => (2, 3),
+        "join" | "split" | "filter" => (1, 2),
+        "escape_html" | "escape_json" | "json" | "inspect" | "first" | "last" | "len"
+        | "empty?" | "present?" | "upcase" | "downcase" | "trim" | "capitalize" | "reverse"
+        | "sort" | "compact" | "uniq" | "flatten" | "eval" => (1, 1),
+        _ => return None,
+    })
+}
+
+// The shared arity-mismatch message, byte-identical to the BEAM backend.
+fn arity_error(name: &str, min: usize, max: usize, got: usize) -> String {
+    let expected = if min == max {
+        format!("{min} argument{}", if min == 1 { "" } else { "s" })
+    } else {
+        format!("{min} to {max} arguments")
+    };
+    format!("transformer '{name}' takes {expected}, got {got}")
+}
+
 // Transformer names the BEAM delegates to a host translator (the i18n group).
 // They have no native built-in, so they are usable only when a host supplies
 // them through the [`Host::transform`] resolver.
@@ -728,6 +758,12 @@ fn check_op(op: &Op, caps: &Caps) -> Option<String> {
                          which is not enabled. Add it to the request \"transformers\" list.",
                         group_phrase(provides)
                     ))
+                } else if let Some((min, max)) = builtin_arity(name) {
+                    if args.len() < min || args.len() > max {
+                        Some(arity_error(name, min, max, args.len()))
+                    } else {
+                        args.iter().find_map(|arg| check_op(arg, caps))
+                    }
                 } else {
                     args.iter().find_map(|arg| check_op(arg, caps))
                 }
@@ -1029,7 +1065,6 @@ fn get_field(value: &Value, segment: &str) -> Value {
         _ => Value::Null,
     }
 }
-
 
 // ── Per-host custom transformers ─────────────────────────────────────────────
 //
@@ -1689,7 +1724,6 @@ mod typed_api_tests {
         let opts = RenderOptions::new().with_host(Host {
             transform: shout,
             transformer_names: &["shout"],
-            ..Host::default()
         });
         assert_eq!(
             program.render(&json!({ "name": "ada" }), &opts).unwrap(),
@@ -1842,6 +1876,59 @@ mod guard_tests {
             "value": { "t": "call", "name": "upcase", "args": [{ "t": "assign", "name": "x" }], "kwargs": {} },
             "escape": "html"
         }])
+    }
+
+    // Build an `{{ subject | name args... }}` emit program (subject + literal args).
+    fn call_program(name: &str, subject: &str, args: Vec<Value>) -> Value {
+        let mut call_args = vec![json!({ "t": "assign", "name": subject })];
+        call_args.extend(args.into_iter().map(|v| json!({ "t": "lit", "value": v })));
+        json!([{
+            "t": "emit",
+            "value": { "t": "call", "name": name, "args": call_args, "kwargs": {} },
+            "escape": "html"
+        }])
+    }
+
+    #[test]
+    fn arity_mismatch_is_a_structured_error_not_a_panic() {
+        let data = json!({ "title": "hello world" });
+
+        // Too few args (the former `unreachable` panic): a clean, message-bearing
+        // error. The test completing at all proves there is no panic.
+        assert_eq!(
+            render_groups(
+                call_program("replace", "title", vec![json!("x")]),
+                data.clone(),
+                &["format"],
+            ),
+            "stem_native error: transformer 'replace' takes 3 arguments, got 2"
+        );
+        // Too many args (formerly silently dropped) is also refused.
+        assert_eq!(
+            render_groups(
+                call_program("upcase", "title", vec![json!("extra")]),
+                data.clone(),
+                &["format"],
+            ),
+            "stem_native error: transformer 'upcase' takes 1 argument, got 2"
+        );
+        // Range boundaries remain valid (regression against over-tightening).
+        assert_eq!(
+            render_groups(
+                call_program("truncate", "title", vec![json!(5)]),
+                data.clone(),
+                &["format"],
+            ),
+            "hello"
+        );
+        assert_eq!(
+            render_groups(
+                call_program("truncate", "title", vec![json!(5), json!("…")]),
+                data.clone(),
+                &["format"],
+            ),
+            "hell…"
+        );
     }
 
     #[test]
@@ -2157,7 +2244,6 @@ mod host_transformer_tests {
         let host = Host {
             transform: demo,
             transformer_names: names,
-            ..Host::default()
         };
         handle_with_host(&request.to_string(), &host)
     }
