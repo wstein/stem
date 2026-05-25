@@ -56,7 +56,7 @@ defmodule Stem.DSLTest.DictionaryViews do
 
   deftemplate(
     :render_inline_template,
-    "{{lookup status_map current_status |> default(\"Unknown\")}}",
+    "{{lookup status_map current_status | default \"Unknown\"}}",
     [:assigns]
   )
 
@@ -68,7 +68,7 @@ defmodule Stem.DSLTest.DictionaryViews do
 
   def render_inline_sigil(assigns) do
     ~STEM"""
-    Inline {{lookup status_map current_status |> default("Unknown")}}
+    Inline {{lookup status_map current_status | default "Unknown"}}
     """
     |> String.trim()
   end

@@ -11,18 +11,18 @@
     <span>Stem · Template Transformers · v1</span>
   </div>
   <h1>Built-in Transformer<br><span class="accent">Reference Sheet</span></h1>
-  <p class="sub">Pipe-chainable functions invoked inside <code>{{{{#raw}}}}{{ … }}{{{{/raw}}}}</code> tags. Only <em>default</em> is always on — the rest are enabled per render in the host. Every result below is rendered live by the engine.</p>
+  <p class="sub">Transformers are called inside <code>{{{{#raw}}}}{{ … }}{{{{/raw}}}}</code> tags. Only <em>default</em> is always on — the rest are enabled per render in the host. Every result below is rendered live by the engine.</p>
 </div>
 <div class="syntax">
   <div class="syntax-row">
-    <div class="lbl">Pipe<b>value first</b></div>
-    <code>{{{{#raw}}}}{{ value |> transformer }}{{{{/raw}}}}</code>
-    <code>{{{{#raw}}}}{{ value |> transformer(arg1, arg2) }}{{{{/raw}}}}</code>
-  </div>
-  <div class="syntax-row">
-    <div class="lbl">Prefix<b>name first</b></div>
+    <div class="lbl">Call<b>name first</b></div>
     <code>{{{{#raw}}}}{{ transformer value }}{{{{/raw}}}}</code>
     <code>{{{{#raw}}}}{{ transformer value arg1 arg2 }}{{{{/raw}}}}</code>
   </div>
-  <p class="syntax-note">Both styles compose and are equivalent — pipe chains left-to-right, prefix nests with parentheses:<br><code>{{{{#raw}}}}{{ name |> trim |> capitalize }}{{{{/raw}}}}</code> = <code>{{{{#raw}}}}{{ capitalize (trim name) }}{{{{/raw}}}}</code></p>
+  <div class="syntax-row">
+    <div class="lbl">Compose<b>| and ( )</b></div>
+    <code>{{{{#raw}}}}{{ value | transformer | transformer arg }}{{{{/raw}}}}</code>
+    <code>{{{{#raw}}}}{{ transformer (transformer value) }}{{{{/raw}}}}</code>
+  </div>
+  <p class="syntax-note">A call is <code>{{{{#raw}}}}name arg…{{{{/raw}}}}</code>. <code>|</code> pipes the value in as the next call's first argument; <code>( )</code> groups a call as an argument. The two compose: <code>{{{{#raw}}}}{{ name | trim | capitalize }}{{{{/raw}}}}</code> = <code>{{{{#raw}}}}{{ capitalize (trim name) }}{{{{/raw}}}}</code></p>
 </div>

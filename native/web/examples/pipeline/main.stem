@@ -1,1 +1,1 @@
-{{name |> upcase}}
+{{name | upcase}}

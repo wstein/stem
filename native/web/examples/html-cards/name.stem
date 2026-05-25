@@ -1,2 +1,2 @@
 {{!-- e.g. "1. ADA LOVELACE ★ lead" --}}
-<div class="name">{{@index1}}. {{this.name |> upcase}}{{#if this.lead}} {{> lead_badge}}{{/if}}</div>
+<div class="name">{{@index1}}. {{this.name | upcase}}{{#if this.lead}} {{> lead_badge}}{{/if}}</div>
