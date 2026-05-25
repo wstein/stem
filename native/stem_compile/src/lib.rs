@@ -202,7 +202,7 @@ fn tokenize(src: &str) -> Result<Vec<Token>, CompileError> {
         let start = i + rel;
 
         // Backslash escaping: N trailing backslashes before {{.
-        // Odd N → floor(N/2) literal backslashes + literal {{inner}}; even N → N/2 backslashes + evaluate.
+        // Consume exactly one: N=1 → escape (literal {{inner}}); N≥2 → emit N-1 and evaluate.
         let n = text
             .as_bytes()
             .iter()
@@ -210,41 +210,57 @@ fn tokenize(src: &str) -> Result<Vec<Token>, CompileError> {
             .take_while(|&&b| b == b'\\')
             .count();
         if n > 0 {
-            let pairs = n / 2;
-            text.truncate(text.len() - n + pairs);
-            if n % 2 == 1 {
+            text.truncate(text.len() - 1);
+            if n == 1 {
                 text.push_str("{{");
                 i = start + 2;
                 continue;
             }
-            // Even: collapsed backslashes in text, fall through to normal {{ processing.
+            // N≥2: one backslash consumed, N-1 remain; fall through to evaluate.
         }
 
-        // 4-brace raw block: {{{{raw}}}}...{{{{/raw}}}} — content emitted verbatim.
-        if src[start..].starts_with("{{{{") {
-            if !src[start..].starts_with("{{{{raw}}}}") {
+        // 4-brace raw block: {{{{#name}}}}...{{{{/name}}}} — content emitted verbatim.
+        if src[start..].starts_with("{{{{#") {
+            let name_start = start + 5; // skip "{{{{#"
+            let close_brace = src[name_start..].find("}}}}").ok_or_else(|| CompileError {
+                message: "unterminated raw block open tag".to_string(),
+                start,
+                end: src.len(),
+            })?;
+            let name = &src[name_start..name_start + close_brace];
+            if name.is_empty() {
                 return Err(CompileError {
-                    message: "unrecognized `{{{{` block — only `{{{{raw}}}}` is supported"
-                        .to_string(),
+                    message: "raw block name is required in `{{{{#}}}}`".to_string(),
                     start,
-                    end: src[start..]
-                        .find("}}}}")
-                        .map_or(src.len(), |r| start + r + 4),
+                    end: name_start + close_brace + 4,
                 });
             }
-            const RAW_CLOSE: &str = "{{{{/raw}}}}";
-            let content_start = start + "{{{{raw}}}}".len();
+            let content_start = name_start + close_brace + 4; // skip "}}}}"
+            let mut close_tag = String::from("{{{{/");
+            close_tag.push_str(name);
+            close_tag.push_str("}}}}");
             let content_len = src[content_start..]
-                .find(RAW_CLOSE)
+                .find(close_tag.as_str())
                 .ok_or_else(|| CompileError {
-                    message: "unclosed `{{{{raw}}}}` block — missing `{{{{/raw}}}}`".to_string(),
+                    message: format!(
+                        "unclosed raw block `{{{{{{{{#{name}}}}}}}}}` — missing `{close_tag}`"
+                    ),
                     start,
                     end: src.len(),
                 })?;
             let raw_text = &src[content_start..content_start + content_len];
             text.push_str(raw_text);
-            i = content_start + content_len + RAW_CLOSE.len();
+            i = content_start + content_len + close_tag.len();
             continue;
+        }
+        if src[start..].starts_with("{{{{") {
+            return Err(CompileError {
+                message: "raw blocks use `{{{{#name}}}}` syntax".to_string(),
+                start,
+                end: src[start..]
+                    .find("}}}}")
+                    .map_or(src.len(), |r| start + r + 4),
+            });
         }
 
         // Comments (`{{! .. }}`, `{{!-- .. --}}`) are dropped without flushing
@@ -2028,7 +2044,7 @@ mod tests {
 
     #[test]
     fn backslash_escape() {
-        // N=1 (odd): 0 literal backslashes + literal tag
+        // N=1: escape (literal tag, no evaluation)
         assert_wire(
             r"\{{name}}",
             r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"{{name}}"}]}"#,
@@ -2037,27 +2053,41 @@ mod tests {
             r"before \{{name}} after",
             r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"before {{name}} after"}]}"#,
         );
-        // N=2 (even): 1 literal backslash + tag evaluates
+        // N=2: consume 1, emit 1 backslash + evaluate
         assert_wire(
             r"\\{{name}}",
             r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"\\"},{"escape":"html","t":"emit","value":{"name":"name","t":"assign"}}]}"#,
         );
-        // N=3 (odd): 1 literal backslash + literal tag
+        // N=3: consume 1, emit 2 backslashes + evaluate
         assert_wire(
             r"\\\{{name}}",
-            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"\\{{name}}"}]}"#,
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"\\\\"},{"escape":"html","t":"emit","value":{"name":"name","t":"assign"}}]}"#,
+        );
+        // N=4: consume 1, emit 3 backslashes + evaluate
+        assert_wire(
+            r"\\\\{{name}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"\\\\\\"},{"escape":"html","t":"emit","value":{"name":"name","t":"assign"}}]}"#,
+        );
+        // Standalone backslashes (not before {{) pass through unchanged
+        assert_wire(
+            r"a \ b \\ c",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"a \\ b \\\\ c"}]}"#,
         );
     }
 
     #[test]
     fn raw_block() {
         assert_wire(
-            "{{{{raw}}}}{{name}}{{{{/raw}}}}",
+            "{{{{#raw}}}}{{name}}{{{{/raw}}}}",
             r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"{{name}}"}]}"#,
         );
         assert_wire(
-            "before{{{{raw}}}}{{name}}{{{{/raw}}}}after",
+            "before{{{{#raw}}}}{{name}}{{{{/raw}}}}after",
             r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"before{{name}}after"}]}"#,
+        );
+        assert_wire(
+            "{{{{#mycodeblock}}}}raw content{{{{/mycodeblock}}}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"raw content"}]}"#,
         );
     }
 }
