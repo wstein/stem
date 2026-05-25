@@ -108,37 +108,47 @@ evaluated expressions.
 
 === Backslash escape
 
-Prefixing a tag with a backslash renders the tag literally.
-The backslash itself is consumed and does not appear in output.
+Exactly one leading backslash is consumed before `{{`.
+N=1 escapes the tag (emitted as literal text); N≥2 emits N−1 backslashes and evaluates.
+Backslashes not immediately before `{{` pass through unchanged.
 
 [source,text]
 ----
-\{{name}}       → {{name}}   (literal; expression not evaluated)
-\\{{name}}      → \World     (one literal \; expression evaluates)
-\\\{{name}}     → \{{name}}  (one literal \; expression not evaluated)
+\{{name}}       → {{name}}    (N=1: consume 1, literal tag)
+\\{{name}}      → \World      (N=2: consume 1, emit 1, evaluate)
+\\\{{name}}     → \\World     (N=3: consume 1, emit 2, evaluate)
+\\\\{{name}}    → \\\World    (N=4: consume 1, emit 3, evaluate)
+
+\               → \           (no {{ follows — unchanged)
+\\              → \\          (no {{ follows — unchanged)
 ----
 
-The general rule for N consecutive backslashes immediately before `{{`:
+The rule for N consecutive backslashes immediately before `{{`:
 
-* `floor(N/2)` literal backslash characters are emitted.
-* If N is *odd*, the tag is escaped and rendered literally.
-* If N is *even*, the tag evaluates normally.
+* One backslash is always consumed.
+* If N=1, the tag is escaped and rendered literally.
+* If N≥2, N−1 backslash characters are emitted and the tag evaluates normally.
 
 === Raw block
 
-The `{{{{raw}}}}` / `{{{{/raw}}}}` block emits all of its content verbatim.
+The `{{{{#name}}}}` / `{{{{/name}}}}` block emits all of its content verbatim.
+The name is an arbitrary identifier that must match between the open and close tag.
 No Stem expressions, comments, or block tags inside are processed.
 Content merges into the surrounding text stream.
 
 [source,text]
 ----
-{{{{raw}}}}{{name}} {{#if x}}yes{{/if}}{{{{/raw}}}}
+{{{{#raw}}}}{{name}} {{#if x}}yes{{/if}}{{{{/raw}}}}
 → {{name}} {{#if x}}yes{{/if}}
+
+{{{{#mycodeblock}}}}
+  raw code here
+{{{{/mycodeblock}}}}
 ----
 
 Use raw blocks when embedding a Stem template inside a Stem template, or when
 documenting Stem syntax in a Stem-rendered page.
-An unclosed `{{{{raw}}}}` block is a compile-time error.
+An unclosed raw block is a compile-time error.
 
 == Template Formatter Plugin
 

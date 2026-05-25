@@ -128,13 +128,14 @@ defmodule Stem do
     * `{{[first-name]}}` / `{{user.[first-name]}}` bracketed literal keys for
       keys that are not valid identifiers (dashes, spaces, dots, leading digits).
     * `{{~ ... ~}}` whitespace control around any tag.
-    * `\{{expression}}` — a single backslash before `{{` escapes the tag and
-      renders it as literal text. The backslash itself is not emitted.
-      For N consecutive backslashes before `{{`: floor(N/2) literal backslashes
-      are emitted; if N is odd the tag is escaped (literal); if N is even the tag
-      evaluates normally.
-    * `{{{{raw}}}}…{{{{/raw}}}}` — everything between the four-brace open and
-      close tags is emitted verbatim without any Stem processing. Content merges
+    * `\{{expression}}` — exactly one leading backslash is consumed before `{{`.
+      N=1: the backslash is consumed and the tag is emitted as literal text
+      (e.g. `\{{name}}` → `{{name}}`). N≥2: one backslash is consumed, N−1
+      are emitted, and the tag evaluates (e.g. `\\{{name}}` → `\Werner`).
+      Backslashes not immediately before `{{` are always passed through unchanged.
+    * `{{{{#name}}}}…{{{{/name}}}}` — everything between the four-brace open and
+      close tags is emitted verbatim without any Stem processing. The name is an
+      arbitrary identifier and must match between open and close. Content merges
       into the surrounding text stream. Nesting is not supported.
 
   Bare identifiers resolve to assigns: `{{name}}` reads the `:name` assign, and

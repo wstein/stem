@@ -94,7 +94,8 @@
       <tr><td class="col-expr"><code>\{{name}}</code></td><td class="col-result"><code>\{{name}}</code></td></tr>
       <tr><td class="col-expr"><code>\\{{name}}</code></td><td class="col-result"><code>\\{{name}}</code></td></tr>
       <tr><td class="col-expr"><code>\\\{{name}}</code></td><td class="col-result"><code>\\\{{name}}</code></td></tr>
-      <tr><td class="col-expr"><code>{{{{raw}}}}{{name}}{{{{/raw}}}}</code></td><td class="col-result"><code>{{{{raw}}}}{{name}}{{{{/raw}}}}</code></td></tr>
+      <tr><td class="col-expr"><code>\\\\{{name}}</code></td><td class="col-result"><code>\\\\{{name}}</code></td></tr>
+      <tr><td class="col-expr"><code>{{{{#raw}}}}{{name}}{{{{/raw}}}}</code></td><td class="col-result"><code>{{{{#raw}}}}{{name}}{{{{/raw}}}}</code></td></tr>
     </table>
   </div>
 
