@@ -14,8 +14,7 @@ defmodule Stem.CLI do
 
     -o, --output FILE                  Write the rendered output to FILE
     --strict                           Warn on missing assigns
-    --allow-elixir-expressions         Allow arbitrary Elixir expressions in tags
-    --transformers GROUPS             Enable helper capability groups (comma-separated)
+    --transformers GROUPS              Enable helper capability groups (comma-separated)
     --escape MODE                      Escape mode: none, html (default), xml, json, url
     -h, --help                         Show this message
     -v, --version                      Show the Stem version

@@ -1,2 +1,3 @@
 * xref:manual:index.adoc[Manual]
 * xref:manual:transformers.adoc[Transformer Reference]
+* xref:manual:migration.adoc[Migration Guide]

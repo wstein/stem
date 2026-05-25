@@ -1,0 +1,144 @@
+= Migration Guide
+:page-layout: default
+
+This guide covers the breaking changes introduced since `0.2.0` and the
+mechanical steps to update existing templates, host code, and tooling.
+Each change is a hard cut — there is no compatibility shim — so apply every
+section that touches code you maintain.
+
+For a dated summary of the same changes, see xref:changelog.adoc[Changelog].
+
+== Pipe operator: `|>` becomes `|`
+
+The pipeline separator is now a single `|`, and transformer arguments are
+space-separated in prefix position. The `transformer(arg1, arg2)` paren-call
+form is removed; group sub-expressions with `()` instead.
+
+*Before:*
+[source,handlebars]
+----
+{{name |> upcase |> truncate(20)}}
+{{items |> join(", ")}}
+{{default(upcase(name), "anon")}}
+----
+
+*After:*
+[source,handlebars]
+----
+{{name | upcase | truncate 20}}
+{{items | join ", "}}
+{{default (upcase name) "anon"}}
+----
+
+The piped value is always the first argument of the next stage. A stage with
+no helper name (`{{name |  | trim}}`) is rejected with an explicit
+"pipeline stages cannot be empty" error.
+
+Run `mix stem.format` to reformat your `.stem` files after the edit.
+
+== `||` and `&&` are reserved
+
+The boolean operators `||` and `&&` are reserved for a future release and are
+refused at compile time (maximal munch — spaced or not). A single `|` remains
+the pipe separator.
+
+[source,handlebars]
+----
+{{a || b}}   <1>
+{{a | b}}    <2>
+----
+<1> Rejected: "the '||' operator is not supported".
+<2> Accepted: `b` is a pipe stage applied to `a`.
+
+Move boolean logic into the controller and pass the result through `assigns`,
+or register a predicate transformer.
+
+== Built-in arity is validated
+
+Every built-in transformer now declares an argument range and is checked at
+render time. Calling one with the wrong number of arguments raises a uniform,
+cross-backend error instead of silently truncating arguments or aborting the
+native engine. The subject counts as the first argument.
+
+[source,handlebars]
+----
+{{replace title "x"}}   <1>
+{{replace title "x" "y"}} <2>
+----
+<1> Rejected: "transformer 'replace' takes 3 arguments, got 2".
+<2> Accepted: subject + two literals = three arguments.
+
+The BEAM raises `Stem.SyntaxError`; the native engine returns the same message
+body behind its `stem_native error:` sentinel.
+
+== The Elixir-expression fallback is gone
+
+The arbitrary-Elixir escape hatch is removed entirely. This affects three
+surfaces:
+
+* The `allow_elixir_expressions` compile/eval option no longer exists.
+* The `--allow-elixir-expressions` CLI flag is removed.
+* The `mix stem.audit` task (which scanned for Elixir-expression usage) is
+  removed — there is nothing left to audit.
+
+*Before:*
+[source,elixir]
+----
+Stem.Unsafe.eval_string("{{a + b}}", assigns: [a: 1, b: 2],
+  allow_elixir_expressions: true)
+----
+
+*After:* compute the value in Elixir and pass it as an assign.
+[source,elixir]
+----
+Stem.Unsafe.eval_string("{{sum}}", assigns: [sum: 1 + 2])
+----
+
+An unrecognised expression such as `{{a + b}}` now always raises
+`Stem.SyntaxError`. Templates are structured-only.
+
+== Computed getters are removed
+
+Zero-arity function assigns (BEAM) and the native `$getter` host hook are both
+removed. A value must be a plain term by the time it reaches the template.
+
+*Before:*
+[source,elixir]
+----
+Stem.Unsafe.eval_string("{{now}}", assigns: [now: fn -> DateTime.utc_now() end])
+----
+
+*After:* resolve the value before rendering.
+[source,elixir]
+----
+Stem.Unsafe.eval_string("{{now}}", assigns: [now: DateTime.utc_now()])
+----
+
+== `Stem.Runtime.is_truthy` becomes `truthy?`
+
+The truthiness predicate follows the trailing-`?` convention. Update any host
+code that called it directly.
+
+[source,elixir]
+----
+# Before
+Stem.Runtime.is_truthy(value)
+# After
+Stem.Runtime.truthy?(value)
+----
+
+== `eval` renders full template strings
+
+The opt-in `eval` transformer now treats its input as a complete Stem template
+string — braces included — not a bare inner expression. The caller supplies the
+`{{ … }}`.
+
+[source,handlebars]
+----
+{{expr | eval}}
+----
+
+With `expr = "{{name | upcase}}"` and `name = "ada"`, this renders `ADA`. A
+string with no tags renders to itself. As before, `eval` is opt-in and unsafe
+for untrusted templates *or* untrusted data — see
+xref:transformers.adoc[Transformer Reference].

@@ -56,26 +56,17 @@ echo '{"name":"Nina"}' | mix stem template.stem
 
 By isolating the data into standalone files or pipes, there is no ambiguity parsing raw strings vs files on the command line.
 
-=== Execution Modes
+=== Structured Templates Only
 
-The CLI supports two execution modes via the `--allow-elixir-expressions` flag:
+Templates accept only structured Stem syntax — there is no execution-mode flag and no arbitrary-Elixir escape hatch.
 
-*Restricted Mode (default):*
 [source,sh]
 ----
-# Restricts templates to structured Stem expressions only
 echo '{"name":"Nina"}' | bin/stem template.stem
 ----
 
-*Unrestricted Mode:*
-[source,sh]
-----
-# Allows arbitrary Elixir expressions — development only
-echo '{"a":1,"b":2}' | bin/stem template.stem --allow-elixir-expressions
-----
-
-Use restricted mode (the default) for all production templates and when working with untrusted or user-generated templates.
-Only use `--allow-elixir-expressions` for local development and experiments on templates you fully control.
+An unrecognised expression (e.g. `{{a + b}}`) is refused with a `Stem.SyntaxError` rather than evaluated.
+Move computed values into the controller and pass them through `assigns`, or register a transformer (see <<Helper Capability Groups>>).
 
 == Runtime APIs
 

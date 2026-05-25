@@ -1,0 +1,44 @@
+= Changelog
+:page-layout: default
+
+Notable changes to Stem, newest first. This project follows
+https://semver.org/[Semantic Versioning]; during the `0.x` series a breaking
+change bumps the minor version.
+
+For step-by-step upgrade instructions, see xref:manual:migration.adoc[Migration Guide].
+
+== Unreleased
+
+Breaking changes since `0.2.0`. There is no compatibility shim for any of these.
+
+=== Changed
+
+* *Pipe syntax* — the pipeline separator is now a single `|` with
+  space-separated prefix arguments; the `transformer(arg, …)` paren-call form is
+  removed in favour of `()` grouping (`{{name | truncate 20}}`,
+  `{{default (upcase name) "anon"}}`).
+* *Built-in arity is validated at render time* — a built-in called with the
+  wrong number of arguments raises a uniform, byte-identical error on both the
+  BEAM and the native engine instead of silently truncating arguments or
+  aborting the engine.
+* *`eval` transformer* — now renders a full Stem template string (braces
+  included), not a bare inner expression.
+* *Renamed* `Stem.Runtime.is_truthy/1,2` to `Stem.Runtime.truthy?/1,2`.
+
+=== Removed
+
+* *Elixir-expression fallback* — the `allow_elixir_expressions` option, the
+  `--allow-elixir-expressions` CLI flag, and the `mix stem.audit` task are
+  removed. Templates are structured-only; an unrecognised expression raises
+  `Stem.SyntaxError`.
+* *Computed getters* — zero-arity function assigns (BEAM) and the native
+  `$getter` host hook are removed. Resolve values before rendering.
+
+=== Reserved
+
+* The boolean operators `||` and `&&` are reserved for a future release and are
+  now refused at compile time.
+
+== 0.2.0
+
+Baseline for this changelog. See the Git history for earlier changes.

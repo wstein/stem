@@ -2,3 +2,4 @@
 ** xref:onboarding:index.adoc[Onboarding]
 ** xref:manual:index.adoc[Manual]
 ** xref:architecture:index.adoc[Architecture]
+* xref:changelog.adoc[Changelog]
