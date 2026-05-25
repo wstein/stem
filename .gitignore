@@ -27,3 +27,4 @@ target/
 .idea/
 # wasm-bindgen output for the browser playground (regenerate with native/web/build.sh)
 native/web/wasm/
+.DS_Store
