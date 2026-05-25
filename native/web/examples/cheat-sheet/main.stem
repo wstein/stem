@@ -8,7 +8,7 @@
 {{#each narrow_groups}}{{> group}}{{/each}}
 {{> loading}}
 </div>
-{{> data_source}}
+{{> data}}
 {{> footer}}
 </div>
 {{> scripts}}
