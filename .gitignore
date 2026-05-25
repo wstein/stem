@@ -24,3 +24,4 @@ tmp/
 
 ### Rust native PoC build artifacts ###
 target/
+.idea/
