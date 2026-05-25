@@ -288,25 +288,29 @@ pub fn handle_with_host(raw: &str, host: &Host) -> String {
 // agree.
 
 /// A capability group of built-in transformers, loaded via [`RenderOptions`].
-/// The Minimum group is always available and needs no opt-in. Mirrors
-/// `Stem.Transformers.groups/0`.
+/// The Minimum group is always available and needs no opt-in. Groups are
+/// ordered by risk: Inspect (read-only) < Format (value transforms) <
+/// Transform (structural/iterative). Mirrors `Stem.Transformers.groups/0`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Group {
-    Strings,
-    Collections,
-    Predicates,
+    /// Read-only inspection: `first`, `lookup`, slicing, predicates, `len`, `last`. Bounded O(n), no mutation.
+    Inspect,
+    /// Value transforms: case, trim, truncate, replace. Bounded by string length.
+    Format,
+    /// Structural transforms: map, filter, sort, group_by, flatten, … May iterate unboundedly.
+    Transform,
     I18n,
-    /// The Minimum + Strings convenience bundle (`Stem.Transformers.Standard`).
+    /// The Minimum + Inspect + Format convenience bundle.
     Standard,
 }
 
 fn group_bit(group: Group) -> u8 {
     match group {
-        Group::Strings => GROUP_STRINGS,
-        Group::Collections => GROUP_COLLECTIONS,
-        Group::Predicates => GROUP_PREDICATES,
-        Group::I18n => GROUP_I18N,
-        Group::Standard => GROUP_MINIMUM | GROUP_STRINGS,
+        Group::Inspect    => GROUP_INSPECT,
+        Group::Format     => GROUP_FORMAT,
+        Group::Transform  => GROUP_TRANSFORM,
+        Group::I18n       => GROUP_I18N,
+        Group::Standard   => GROUP_MINIMUM | GROUP_INSPECT | GROUP_FORMAT,
     }
 }
 
@@ -581,46 +585,50 @@ const SUPPORTED_ESCAPES: &[&str] = &["none", "html", "xml", "json"];
 // callable only when one of the groups that provide it is enabled, so an
 // untrusted template can never reach a more powerful transformer than the
 // caller loaded — the same secure-by-default model as the BEAM dispatcher.
-const GROUP_MINIMUM: u8 = 1 << 0;
-const GROUP_STRINGS: u8 = 1 << 1;
-const GROUP_COLLECTIONS: u8 = 1 << 2;
-const GROUP_PREDICATES: u8 = 1 << 3;
-const GROUP_I18N: u8 = 1 << 4;
+const GROUP_MINIMUM:   u8 = 1 << 0;
+const GROUP_INSPECT:   u8 = 1 << 1;
+const GROUP_FORMAT:    u8 = 1 << 2;
+const GROUP_TRANSFORM: u8 = 1 << 3;
+const GROUP_I18N:      u8 = 1 << 4;
 
 // Resolve the enabled-group set from the request's group names. Minimum is
-// always included; unknown names are ignored. "standard" is the Minimum+Strings
-// convenience bundle, matching `Stem.Transformers.Standard`.
+// always included; unknown names are ignored. Legacy names ("strings",
+// "collections", "predicates") are accepted as aliases for the new risk-based
+// names for backward compatibility with stored URL state.
 fn parse_groups(names: &[String]) -> u8 {
     let mut set = GROUP_MINIMUM;
     for name in names {
         set |= match name.as_str() {
-            "minimum" => GROUP_MINIMUM,
-            "strings" => GROUP_STRINGS,
-            "collections" => GROUP_COLLECTIONS,
-            "predicates" => GROUP_PREDICATES,
-            "i18n" => GROUP_I18N,
-            "standard" => GROUP_MINIMUM | GROUP_STRINGS,
+            "minimum"                       => GROUP_MINIMUM,
+            "inspect" | "predicates"        => GROUP_INSPECT,
+            "format"  | "strings"           => GROUP_FORMAT,
+            "transform" | "collections"     => GROUP_TRANSFORM,
+            "i18n"                          => GROUP_I18N,
+            "standard"                      => GROUP_MINIMUM | GROUP_INSPECT | GROUP_FORMAT,
             _ => 0,
         };
     }
     set
 }
 
-// The capability group(s) that provide a built-in transformer, or `None` if the
-// name is not a native built-in. `take`/`drop`/`slice`/`first`/`reverse` are
-// shared by Strings and Collections, so either group enables them. Kept in sync
-// with the match arms in `call`.
+// The capability group that provides a built-in transformer, or `None` if the
+// name is not a native built-in. Groups are now risk-based: inspect (read-only
+// bounded ops), format (value transforms), transform (structural/iterative ops).
+// Kept in sync with the match arms in `call`.
 fn builtin_groups(name: &str) -> Option<u8> {
     Some(match name {
-        "escape_html" | "escape_json" | "json" | "inspect" | "default" | "lookup" | "join"
+        // core — always on: escaping, encoding, essential output ops
+        "escape_html" | "escape_json" | "json" | "inspect" | "default" | "join"
         | "log" => GROUP_MINIMUM,
-        "trim" | "upcase" | "downcase" | "capitalize" | "truncate" | "replace" | "starts_with"
-        | "ends_with" => GROUP_STRINGS,
-        "take" | "drop" | "slice" | "first" | "reverse" => GROUP_STRINGS | GROUP_COLLECTIONS,
-        "map" | "filter" | "sort" | "sort_by" | "group_by" | "compact" | "uniq" | "flatten" => {
-            GROUP_COLLECTIONS
-        }
-        "contains" | "empty?" | "present?" => GROUP_PREDICATES,
+        // inspect — read-only access, no structural change
+        "first" | "lookup" | "starts_with" | "ends_with" | "contains"
+        | "empty?" | "present?" | "len" | "last" => GROUP_INSPECT,
+        // format — atomic value transforms, bounded by string length
+        "trim" | "upcase" | "downcase" | "capitalize" | "truncate" | "replace" => GROUP_FORMAT,
+        // transform — structural/iterative, may loop, potential DoS
+        "drop" | "reverse" | "slice" | "take"
+        | "map" | "filter" | "sort" | "sort_by" | "group_by" | "compact" | "uniq"
+        | "flatten" => GROUP_TRANSFORM,
         _ => return None,
     })
 }
@@ -636,9 +644,9 @@ fn is_i18n_transformer(name: &str) -> bool {
 fn group_phrase(set: u8) -> String {
     [
         (GROUP_MINIMUM, "minimum"),
-        (GROUP_STRINGS, "strings"),
-        (GROUP_COLLECTIONS, "collections"),
-        (GROUP_PREDICATES, "predicates"),
+        (GROUP_INSPECT, "inspect"),
+        (GROUP_FORMAT, "format"),
+        (GROUP_TRANSFORM, "transform"),
         (GROUP_I18N, "i18n"),
     ]
     .iter()
@@ -1312,10 +1320,22 @@ fn call(name: &str, args: &[Value]) -> Value {
         "uniq" => uniq(&args[0]),
         "flatten" => Value::Array(flatten(&args[0])),
 
-        // Predicates
+        // Inspect — read-only sequence / predicate ops
         "contains" => Value::from(contains(&args[0], &args[1])),
         "empty?" => Value::from(!present(&args[0])),
         "present?" => Value::from(present(&args[0])),
+        "len" => match &args[0] {
+            Value::String(s) => Value::from(s.chars().count() as i64),
+            Value::Array(a) => Value::from(a.len() as i64),
+            Value::Object(o) => Value::from(o.len() as i64),
+            _ => Value::Null,
+        },
+        "last" => match &args[0] {
+            Value::String(s) => {
+                Value::from(s.chars().last().map(String::from).unwrap_or_default())
+            }
+            other => enumerable(other).into_iter().last().unwrap_or(Value::Null),
+        },
 
         // Unreachable: `unsupported_feature` rejects any name outside
         // `SUPPORTED_TRANSFORMERS` before rendering begins. Returns null rather
@@ -1665,10 +1685,10 @@ mod typed_api_tests {
         let err = program.render(&data, &RenderOptions::new()).unwrap_err();
         assert!(err
             .message
-            .contains("requires the strings capability group"));
+            .contains("requires the format capability group"));
 
-        // Strings loaded: renders.
-        let opts = RenderOptions::new().with_group(Group::Strings);
+        // Format loaded: renders.
+        let opts = RenderOptions::new().with_group(Group::Format);
         assert_eq!(program.render(&data, &opts).unwrap(), "ADA");
     }
 
@@ -1716,7 +1736,7 @@ mod typed_api_tests {
         let typed = program
             .render(
                 &data,
-                &RenderOptions::new().with_groups([Group::Strings, Group::Collections]),
+                &RenderOptions::new().with_groups([Group::Format, Group::Transform]),
             )
             .unwrap();
 
@@ -2045,17 +2065,17 @@ mod guard_tests {
                 "escape": "html"
             }]),
             json!({ "x": "hi" }),
-            &["strings"],
+            &["format"],
         );
         assert_eq!(out, "HI");
     }
 
     #[test]
     fn transformer_in_an_unloaded_group_is_refused_before_render() {
-        // Minimum-only: `upcase` (Strings) is gated off and refused up front.
+        // Minimum-only: `upcase` (Format group) is gated off and refused up front.
         let out = render(upcase_program(), json!({ "x": "hi" }));
         assert!(
-            out.contains("requires the strings capability group"),
+            out.contains("requires the format capability group"),
             "got: {out}"
         );
     }
@@ -2063,14 +2083,14 @@ mod guard_tests {
     #[test]
     fn transformer_renders_once_its_group_is_loaded() {
         assert_eq!(
-            render_groups(upcase_program(), json!({ "x": "hi" }), &["strings"]),
+            render_groups(upcase_program(), json!({ "x": "hi" }), &["format"]),
             "HI"
         );
     }
 
     #[test]
-    fn standard_bundle_loads_strings() {
-        // "standard" is the Minimum+Strings convenience bundle.
+    fn standard_bundle_loads_format() {
+        // "standard" is the Minimum+Inspect+Format convenience bundle.
         assert_eq!(
             render_groups(upcase_program(), json!({ "x": "hi" }), &["standard"]),
             "HI"
@@ -2078,7 +2098,7 @@ mod guard_tests {
     }
 
     #[test]
-    fn collections_transformer_is_gated_independently_of_strings() {
+    fn transform_group_is_gated_independently_of_format() {
         let program = json!([{
             "t": "emit",
             "value": {
@@ -2093,31 +2113,30 @@ mod guard_tests {
         }]);
         let data = json!({ "xs": ["b", "a", "c"] });
 
-        // Strings loaded but not Collections: `sort` is still refused.
-        let refused = render_groups(program.clone(), data.clone(), &["strings"]);
+        // Format loaded but not Transform: `sort` is still refused.
+        let refused = render_groups(program.clone(), data.clone(), &["format"]);
         assert!(
-            refused.contains("transformer 'sort' requires the collections capability group"),
+            refused.contains("transformer 'sort' requires the transform capability group"),
             "got: {refused}"
         );
 
-        // Collections loaded: it renders. (`join` is Minimum, always on.)
-        assert_eq!(render_groups(program, data, &["collections"]), "a,b,c");
+        // Transform loaded: it renders. (`join` is Minimum, always on.)
+        assert_eq!(render_groups(program, data, &["transform"]), "a,b,c");
     }
 
     #[test]
-    fn shared_transformer_is_enabled_by_either_group() {
-        // `first` is shared by Strings and Collections; either group enables it.
+    fn inspect_group_enables_first_and_lookup() {
+        // `first` and `lookup` are in the inspect group.
         let program = json!([{
             "t": "emit",
             "value": { "t": "call", "name": "first", "args": [{ "t": "assign", "name": "xs" }], "kwargs": {} },
             "escape": "html"
         }]);
         let data = json!({ "xs": ["a", "b"] });
-        assert_eq!(
-            render_groups(program.clone(), data.clone(), &["strings"]),
-            "a"
-        );
-        assert_eq!(render_groups(program, data, &["collections"]), "a");
+        // inspect group enables it:
+        assert_eq!(render_groups(program.clone(), data.clone(), &["inspect"]), "a");
+        // format and transform alone do not:
+        assert!(render_groups(program, data, &["format"]).contains("requires the inspect capability group"));
     }
 
     fn render_if(data: Value) -> String {

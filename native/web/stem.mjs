@@ -16,7 +16,7 @@ import init, { compile as wasmCompile, render as wasmRender } from "./wasm/stem_
 // so it enables every group with a native byte-parity implementation (i18n is
 // omitted: `t`/`translate` need a host translator the browser has none of).
 // Mirrors a BEAM caller passing `transformers:` for these groups.
-const PLAYGROUND_GROUPS = ["minimum", "strings", "collections", "predicates"];
+const PLAYGROUND_GROUPS = ["minimum", "inspect", "format", "transform"];
 
 export async function createRenderer(wasmInput) {
   await init({ module_or_path: wasmInput });
