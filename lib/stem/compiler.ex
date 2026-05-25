@@ -136,7 +136,7 @@ defmodule Stem.Compiler do
     quote do
       unquote(this) = unquote(subject)
 
-      if Stem.Runtime.is_truthy(
+      if Stem.Runtime.truthy?(
            unquote(this),
            warn_on_falsy_coercion: unquote(state.warn_falsy),
            file: unquote(state.file),
@@ -207,7 +207,7 @@ defmodule Stem.Compiler do
     value = compile_expression(expr_ast, meta, state)
 
     quote do
-      Stem.Runtime.is_truthy(
+      Stem.Runtime.truthy?(
         unquote(value),
         warn_on_falsy_coercion: unquote(state.warn_falsy),
         file: unquote(state.file),
@@ -308,7 +308,7 @@ defmodule Stem.Compiler do
 
     case Code.string_to_quoted(trimmed) do
       {:ok, value} ->
-        Stem.Runtime.is_truthy(value)
+        Stem.Runtime.truthy?(value)
 
       _ ->
         trimmed not in ["false", "nil"]

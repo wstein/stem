@@ -61,14 +61,14 @@ defmodule Stem.Runtime do
   Falsey values: false, nil, 0, "", [], %{}
   All other values are truthy.
   """
-  @spec is_truthy(term()) :: boolean()
-  def is_truthy(value), do: value not in [false, nil, 0, "", [], %{}]
+  @spec truthy?(term()) :: boolean()
+  def truthy?(value), do: value not in [false, nil, 0, "", [], %{}]
 
-  @spec is_truthy(term(), keyword()) :: boolean()
-  def is_truthy(value, opts) when is_list(opts) do
+  @spec truthy?(term(), keyword()) :: boolean()
+  def truthy?(value, opts) when is_list(opts) do
     value
     |> warn_on_falsy_coercion(opts)
-    |> is_truthy()
+    |> truthy?()
   end
 
   @spec warn_on_falsy_coercion(term(), keyword()) :: term()

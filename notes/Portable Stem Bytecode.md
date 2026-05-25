@@ -18,7 +18,7 @@ A second `Stem.AST` backend (`Stem.Bytecode`) lowers templates to a versioned, c
 ## Why
 
 - Emitting *data* (bytecode) instead of *source* avoids string-codegen hazards and keeps one interpreter compiled once — no `rustc`-per-template, no `dlopen` of generated code.
-- The Phase-1 Elixir VM *reuses* host primitives (`fetch_assign!/3`, `is_truthy/1`, `Builtins.each/3`, `Transformers.invoke/3`, `Escaping`), so assign resolution, block semantics, dispatch, and escaping match by construction (see [[Native Backend Strategy]]).
+- The Phase-1 Elixir VM *reuses* host primitives (`fetch_assign!/3`, `truthy?/1`, `Builtins.each/3`, `Transformers.invoke/3`, `Escaping`), so assign resolution, block semantics, dispatch, and escaping match by construction (see [[Native Backend Strategy]]).
 - Capability gating is identical because the VM calls `Stem.Transformers.invoke/3`: the Minimum-only default and loaded groups apply, and custom `transformers:` work in the VM. Only a future non-BEAM core must reject a program listing `host_transformers` — hence the metadata.
 
 ## How

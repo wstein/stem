@@ -8,7 +8,7 @@ defmodule Stem.Bytecode.VM do
   output as the compiled backend for every program `Stem.Bytecode.compile/2` can
   emit. It is the Phase-1 reference implementation of the native backend: it
   reuses the existing runtime primitives — `Stem.Runtime.fetch_assign!/3`,
-  `Stem.Runtime.is_truthy/1`, `Stem.Builtins.each/3`, `Stem.Transformers.invoke/3`,
+  `Stem.Runtime.truthy?/1`, `Stem.Builtins.each/3`, `Stem.Transformers.invoke/3`,
   and `Stem.Escaping` — so assign resolution, block semantics, transformer
   dispatch (including the secure Minimum-only capability default), and escaping
   are identical to `Stem.compile_string/2` by construction.
@@ -72,7 +72,7 @@ defmodule Stem.Bytecode.VM do
   end
 
   defp exec({:if, cond_op, then_branch, else_branch}, context) do
-    if Stem.Runtime.is_truthy(eval(cond_op, context)) do
+    if Stem.Runtime.truthy?(eval(cond_op, context)) do
       render_instructions(then_branch, context)
     else
       render_instructions(else_branch, context)
@@ -92,7 +92,7 @@ defmodule Stem.Bytecode.VM do
   defp exec({:with, subject_op, params, body, else_branch}, context) do
     subject = eval(subject_op, context)
 
-    if Stem.Runtime.is_truthy(subject) do
+    if Stem.Runtime.truthy?(subject) do
       render_instructions(body, with_context(context, params, subject))
     else
       render_instructions(else_branch, context)

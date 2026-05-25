@@ -29,21 +29,21 @@ defmodule Stem.RuntimeTest do
     assert stderr == ""
   end
 
-  test "is_truthy matches Handlebars semantics" do
-    assert Stem.Runtime.is_truthy(true)
-    refute Stem.Runtime.is_truthy(false)
-    refute Stem.Runtime.is_truthy(nil)
-    refute Stem.Runtime.is_truthy(0)
-    refute Stem.Runtime.is_truthy("")
-    refute Stem.Runtime.is_truthy([])
-    refute Stem.Runtime.is_truthy(%{})
-    assert Stem.Runtime.is_truthy([1])
+  test "truthy? matches Handlebars semantics" do
+    assert Stem.Runtime.truthy?(true)
+    refute Stem.Runtime.truthy?(false)
+    refute Stem.Runtime.truthy?(nil)
+    refute Stem.Runtime.truthy?(0)
+    refute Stem.Runtime.truthy?("")
+    refute Stem.Runtime.truthy?([])
+    refute Stem.Runtime.truthy?(%{})
+    assert Stem.Runtime.truthy?([1])
   end
 
-  test "is_truthy with options warns before coercion" do
+  test "truthy? with options warns before coercion" do
     stderr =
       capture_io(:stderr, fn ->
-        refute Stem.Runtime.is_truthy(0,
+        refute Stem.Runtime.truthy?(0,
                  warn_on_falsy_coercion: true,
                  file: "template.stem",
                  line: 3,
@@ -54,10 +54,10 @@ defmodule Stem.RuntimeTest do
     assert stderr =~ "template.stem:3: condition coerces 0 to falsy under Stem truthiness"
   end
 
-  test "is_truthy with options accepts truthy values without warnings" do
+  test "truthy? with options accepts truthy values without warnings" do
     stderr =
       capture_io(:stderr, fn ->
-        assert Stem.Runtime.is_truthy("value",
+        assert Stem.Runtime.truthy?("value",
                  warn_on_falsy_coercion: true,
                  file: "template.stem",
                  line: 3,

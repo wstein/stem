@@ -1118,7 +1118,7 @@ fn truthy(value: &Value) -> bool {
         Value::Array(a) => !a.is_empty(),
         Value::Object(o) => !o.is_empty(),
         // Only the integer 0 is falsey; the float 0.0 is truthy, matching
-        // `Stem.Runtime.is_truthy/1` whose falsey set contains the integer 0 but
+        // `Stem.Runtime.truthy?/1` whose falsey set contains the integer 0 but
         // not 0.0.
         Value::Number(n) => !(n.as_i64() == Some(0) || n.as_u64() == Some(0)),
     }
