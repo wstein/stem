@@ -203,7 +203,12 @@ fn tokenize(src: &str) -> Result<Vec<Token>, CompileError> {
 
         // Backslash escaping: N trailing backslashes before {{.
         // Odd N → floor(N/2) literal backslashes + literal {{inner}}; even N → N/2 backslashes + evaluate.
-        let n = text.as_bytes().iter().rev().take_while(|&&b| b == b'\\').count();
+        let n = text
+            .as_bytes()
+            .iter()
+            .rev()
+            .take_while(|&&b| b == b'\\')
+            .count();
         if n > 0 {
             let pairs = n / 2;
             text.truncate(text.len() - n + pairs);
@@ -229,11 +234,13 @@ fn tokenize(src: &str) -> Result<Vec<Token>, CompileError> {
             }
             const RAW_CLOSE: &str = "{{{{/raw}}}}";
             let content_start = start + "{{{{raw}}}}".len();
-            let content_len = src[content_start..].find(RAW_CLOSE).ok_or_else(|| CompileError {
-                message: "unclosed `{{{{raw}}}}` block — missing `{{{{/raw}}}}`".to_string(),
-                start,
-                end: src.len(),
-            })?;
+            let content_len = src[content_start..]
+                .find(RAW_CLOSE)
+                .ok_or_else(|| CompileError {
+                    message: "unclosed `{{{{raw}}}}` block — missing `{{{{/raw}}}}`".to_string(),
+                    start,
+                    end: src.len(),
+                })?;
             let raw_text = &src[content_start..content_start + content_len];
             text.push_str(raw_text);
             i = content_start + content_len + RAW_CLOSE.len();

@@ -310,11 +310,11 @@ pub enum Group {
 
 fn group_bit(group: Group) -> u8 {
     match group {
-        Group::Eval      => GROUP_EVAL,
-        Group::Format    => GROUP_FORMAT,
+        Group::Eval => GROUP_EVAL,
+        Group::Format => GROUP_FORMAT,
         Group::Transform => GROUP_TRANSFORM,
-        Group::I18n      => GROUP_I18N,
-        Group::Standard  => GROUP_MINIMUM | GROUP_FORMAT,
+        Group::I18n => GROUP_I18N,
+        Group::Standard => GROUP_MINIMUM | GROUP_FORMAT,
     }
 }
 
@@ -407,7 +407,10 @@ impl Program {
         };
         match check_instrs(&self.instructions, &caps) {
             Some(message) => Err(RenderError { message }),
-            None => Ok(render(&self.instructions, &root_ctx(data, &options.host, options.groups))),
+            None => Ok(render(
+                &self.instructions,
+                &root_ctx(data, &options.host, options.groups),
+            )),
         }
     }
 
@@ -492,7 +495,10 @@ mod wasm {
             };
             let (output, segments) = match check_instrs(&program.instructions, &caps) {
                 Some(message) => (format!("stem_native error: {message}"), Vec::new()),
-                None => render_mapped(&program.instructions, &root_ctx(&data, &options.host, options.groups)),
+                None => render_mapped(
+                    &program.instructions,
+                    &root_ctx(&data, &options.host, options.groups),
+                ),
             };
             to_js(&serde_json::json!({ "output": output, "segments": segments }))
         } else {
@@ -575,7 +581,10 @@ fn render_input_mapped(input: &Input, host: &Host) -> String {
     };
     let (output, segments) = match check_instrs(&input.program.instructions, &caps) {
         Some(message) => (format!("stem_native error: {message}"), Vec::new()),
-        None => render_mapped(&input.program.instructions, &root_ctx(&input.data, host, parse_groups(&input.transformers))),
+        None => render_mapped(
+            &input.program.instructions,
+            &root_ctx(&input.data, host, parse_groups(&input.transformers)),
+        ),
     };
     serde_json::to_string(&json!({ "output": output, "segments": segments })).unwrap_or_default()
 }
@@ -591,11 +600,11 @@ const SUPPORTED_ESCAPES: &[&str] = &["none", "html", "xml", "json"];
 // callable only when the group that provides it is enabled, so an untrusted
 // template can never reach a more powerful transformer than the caller loaded —
 // the same secure-by-default model as the BEAM dispatcher.
-const GROUP_MINIMUM:   u8 = 1 << 0;
-const GROUP_FORMAT:    u8 = 1 << 2;
+const GROUP_MINIMUM: u8 = 1 << 0;
+const GROUP_FORMAT: u8 = 1 << 2;
 const GROUP_TRANSFORM: u8 = 1 << 3;
-const GROUP_I18N:      u8 = 1 << 4;
-const GROUP_EVAL:      u8 = 1 << 5;
+const GROUP_I18N: u8 = 1 << 4;
+const GROUP_EVAL: u8 = 1 << 5;
 
 // Resolve the enabled-group set from the request's group names. Minimum is
 // always included; unknown names are ignored. Legacy names ("strings",
@@ -606,11 +615,11 @@ fn parse_groups(names: &[String]) -> u8 {
     for name in names {
         set |= match name.as_str() {
             "minimum" | "inspect" | "predicates" => GROUP_MINIMUM,
-            "format"  | "strings"                => GROUP_FORMAT,
-            "transform" | "collections"          => GROUP_TRANSFORM,
-            "i18n"                               => GROUP_I18N,
-            "standard"                           => GROUP_MINIMUM | GROUP_FORMAT,
-            "eval"                               => GROUP_EVAL,
+            "format" | "strings" => GROUP_FORMAT,
+            "transform" | "collections" => GROUP_TRANSFORM,
+            "i18n" => GROUP_I18N,
+            "standard" => GROUP_MINIMUM | GROUP_FORMAT,
+            "eval" => GROUP_EVAL,
             _ => 0,
         };
     }
@@ -625,14 +634,13 @@ fn builtin_groups(name: &str) -> Option<u8> {
     Some(match name {
         // default — always on: escaping, encoding, read-only inspect ops
         "escape_html" | "escape_json" | "json" | "inspect" | "default" | "join" | "log"
-        | "first" | "lookup" | "starts_with" | "ends_with" | "contains"
-        | "empty?" | "present?" | "len" | "last" => GROUP_MINIMUM,
+        | "first" | "lookup" | "starts_with" | "ends_with" | "contains" | "empty?" | "present?"
+        | "len" | "last" => GROUP_MINIMUM,
         // format — atomic value transforms, bounded by string length
         "trim" | "upcase" | "downcase" | "capitalize" | "truncate" | "replace" => GROUP_FORMAT,
         // transform — structural/iterative, may loop, potential DoS
-        "split" | "drop" | "reverse" | "slice" | "take"
-        | "map" | "filter" | "sort" | "sort_by" | "group_by" | "compact" | "uniq"
-        | "flatten" => GROUP_TRANSFORM,
+        "split" | "drop" | "reverse" | "slice" | "take" | "map" | "filter" | "sort" | "sort_by"
+        | "group_by" | "compact" | "uniq" | "flatten" => GROUP_TRANSFORM,
         // eval — dynamic expression evaluation, separate from risk taxonomy
         "eval" => GROUP_EVAL,
         _ => return None,
@@ -1007,9 +1015,15 @@ fn eval(op: &Op, ctx: &Ctx) -> Value {
                 let tmpl = format!("{{{{{expr}}}}}");
                 if let Ok(program) = compile_with_partials(&tmpl, &HashMap::new()) {
                     let sub_groups = ctx.groups & !GROUP_EVAL;
-                    let sub_caps = Caps { groups: sub_groups, host_names: &[] };
+                    let sub_caps = Caps {
+                        groups: sub_groups,
+                        host_names: &[],
+                    };
                     if check_instrs(&program.instructions, &sub_caps).is_none() {
-                        let sub_ctx = Ctx { groups: sub_groups, ..clone_ctx(ctx) };
+                        let sub_ctx = Ctx {
+                            groups: sub_groups,
+                            ..clone_ctx(ctx)
+                        };
                         return Value::String(render(&program.instructions, &sub_ctx));
                     }
                 }
@@ -1300,7 +1314,11 @@ fn call(name: &str, args: &[Value]) -> Value {
         "split" => {
             let s = to_string(&args[0]);
             let sep = args.get(1).map(to_string).unwrap_or_default();
-            Value::Array(s.split(sep.as_str()).map(|p| Value::String(p.to_string())).collect())
+            Value::Array(
+                s.split(sep.as_str())
+                    .map(|p| Value::String(p.to_string()))
+                    .collect(),
+            )
         }
 
         // Shared sequence ops (string- and list-aware)
@@ -1364,9 +1382,7 @@ fn call(name: &str, args: &[Value]) -> Value {
             _ => Value::Null,
         },
         "last" => match &args[0] {
-            Value::String(s) => {
-                Value::from(s.chars().last().map(String::from).unwrap_or_default())
-            }
+            Value::String(s) => Value::from(s.chars().last().map(String::from).unwrap_or_default()),
             other => enumerable(other).into_iter().last().unwrap_or(Value::Null),
         },
 
@@ -1716,9 +1732,7 @@ mod typed_api_tests {
 
         // Minimum-only: refused, as a typed RenderError.
         let err = program.render(&data, &RenderOptions::new()).unwrap_err();
-        assert!(err
-            .message
-            .contains("requires the format capability group"));
+        assert!(err.message.contains("requires the format capability group"));
 
         // Format loaded: renders.
         let opts = RenderOptions::new().with_group(Group::Format);
@@ -2191,7 +2205,10 @@ mod guard_tests {
         }]);
         let data = json!({ "s": "a,b,c" });
         let refused = render(program.clone(), data.clone());
-        assert!(refused.contains("requires the transform capability group"), "got: {refused}");
+        assert!(
+            refused.contains("requires the transform capability group"),
+            "got: {refused}"
+        );
         assert_eq!(render_groups(program, data, &["transform"]), "a|b|c");
     }
 
@@ -2209,7 +2226,10 @@ mod guard_tests {
         }]);
         let data = json!({ "name": "world", "expr": "name" });
         let refused = render(program.clone(), data.clone());
-        assert!(refused.contains("requires the eval capability group"), "got: {refused}");
+        assert!(
+            refused.contains("requires the eval capability group"),
+            "got: {refused}"
+        );
         assert_eq!(render_groups(program, data, &["eval"]), "world");
     }
 
