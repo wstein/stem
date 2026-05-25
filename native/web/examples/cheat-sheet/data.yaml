@@ -6,7 +6,7 @@ quote: "say \"hello\" to everyone"
 present: "I exist"
 missing: null
 csv: "a,b,c"
-expr: "title"
+expr: "{{name |> upcase}}"
 name: "World"
 raw_src: "{{{{#raw}}}}{{name}}{{{{/raw}}}}"
 
@@ -23,3 +23,165 @@ people:
   - { name: Alice, age: 28, dept: Design }
   - { name: Bob,   age: 35, dept: Engineering, lead: true }
   - { name: Dave,  age: 28, dept: Design }
+
+capability_groups:
+  - name: default
+    accent: "#6b7280"
+    pill: "always on"
+    desc: "Output helpers, serialisation, collection access, predicates. Enabled with no opt-in."
+    transformers:
+    - name: escape_html
+      desc: "Escapes HTML special characters in a string."
+      example: "{{unsafe |> escape_html}}"
+    - name: escape_json
+      desc: "Escapes characters in a string for safe inclusion in JSON."
+      example: "{{quote |> escape_json}}"
+    - name: json
+      desc: "Serializes a value to a JSON string."
+      example: "{{fruits |> take(3) |> json}}"
+    - name: inspect
+      desc: "Returns a human-readable representation of a value."
+      example: "{{fruits |> take(3) |> inspect}}"
+    - name: default
+      desc: "Returns the provided default value if the input is null or empty."
+      example: "{{missing |> default(\"N/A\")}}"
+    - name: join
+      desc: "Joins elements of a collection into a string with a given separator."
+      example: "{{fruits |> take(3) |> join(\", \")}}"
+    - name: log
+      desc: "Writes the value to stderr for debugging and renders nothing."
+      example: "{{title |> log}}"
+    - name: first
+      desc: "Returns the first element of a collection."
+      example: "{{fruits |> first}}"
+    - name: last
+      desc: "Returns the last element of a collection."
+      example: "{{fruits |> last}}"
+    - name: len
+      desc: "Returns the number of items, characters, or keys."
+      example: "{{fruits |> len}}"
+    - name: lookup
+      desc: "Looks up a value by key in a map."
+      example: "{{config |> lookup(\"host\")}}"
+    - name: lookup
+      desc: "Looks up an element by zero-based index in a list."
+      example: "{{fruits |> lookup(2)}}"
+    - name: contains
+      desc: "Returns true if the collection or string contains the given value."
+      example: "{{fruits |> contains(\"apple\")}}"
+    - name: starts_with
+      desc: "Returns true if the string starts with the given prefix."
+      example: "{{title |> starts_with(\"the\")}}"
+    - name: ends_with
+      desc: "Returns true if the string ends with the given suffix."
+      example: "{{title |> ends_with(\"fox\")}}"
+    - name: empty?
+      desc: "Returns true if the value is null or empty (\"\", [], {})."
+      example: "{{missing |> empty?}}"
+    - name: present?
+      desc: "Returns true if the value is present (the inverse of empty?)."
+      example: "{{present |> present?}}"
+  - name: format
+    accent: "#16a36b"
+    pill: "low risk"
+    desc: "Low risk — atomic string transforms that cannot iterate or recurse."
+    transformers:
+    - name: upcase
+      desc: "Converts a string to uppercase."
+      example: "{{title |> upcase}}"
+    - name: downcase
+      desc: "Converts a string to lowercase."
+      example: "{{blurb |> downcase}}"
+    - name: capitalize
+      desc: "Capitalizes the first character and lowercases the rest."
+      example: "{{title |> capitalize}}"
+    - name: trim
+      desc: "Removes leading and trailing whitespace."
+      example: "{{str |> trim}}"
+    - name: truncate
+      desc: "Shortens a string to a maximum length, appending a suffix."
+      example: "{{blurb |> truncate(20, \"…\")}}"
+    - name: replace
+      desc: "Replaces occurrences of a substring with another."
+      example: "{{title |> replace(\"quick\", \"lazy\")}}"
+  - name: transform
+    accent: "#f29e3a"
+    pill: "medium risk · audited"
+    desc: "Medium risk — full-collection traversals. Loading the group emits a one-shot audit event."
+    callout: "Loading this group emits a one-shot audit event on load."
+    transformers:
+    - name: split
+      desc: "Splits a string into a list on a separator."
+      example: "{{csv |> split(\",\") |> join(\"|\")}}"
+    - name: take
+      desc: "Returns the first n elements of a collection."
+      example: "{{fruits |> take(3) |> join(\", \")}}"
+    - name: drop
+      desc: "Returns the collection without its first n elements."
+      example: "{{fruits |> drop(3) |> join(\", \")}}"
+    - name: slice
+      desc: "Returns a sub-range of a collection by offset and length."
+      example: "{{fruits |> slice(1, 3) |> join(\", \")}}"
+    - name: reverse
+      desc: "Reverses the order of a collection."
+      example: "{{fruits |> take(4) |> reverse |> join(\", \")}}"
+    - name: sort
+      desc: "Sorts a collection in ascending order."
+      example: "{{fruits |> sort |> join(\", \")}}"
+    - name: sort_by
+      desc: "Sorts a collection of maps by a field (dot-path)."
+      example: "{{people |> sort_by(\"age\") |> map(\"name\") |> join(\", \")}}"
+    - name: map
+      desc: "Extracts a field (dot-path) from each map in a collection."
+      example: "{{people |> map(\"name\") |> join(\", \")}}"
+    - name: filter
+      desc: "Keeps elements whose field (dot-path) is truthy."
+      example: "{{people |> filter(\"lead\") |> map(\"name\") |> join(\", \")}}"
+    - name: compact
+      desc: "Removes null entries from a collection."
+      example: "{{sparse |> compact |> join(\", \")}}"
+    - name: uniq
+      desc: "Removes duplicate elements from a collection."
+      example: "{{fruits |> uniq |> sort |> join(\", \")}}"
+    - name: flatten
+      desc: "Flattens nested lists by one level."
+      example: "{{nested |> flatten |> join(\", \")}}"
+    - name: group_by
+      desc: "Groups a collection of maps by a field (dot-path) into a map."
+      example: "{{people |> group_by(\"dept\") |> json}}"
+  - name: eval
+    accent: "#7c5cf0"
+    pill: "dynamic · opt-in"
+    desc: "Dynamic, opt-in only — renders a string from data as a full Stem template against the assign context."
+    callout: "Never enable for untrusted templates OR untrusted data — eval renders an arbitrary Stem template drawn from a data value at render time (SSTI)."
+    warn: true
+    transformers:
+    - name: eval
+      desc: "Renders a string as a full Stem template (the caller supplies the braces, e.g. \"{{name |> upcase}}\")."
+      example: "{{expr |> eval}}"
+      result: "WORLD"
+  - name: escape
+    accent: "#3a7bf2"
+    pill: "literal output"
+    desc: "Always available — literal output via the consume-1 backslash rule and raw blocks."
+    transformers:
+    - name: '\{{ }}'
+      desc: "One backslash before a tag prints it literally; the backslash is consumed."
+      example: '\{{name}}'
+      result: '{{name}}'
+    - name: '\\{{ }}'
+      desc: "Two backslashes emit one literal backslash, then the tag interpolates."
+      example: '\\{{name}}'
+      result: '\World'
+    - name: '\\\{{ }}'
+      desc: "Three backslashes emit two literal backslashes, then the tag interpolates."
+      example: '\\\{{name}}'
+      result: '\\World'
+    - name: '\\\\{{ }}'
+      desc: "In general, n backslashes emit n-1 literal backslashes, then the tag interpolates."
+      example: '\\\\{{name}}'
+      result: '\\\World'
+    - name: '{{{{#raw}}}}'
+      desc: "A raw block emits everything between the open and close tags literally."
+      example: '{{{{#raw}}}}{{name}}{{{{/raw}}}}'
+      result: '{{name}}'

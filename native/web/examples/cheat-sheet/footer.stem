@@ -1,0 +1,4 @@
+<div class="foot">
+  <div class="legend">{{#each capability_groups}}<span><i style="background:{{accent}}"></i>{{name}} · {{pill}}</span>{{/each}}</div>
+  <div>STEM · TRANSFORMERS · QUICK REFERENCE · v1</div>
+</div>

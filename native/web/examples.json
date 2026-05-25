@@ -74,7 +74,7 @@
     "label": "Reference - Transformer cheat sheet",
     "view": "rendered",
     "main": "main.stem",
-    "partials": ["styles"],
+    "partials": ["styles", "header", "group", "row", "loading", "footer"],
     "data": "data.yaml",
     "groups": ["format", "transform", "eval"]
   }

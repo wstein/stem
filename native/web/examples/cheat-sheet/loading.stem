@@ -1,0 +1,14 @@
+<section class="card loading" style="--a:#18173a">
+  <div class="head"><span class="dot"></span><h2>loading groups · elixir</h2><span class="pill">host config</span><p class="desc">Pass transformer modules to Stem.Unsafe.eval_string/2 — the default group needs no opt-in.</p></div>
+  <pre class="codeblock"># format group (low risk)
+Stem.Unsafe.eval_string(template, assigns: data,
+  transformers: Stem.Transformers.Strings.all())
+
+# transform group (medium risk — audited)
+Stem.Unsafe.eval_string(template, assigns: data,
+  transformers: Stem.Transformers.Collections.all())
+
+# everything bundled
+Stem.Unsafe.eval_string(template, assigns: data,
+  transformers: Stem.Transformers.Standard.all())</pre>
+</section>
