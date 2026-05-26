@@ -60,17 +60,21 @@ Playground workflow highlights:
   on narrow screens.
 - Inline compile diagnostics in the template editor gutter, plus a status lane
   with line/column locations.
-- A toggleable, resizable **Diagnostics dock** (status-bar "Diagnostics" button)
-  with a **Problems** tab (compile / capability / render errors, badged by
-  severity) and a **Dependencies** tab — an SVG graph of `{{> name}}` partial
-  inclusions built from the engine's `parse_ast`, drawing cyclic inclusions as
-  red edges (the compile-time `partial recursion detected` error) and unknown
-  partials as dashed amber nodes. A **Context Inspector** tab snapshots the
-  render context (`@this`/`@parent`/`@root`/iteration vars/locals) at a clicked
-  output expression via the engine's `inspect_at` — one card per loop iteration.
-  A **Parse Tree** tab renders the active template's pre-expansion `parse_ast` as
-  an indented outline (source syntax, distinct from the Bytecode disassembly
-  view); hovering or clicking a row highlights and jumps to its source span.
+- A **Problems** dock at the bottom (status-bar "Diagnostics" button) listing
+  compile / capability / render errors, badged by severity; it auto-opens when an
+  error first appears. Every unknown partial is listed (found via the `parse_ast`
+  dependency scan), not just the first the fail-fast compiler reports.
+- Two read-only inspectors live in the Sources data sub-pane, alongside the
+  `data` / `transform` editors: **Context Inspector** snapshots the render
+  context (`@this`/`@parent`/`@root`/iteration vars/locals) at a clicked output
+  expression via the engine's `inspect_at` (one card per loop iteration), and
+  **Parse Tree** renders the active template's pre-expansion `parse_ast` as an
+  indented outline (hover/click a row to highlight its source span).
+- A floating, draggable, resizable **Dependencies** popup (toolbar button, like
+  Appearance) draws the `{{> name}}` partial graph from `parse_ast` with a
+  force-directed (neato-style) layout: cyclic inclusions as red edges (the
+  compile-time `partial recursion detected` error), unknown partials as dashed
+  amber nodes. Floating-panel layout (open state, position, size) persists.
 - A capability-group selector (Strings / Collections / Predicates checkboxes;
   Minimum is always on) in the output header. Unchecking a group makes the
   engine refuse a template that uses one of its transformers, surfacing the

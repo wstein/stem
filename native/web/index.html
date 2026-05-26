@@ -124,6 +124,7 @@
         transition: background 80ms ease, border-color 80ms ease;
       }
       select.select:hover, button.btn:hover { background: var(--bg-2); }
+      button.btn.active { color: var(--accent-2); border-color: var(--accent-soft); background: var(--accent-softer); }
       select.select:focus, button.btn:focus {
         outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
       }
@@ -248,6 +249,9 @@
       .data-tab:hover { color: var(--fg-secondary); }
       .data-tab.active { color: var(--tok-key); background: var(--bg-pane); }
       .data-tab .yaml-ver { margin-left: 0; }
+      /* Read-only inspector panels shown in place of the data editor. */
+      .data-inspect { flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--bg-pane); }
+      .data-inspect[hidden] { display: none; }
       .yaml-ver {
         margin-left: auto; color: var(--fg-faint);
         font-size: 10px; font-weight: bold; letter-spacing: .02em; opacity: .7;
@@ -599,6 +603,19 @@
       }
       .workspace.stacked .pane { min-width: 0; min-height: 160px; }
 
+      /* ── Dependencies popup (draggable + resizable) ──────────────── */
+      .dep-panel {
+        position: fixed; z-index: 150;
+        width: 560px; height: 440px; min-width: 320px; min-height: 220px;
+        background: var(--bg); border: 1px solid var(--border); border-radius: 10px;
+        box-shadow: var(--shadow-pop); display: flex; flex-direction: column;
+        overflow: hidden; resize: both;
+      }
+      .dep-panel[hidden] { display: none; }
+      .dep-panel .tw-header { flex: 0 0 auto; }
+      .dep-panel .dep-body { flex: 1 1 auto; min-height: 0; }
+      .dep-panel .dep-pane { height: 100%; }
+
       /* ── Tweaks panel ────────────────────────────────────────────── */
       .tw-panel {
         position: fixed; right: 18px; bottom: 42px; width: 300px;
@@ -703,6 +720,7 @@
         <div class="topbar-group">
           <button id="share-btn" class="btn" title="Copy a link that restores this template and data">Copy link</button>
           <button id="cmd-btn" class="btn" title="Open command palette">Commands <span class="kbd-inline">⌘⇧P</span></button>
+          <button id="deps-btn" class="btn" title="Partial dependency graph">Dependencies</button>
           <button id="tweaks-btn" class="btn" title="Appearance settings (theme, layout)">Appearance</button>
         </div>
         <div class="spacer"></div>
@@ -755,6 +773,9 @@
             <div class="editor-cell">
               <div class="data-tabs" id="data-tabs"></div>
               <div class="editor-pane" id="data-editor-container"></div>
+              <!-- Read-only introspection panels (Context Inspector / Parse Tree),
+                   shown in place of the data editor when their tab is active. -->
+              <div class="data-inspect" id="data-inspect" hidden></div>
             </div>
           </div>
         </section>
@@ -829,11 +850,6 @@
             <button class="dock-tab active" data-dock="problems">
               Problems <span class="badge" id="dock-badge-problems">0</span>
             </button>
-            <button class="dock-tab" data-dock="context">Context Inspector</button>
-            <button class="dock-tab" data-dock="deps">
-              Dependencies <span class="badge" id="dock-badge-deps">0</span>
-            </button>
-            <button class="dock-tab" data-dock="ast">Parse Tree</button>
           </div>
           <div class="dock-actions">
             <button id="dock-collapse" title="Collapse / expand" aria-label="Collapse dock">
@@ -1254,15 +1270,19 @@
       function selectTemplateTab(i) {
         activeView = "tmpl"; activeTabIdx = i; showActiveTab();
       }
+      const DATA_TABS = ["data", "transform", "context", "ast"];
+      const isInspectTab = (name) => name === "context" || name === "ast";
+
       function selectDataTab(name = "data") {
-        dataTab = name === "transform" ? "transform" : "data";
+        dataTab = DATA_TABS.includes(name) ? name : "data";
         activeView = "data";
         showDataTab();
-        dataView.focus();
+        if (!isInspectTab(dataTab)) dataView.focus();
         updateStatusMeta();
       }
 
-      // Render the data-pane tab bar (data.yaml | transform), highlighting active.
+      // Render the data-pane tab bar, highlighting active. Beyond the data and
+      // transform editors it hosts the read-only Context Inspector and Parse Tree.
       function renderDataTabs() {
         const bar = byId("data-tabs");
         bar.innerHTML = "";
@@ -1285,16 +1305,34 @@
         };
         mk("data", "data", "YAML 1.2", yamlDirty);
         mk("transform", "transform · JSONata", null, transformDirty);
+        mk("context", "Context Inspector", null, false);
+        mk("ast", "Parse Tree", null, false);
       }
 
-      // Show the active data tab's source in the editor — YAML highlighting for
-      // data, plain for the transform. Programmatic, so it doesn't recompile.
+      // Show the active data tab: the data/transform editor, or a read-only
+      // inspector panel (Context Inspector / Parse Tree) in its place.
       function showDataTab() {
-        setEditorText(dataView, dataTab === "transform" ? transformSrc : yamlSrc);
-        dataView.dispatch({
-          effects: dataLangComp.reconfigure(dataTab === "transform" ? [] : [yaml(), yamlHighlighting]),
-        });
+        const inspect = isInspectTab(dataTab);
+        byId("data-editor-container").hidden = inspect;
+        byId("data-inspect").hidden = !inspect;
+        if (inspect) {
+          renderDataInspect();
+        } else {
+          setEditorText(dataView, dataTab === "transform" ? transformSrc : yamlSrc);
+          dataView.dispatch({
+            effects: dataLangComp.reconfigure(dataTab === "transform" ? [] : [yaml(), yamlHighlighting]),
+          });
+        }
         renderDataTabs();
+      }
+
+      // (Re)render the active inspector panel into the data pane.
+      function renderDataInspect() {
+        if (!isInspectTab(dataTab)) return;
+        const panel = byId("data-inspect");
+        panel.textContent = "";
+        if (dataTab === "context") renderContext(panel);
+        else renderAst(panel);
       }
       function addPartial() {
         let n = 1, name;
@@ -1326,6 +1364,7 @@
         renderTabs();
         updateStatusMeta();
         caretLinkKey = null; syncOutputToCaret();
+        if (dataTab === "ast") renderDataInspect(); // Parse Tree follows the active tab
       }
 
       // ── Compile + render ──────────────────────────────────────────────
@@ -1383,6 +1422,8 @@
         renderPreview();
         qs(".output-body").dataset.empty = outputHasContent(outputView) ? "false" : "true";
         renderDock();
+        renderDataInspect();
+        refreshDepsPanel();
       }
 
       // Paint the read-only output editor for the active text view. The "View
@@ -1667,6 +1708,12 @@
       }
 
       function updateStatusMeta() {
+        // The inspector tabs have no editor/caret — show a plain label.
+        if (activeView === "data" && isInspectTab(dataTab)) {
+          const name = dataTab === "context" ? "Context Inspector" : "Parse Tree";
+          byId("status-meta").innerHTML = `<b>${name}</b>  ·  read-only`;
+          return;
+        }
         const view = activeView === "data" ? dataView : templateView;
         const sel  = view.state.selection.main;
         const line = view.state.doc.lineAt(sel.head);
@@ -2320,25 +2367,7 @@
 
         panel.append(mkEl("div", { class: "tw-foot" }, "Edits persist across reloads."));
 
-        // Draggable by header
-        header.addEventListener("mousedown", (e) => {
-          if (e.target.classList.contains("tw-close")) return;
-          const rect = panel.getBoundingClientRect();
-          const dx = e.clientX - rect.left, dy = e.clientY - rect.top;
-          const onMove = (ev) => {
-            panel.style.left   = Math.max(8, Math.min(window.innerWidth  - rect.width  - 8, ev.clientX - dx)) + "px";
-            panel.style.top    = Math.max(8, Math.min(window.innerHeight - rect.height - 8, ev.clientY - dy)) + "px";
-            panel.style.right  = "auto";
-            panel.style.bottom = "auto";
-          };
-          const onUp = () => {
-            window.removeEventListener("mousemove", onMove);
-            window.removeEventListener("mouseup", onUp);
-          };
-          window.addEventListener("mousemove", onMove);
-          window.addEventListener("mouseup", onUp);
-        });
-
+        makeDraggable(panel, header, panelState.appearance);
         return panel;
       }
 
@@ -2353,19 +2382,135 @@
         }
       }
 
+      // Persisted floating-panel layout (open + position + size), so the GUI
+      // survives reloads. localStorage is the playground's persistence mechanism
+      // (same as the splitters and Appearance settings).
+      const LS_PANELS = "stem-playground:panels.v1";
+      let panelState = { appearance: {}, deps: {} };
+      try {
+        panelState = { appearance: {}, deps: {}, ...JSON.parse(localStorage.getItem(LS_PANELS) || "{}") };
+      } catch {}
+      function savePanels() {
+        try { localStorage.setItem(LS_PANELS, JSON.stringify(panelState)); } catch {}
+      }
+
+      // Apply a saved {left, top} to a panel, clamped into the viewport.
+      function applyPanelPos(panel, st) {
+        if (typeof st.left !== "number") return;
+        const r = panel.getBoundingClientRect();
+        panel.style.left = Math.max(8, Math.min(window.innerWidth - r.width - 8, st.left)) + "px";
+        panel.style.top = Math.max(8, Math.min(window.innerHeight - r.height - 8, st.top)) + "px";
+        panel.style.right = "auto";
+        panel.style.bottom = "auto";
+      }
+
+      // Drag a panel by its header, persisting the final position into `st`.
+      function makeDraggable(panel, header, st) {
+        header.addEventListener("mousedown", (e) => {
+          if (e.target.classList.contains("tw-close")) return;
+          const rect = panel.getBoundingClientRect();
+          const dx = e.clientX - rect.left, dy = e.clientY - rect.top;
+          const onMove = (ev) => {
+            st.left = Math.max(8, Math.min(window.innerWidth - rect.width - 8, ev.clientX - dx));
+            st.top = Math.max(8, Math.min(window.innerHeight - rect.height - 8, ev.clientY - dy));
+            panel.style.left = st.left + "px";
+            panel.style.top = st.top + "px";
+            panel.style.right = "auto";
+            panel.style.bottom = "auto";
+          };
+          const onUp = () => {
+            window.removeEventListener("mousemove", onMove);
+            window.removeEventListener("mouseup", onUp);
+            savePanels();
+          };
+          window.addEventListener("mousemove", onMove);
+          window.addEventListener("mouseup", onUp);
+        });
+      }
+
       function showTweaks() {
         if (tweaksPanel) { hideTweaks(); return; }
         tweaksPanel = buildTweaksPanel();
         document.body.append(tweaksPanel);
+        applyPanelPos(tweaksPanel, panelState.appearance);
+        byId("tweaks-btn").classList.add("active");
+        panelState.appearance.open = true; savePanels();
       }
       function hideTweaks() {
         if (tweaksPanel) { tweaksPanel.remove(); tweaksPanel = null; }
+        byId("tweaks-btn").classList.remove("active");
+        panelState.appearance.open = false; savePanels();
+      }
+
+      // ── Dependencies popup (draggable, resizable, persisted) ──────────
+      let depsPanel = null;
+      let depsResizeObserver = null;
+
+      function buildDepsPanel() {
+        const panel = makeEl("div", { class: "dep-panel", role: "dialog", "aria-label": "Dependencies" });
+        if (typeof panelState.deps.width === "number") {
+          panel.style.width = panelState.deps.width + "px";
+          panel.style.height = panelState.deps.height + "px";
+        } else {
+          panel.style.right = "18px";
+          panel.style.bottom = "42px";
+        }
+        const close = makeEl("button", { class: "tw-close", title: "Close" }, "×");
+        close.addEventListener("click", hideDeps);
+        const header = makeEl("div", { class: "tw-header" }, [
+          makeEl("div", { class: "tw-title" }, [makeEl("span", { class: "tw-pill" }), "Dependencies"]),
+          close,
+        ]);
+        const body = makeEl("div", { class: "dep-body" });
+        panel.append(header, body);
+        renderDeps(body, currentDependencyGraph());
+        makeDraggable(panel, header, panelState.deps);
+        // Persist size as the user resizes; the SVG viewBox auto-rescales, so no
+        // re-layout is needed.
+        depsResizeObserver = new ResizeObserver(() => {
+          panelState.deps.width = panel.offsetWidth;
+          panelState.deps.height = panel.offsetHeight;
+          savePanels();
+        });
+        depsResizeObserver.observe(panel);
+        return panel;
+      }
+      function showDeps() {
+        if (depsPanel) { hideDeps(); return; }
+        depsPanel = buildDepsPanel();
+        document.body.append(depsPanel);
+        applyPanelPos(depsPanel, panelState.deps);
+        byId("deps-btn").classList.add("active");
+        panelState.deps.open = true; savePanels();
+      }
+      function hideDeps() {
+        if (depsResizeObserver) { depsResizeObserver.disconnect(); depsResizeObserver = null; }
+        if (depsPanel) { depsPanel.remove(); depsPanel = null; }
+        byId("deps-btn").classList.remove("active");
+        panelState.deps.open = false; savePanels();
+      }
+      // Re-render the open dependency graph when the sources change.
+      function refreshDepsPanel() {
+        if (depsPanel) {
+          const body = depsPanel.querySelector(".dep-body");
+          body.textContent = "";
+          renderDeps(body, currentDependencyGraph());
+        }
+      }
+
+      // Restore floating panels saved from a previous session. Appearance opens
+      // unless it was explicitly closed (preserving the first-load default);
+      // Dependencies opens only when it was left open.
+      function restorePanels() {
+        if (panelState.appearance.open !== false) showTweaks();
+        if (panelState.deps.open) showDeps();
       }
 
       // ── Wire events ───────────────────────────────────────────────────
       byId("share-btn").addEventListener("click", copyShareLink);
       byId("cmd-btn").addEventListener("click", openPalette);
       byId("tweaks-btn").addEventListener("click", showTweaks);
+      byId("deps-btn").addEventListener("click", showDeps);
 
       byId("example-select").addEventListener("change", (e) => {
         const v = Number(e.target.value);
@@ -2478,20 +2623,10 @@
         }
         hadProblems = probCount > 0;
 
-        // Dependencies are only computed when the dock is open (parse cost).
         if (!dockVisible() || byId("dock").classList.contains("collapsed")) return;
-
-        const deps = currentDependencyGraph();
-        const depBadge = byId("dock-badge-deps");
-        depBadge.textContent = String(deps.nodes.length);
-        depBadge.className = "badge" + (deps.cycles.length ? " danger" : "");
-
         const body = byId("dock-body");
         body.textContent = "";
-        if (dockTab === "deps") renderDeps(body, deps);
-        else if (dockTab === "ast") renderAst(body);
-        else if (dockTab === "context") renderContext(body);
-        else renderProblems(body);
+        renderProblems(body);
       }
 
       // Context Inspector: snapshots of the render context at the last-clicked
@@ -2573,7 +2708,7 @@
         const [from, to] = byteRangeToCharRange(src, sv.start, sv.end);
         const label = src.slice(from, to).trim() || `${sv.file}:${sv.start}`;
         ctxTarget = { file: sv.file, start: sv.start, end: sv.end, label };
-        if (dockVisible()) selectDockTab("context");
+        selectDataTab("context");
       }
 
       // The active template tab's pre-expansion AST (real `parse_ast`), as an
@@ -2640,43 +2775,74 @@
         return node;
       }
 
-      function renderDeps(body, deps) {
-        // Layered layout: BFS levels from "main"; one column per level.
-        const levels = new Map([["main", 0]]);
-        const queue = ["main"];
-        while (queue.length) {
-          const cur = queue.shift();
-          for (const e of deps.edges) {
-            if (e.from !== cur || e.missing) continue;
-            if (!levels.has(e.to) || levels.get(e.to) > levels.get(cur) + 1) {
-              levels.set(e.to, levels.get(cur) + 1);
-              queue.push(e.to);
+      // A neato-style (Fruchterman-Reingold) force-directed layout: nodes repel,
+      // edges pull, gravity keeps the graph centred. Deterministic (circle seed,
+      // no RNG) so it's stable across re-renders. Returns id -> center {x, y} in a
+      // virtual W*H canvas the SVG viewBox scales to its container.
+      function forceLayout(deps, width, height) {
+        const ids = deps.nodes.map((n) => n.id);
+        const n = ids.length;
+        const cx = width / 2, cy = height / 2;
+        const pos = new Map();
+        const R = Math.min(width, height) * 0.36;
+        ids.forEach((id, i) => {
+          const a = (2 * Math.PI * i) / Math.max(1, n);
+          pos.set(id, { x: cx + R * Math.cos(a) + (i % 2 ? 7 : -7), y: cy + R * Math.sin(a) });
+        });
+        if (n <= 1) return pos;
+
+        const links = deps.edges.filter((e) => !e.missing && pos.has(e.from) && pos.has(e.to));
+        const k = 0.75 * Math.sqrt((width * height) / n);
+        let temp = Math.min(width, height) * 0.16;
+        for (let it = 0; it < 280; it++) {
+          const disp = new Map(ids.map((id) => [id, { x: 0, y: 0 }]));
+          for (let i = 0; i < n; i++) {
+            for (let j = i + 1; j < n; j++) {
+              const a = pos.get(ids[i]), b = pos.get(ids[j]);
+              const dx = a.x - b.x, dy = a.y - b.y, d = Math.hypot(dx, dy) || 0.01;
+              const f = (k * k) / d, ux = dx / d, uy = dy / d;
+              disp.get(ids[i]).x += ux * f; disp.get(ids[i]).y += uy * f;
+              disp.get(ids[j]).x -= ux * f; disp.get(ids[j]).y -= uy * f;
             }
           }
+          for (const e of links) {
+            const a = pos.get(e.from), b = pos.get(e.to);
+            const dx = a.x - b.x, dy = a.y - b.y, d = Math.hypot(dx, dy) || 0.01;
+            const f = (d * d) / k, ux = dx / d, uy = dy / d;
+            disp.get(e.from).x -= ux * f; disp.get(e.from).y -= uy * f;
+            disp.get(e.to).x += ux * f; disp.get(e.to).y += uy * f;
+          }
+          for (const id of ids) {
+            const p = pos.get(id), dd = disp.get(id);
+            dd.x += (cx - p.x) * 0.025; dd.y += (cy - p.y) * 0.025;
+            const len = Math.hypot(dd.x, dd.y) || 0.01;
+            p.x += (dd.x / len) * Math.min(len, temp);
+            p.y += (dd.y / len) * Math.min(len, temp);
+          }
+          temp *= 0.975;
         }
-        for (const n of deps.nodes) if (!levels.has(n.id)) levels.set(n.id, 0);
 
-        const byLevel = new Map();
-        for (const [id, lvl] of levels) {
-          if (!byLevel.has(lvl)) byLevel.set(lvl, []);
-          byLevel.get(lvl).push(id);
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const p of pos.values()) {
+          minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+          maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
         }
-        const colW = 150, rowH = 56, padX = 24, padY = 22, boxW = 110, boxH = 36;
-        const pos = new Map();
-        for (const [lvl, ids] of byLevel) {
-          ids.forEach((id, i) => pos.set(id, { x: padX + lvl * colW, y: padY + i * rowH }));
-        }
-        const maxLevel = Math.max(0, ...byLevel.keys());
-        const maxRows = Math.max(1, ...[...byLevel.values()].map((a) => a.length));
-        const w = padX * 2 + maxLevel * colW + boxW;
-        const h = Math.max(160, padY * 2 + (maxRows - 1) * rowH + boxH);
+        const m = 46, sx = (width - 2 * m) / ((maxX - minX) || 1), sy = (height - 2 * m) / ((maxY - minY) || 1);
+        const s = Math.min(sx, sy);
+        for (const p of pos.values()) { p.x = m + (p.x - minX) * s; p.y = m + (p.y - minY) * s; }
+        return pos;
+      }
+
+      function renderDeps(body, deps) {
+        const W = 520, H = Math.max(340, deps.nodes.length * 64), boxW = 104, boxH = 32;
+        const pos = forceLayout(deps, W, H);
 
         const cyclePairs = new Set();
         for (const c of deps.cycles) {
           for (let i = 0; i < c.length - 1; i++) cyclePairs.add(c[i] + "→" + c[i + 1]);
         }
 
-        const svg = svgEl("svg", { viewBox: `0 0 ${w} ${h}`, class: "dep-svg", preserveAspectRatio: "xMidYMid meet" });
+        const svg = svgEl("svg", { viewBox: `0 0 ${W} ${H}`, class: "dep-svg", preserveAspectRatio: "xMidYMid meet" });
         const defs = svgEl("defs");
         const marker = svgEl("marker", { id: "dep-arrow", viewBox: "0 0 10 10", refX: "9", refY: "5", markerUnits: "userSpaceOnUse", markerWidth: "8", markerHeight: "8", orient: "auto" });
         marker.append(svgEl("path", { d: "M0,0 L10,5 L0,10 z", fill: "currentColor" }));
@@ -2687,8 +2853,11 @@
           const a = pos.get(e.from), b = pos.get(e.to);
           if (!a || !b) continue;
           const cls = "dep-edge" + (cyclePairs.has(e.from + "→" + e.to) ? " cycle" : "") + (e.missing ? " missing" : "");
-          const x1 = a.x + boxW, y1 = a.y + boxH / 2, x2 = b.x, y2 = b.y + boxH / 2, mx = (x1 + x2) / 2;
-          const path = svgEl("path", { class: cls, d: `M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}` });
+          // Shorten both ends to the node box edges so the arrowhead is visible.
+          const ang = Math.atan2(b.y - a.y, b.x - a.x);
+          const x1 = a.x + Math.cos(ang) * 34, y1 = a.y + Math.sin(ang) * 20;
+          const x2 = b.x - Math.cos(ang) * 34, y2 = b.y - Math.sin(ang) * 20;
+          const path = svgEl("path", { class: cls, d: `M${x1},${y1} L${x2},${y2}` });
           const tip = e.missing
             ? `unknown partial: ${e.to}`
             : cyclePairs.has(e.from + "→" + e.to)
@@ -2706,9 +2875,10 @@
           const p = pos.get(n.id);
           if (!p) continue;
           const inCycle = deps.cycles.some((c) => c.includes(n.id));
-          const g = svgEl("g", { class: "dep-node" + (n.isMain ? " main" : "") + (inCycle ? " cycle" : "") + (n.missing ? " missing" : ""), transform: `translate(${p.x},${p.y})` });
-          g.append(svgEl("rect", { width: boxW, height: boxH, rx: "6" }));
-          const text = svgEl("text", { x: "12", y: "22" });
+          const g = svgEl("g", { class: "dep-node" + (n.isMain ? " main" : "") + (inCycle ? " cycle" : "") + (n.missing ? " missing" : ""), transform: `translate(${p.x - boxW / 2},${p.y - boxH / 2})` });
+          const rect = svgEl("rect", { width: boxW, height: boxH, rx: "6" });
+          g.append(rect);
+          const text = svgEl("text", { x: boxW / 2, y: boxH / 2 + 4, "text-anchor": "middle" });
           text.textContent = n.id;
           g.append(text);
           g.style.cursor = "pointer";
@@ -2875,7 +3045,7 @@
       }
       applySplits();
       updateStatusMeta();
-      showTweaks(); // open the Tweaks panel on first load
+      restorePanels(); // restore persisted floating panels (Appearance / Dependencies)
     </script>
   </body>
 </html>
