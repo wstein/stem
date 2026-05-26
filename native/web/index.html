@@ -718,7 +718,22 @@
       }
       .search-opt:hover { background: var(--bg-2); }
       .search-opt input { display: none; }
+      .search-opt u { text-decoration: underline; text-underline-offset: 2px; }
       .search-opt:has(input:checked) { color: var(--accent-2); background: var(--accent-soft); border-color: var(--accent-soft); }
+      .replace-bar { border-top: 0; padding-top: 0; }
+      .search-replace-all {
+        flex: 0 0 auto; height: 28px; padding: 0 10px; cursor: pointer;
+        border: 1px solid var(--border-strong); border-radius: 5px;
+        background: var(--bg); color: var(--fg); font: 11px var(--font-ui);
+      }
+      .search-replace-all:hover { background: var(--bg-2); border-color: var(--accent-soft); color: var(--accent-2); }
+      .hit-replace {
+        flex: 0 0 auto; visibility: hidden; align-self: center;
+        border: 1px solid var(--border); border-radius: 4px; background: var(--bg);
+        color: var(--accent-2); font: 10px var(--font-ui); padding: 1px 6px; cursor: pointer;
+      }
+      .search-hit:hover .hit-replace { visibility: visible; }
+      .hit-replace:hover { background: var(--accent-soft); }
       .search-results { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 0; }
       .search-file { padding: 6px 10px 2px; font: 600 11px var(--font-mono); color: var(--tok-key); position: sticky; top: 0; background: var(--bg); }
       .search-file .n { color: var(--fg-faint); font-weight: 400; margin-left: 6px; }
@@ -2849,6 +2864,7 @@
             const nl = f.source.indexOf("\n", idx);
             const lineEnd = nl === -1 ? f.source.length : nl;
             hits.push({
+              index: idx,
               line: f.source.slice(0, idx).split("\n").length,
               col: idx - lineStart + 1,
               lineText: f.source.slice(lineStart, lineEnd),
@@ -2863,9 +2879,60 @@
         return { groups, error: false };
       }
 
-      function renderSearchResults(panel, query) {
+      function searchOpts(panel) {
         const opt = (name) => panel.querySelector(`.search-opt[data-opt="${name}"] input`).checked;
-        const opts = { caseSensitive: opt("case"), regex: opt("regex"), wholeWord: opt("word") };
+        return { caseSensitive: opt("case"), regex: opt("regex"), wholeWord: opt("word") };
+      }
+
+      function fileSourceByKind(file, kind) {
+        if (kind === "data") return yamlSrc;
+        if (kind === "transform") return transformSrc;
+        const i = tabIndexByFile(file);
+        return i >= 0 ? tabs[i].source : "";
+      }
+
+      // Write a source back and keep the visible editor in sync.
+      function setFileSource(file, kind, next) {
+        if (kind === "data") {
+          yamlSrc = next;
+          if (activeView === "data" && dataTab === "data") setEditorText(dataView, next);
+        } else if (kind === "transform") {
+          transformSrc = next;
+          if (activeView === "data" && dataTab === "transform") setEditorText(dataView, next);
+        } else {
+          const i = tabIndexByFile(file);
+          if (i < 0) return;
+          tabs[i].source = next;
+          if (i === activeTabIdx && activeView === "tmpl") setEditorText(templateView, next);
+        }
+      }
+
+      // Replace a single occurrence (literal insertion of the replacement).
+      function replaceOneHit(file, kind, index, matchLen, replacement) {
+        const src = fileSourceByKind(file, kind);
+        setFileSource(file, kind, src.slice(0, index) + replacement + src.slice(index + matchLen));
+        markCustom(); run();
+      }
+
+      // Replace every occurrence across all sources. In regex mode the
+      // replacement may use $1 backrefs; in literal mode `$` is escaped.
+      function replaceAllHits(panel) {
+        const opts = searchOpts(panel);
+        const re = buildSearchMatcher(panel.querySelector(".search-input").value, opts);
+        if (!re) return;
+        const repl = opts.regex
+          ? panel.querySelector(".replace-input").value
+          : panel.querySelector(".replace-input").value.replace(/\$/g, "$$$$");
+        let changed = false;
+        for (const f of searchSources()) {
+          const next = f.source.replace(re, repl);
+          if (next !== f.source) { setFileSource(f.file, f.kind, next); changed = true; }
+        }
+        if (changed) { markCustom(); run(); }
+      }
+
+      function renderSearchResults(panel, query) {
+        const opts = searchOpts(panel);
         const results = panel.querySelector(".search-results");
         const count = panel.querySelector(".search-count");
         results.innerHTML = "";
@@ -2896,8 +2963,13 @@
               makeEl("mark", {}, h.lineText.slice(h.matchInLine, h.matchInLine + h.matchLen)),
               h.lineText.slice(h.matchInLine + h.matchLen),
             ]);
+            const rep = makeEl("button", { class: "hit-replace", title: "Replace this occurrence" }, "Replace");
+            rep.addEventListener("click", (e) => {
+              e.stopPropagation();
+              replaceOneHit(g.file, g.kind, h.index, h.matchLen, panel.querySelector(".replace-input").value);
+            });
             const row = makeEl("div", { class: "search-hit", title: `${g.file}:${h.line}:${h.col}` }, [
-              makeEl("span", { class: "ln" }, `${h.line}:${h.col}`), txt,
+              makeEl("span", { class: "ln" }, `${h.line}:${h.col}`), txt, rep,
             ]);
             row.addEventListener("click", () => openSearchResult(g.file, g.kind, h.line, h.col, h.matchLen));
             results.append(row);
@@ -2946,13 +3018,19 @@
         };
         const opts = makeEl("div", { class: "search-opts" }, [
           mkOpt("case", "Aa", "Case sensitive"),
-          mkOpt("word", "⌶", "Whole word"),
+          mkOpt("word", makeEl("u", {}, "ab"), "Whole word"),
           mkOpt("regex", ".*", "Regular expression"),
         ]);
         const bar = makeEl("div", { class: "search-bar" }, [addClear(input), opts]);
+        // Replace row: a field + Replace All; each result also gets its own
+        // per-occurrence replace button (revealed on hover).
+        const replace = makeEl("input", { type: "text", class: "replace-input", placeholder: "Replace…", autocomplete: "off", spellcheck: "false" });
+        const replaceAll = makeEl("button", { class: "search-replace-all", title: "Replace all occurrences" }, "Replace All");
+        replaceAll.addEventListener("click", () => replaceAllHits(panel));
+        const replaceBar = makeEl("div", { class: "search-bar replace-bar" }, [addClear(replace), replaceAll]);
         const count = makeEl("div", { class: "search-count" });
         const results = makeEl("div", { class: "search-results" });
-        panel.append(header, bar, count, results);
+        panel.append(header, bar, replaceBar, count, results);
         const rerun = debounce(() => renderSearchResults(panel, input.value), 120);
         input.addEventListener("input", rerun);
         input.addEventListener("keydown", (e) => { if (e.key === "Escape") hideSearch(); });
