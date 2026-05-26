@@ -401,6 +401,7 @@
         padding: 8px 14px; border-bottom: 1px solid var(--bg-2);
         font-size: 12px;
       }
+      .problem { cursor: pointer; }
       .problem:hover { background: var(--bg-1); }
       .problem .sev {
         width: 14px; height: 14px; border-radius: 3px; color: #fff;
@@ -433,6 +434,8 @@
       }
       .dep-side li .arrow { color: var(--fg-faint); }
       .dep-side li.cycle { color: var(--danger); }
+      .dep-side li.linked { cursor: pointer; border-radius: 4px; }
+      .dep-side li.linked:hover { color: var(--accent-2); background: var(--accent-softer); }
       .dep-empty { padding: 20px; text-align: center; color: var(--fg-faint); font-size: 12px; }
       .dep-node rect { fill: var(--bg); stroke: var(--border-strong); stroke-width: 1.2; }
       .dep-node.main rect { fill: var(--accent-softer); stroke: var(--accent); stroke-width: 1.6; }
@@ -615,6 +618,11 @@
       .dep-panel .tw-header { flex: 0 0 auto; }
       .dep-panel .dep-body { flex: 1 1 auto; min-height: 0; }
       .dep-panel .dep-pane { height: 100%; }
+      .dep-layout-btn {
+        border: 1px solid var(--border); background: var(--bg); color: var(--fg-muted);
+        font: 11px var(--font-ui); padding: 1px 8px; border-radius: 4px; cursor: pointer;
+      }
+      .dep-layout-btn:hover { background: var(--bg-2); color: var(--fg); }
 
       /* ── Tweaks panel ────────────────────────────────────────────── */
       .tw-panel {
@@ -2457,11 +2465,23 @@
         }
         const close = makeEl("button", { class: "tw-close", title: "Close" }, "×");
         close.addEventListener("click", hideDeps);
+        const layoutBtn = makeEl("button", {
+          class: "dep-layout-btn", title: "Switch graph layout (force / tree)",
+          style: "margin-left:auto",
+        }, panelState.deps.layout === "tree" ? "Tree" : "Force");
+        const body = makeEl("div", { class: "dep-body" });
+        layoutBtn.addEventListener("click", () => {
+          panelState.deps.layout = panelState.deps.layout === "tree" ? "force" : "tree";
+          savePanels();
+          layoutBtn.textContent = panelState.deps.layout === "tree" ? "Tree" : "Force";
+          body.textContent = "";
+          renderDeps(body, currentDependencyGraph());
+        });
         const header = makeEl("div", { class: "tw-header" }, [
           makeEl("div", { class: "tw-title" }, [makeEl("span", { class: "tw-pill" }), "Dependencies"]),
+          layoutBtn,
           close,
         ]);
-        const body = makeEl("div", { class: "dep-body" });
         panel.append(header, body);
         renderDeps(body, currentDependencyGraph());
         makeDraggable(panel, header, panelState.deps);
@@ -2759,13 +2779,35 @@
         }
         for (const p of dockProblems) {
           const sev = p.severity === "cap" ? "cap" : p.severity === "render" ? "render" : "error";
-          body.append(makeEl("div", { class: `problem ${sev}` }, [
+          const row = makeEl("div", { class: `problem ${sev}`, title: "jump to source" }, [
             makeEl("span", { class: "sev" }, sev === "cap" ? "!" : "×"),
             makeEl("span", { class: "where" }, `${p.file}:${p.line}:${p.col}`),
             makeEl("span", { class: "msg" }, p.message),
             makeEl("span", { class: "src" }, p.severity === "cap" ? "capability" : "compile"),
-          ]));
+          ]);
+          row.addEventListener("click", () => openProblem(p));
+          body.append(row);
         }
+      }
+
+      // Jump from a Problems row to its source location.
+      function openProblem(p) {
+        if (p.file === "data.yaml" || p.file === "transform") {
+          selectDataTab(p.file === "transform" ? "transform" : "data");
+          moveCaretTo(dataView, p.line, p.col);
+          return;
+        }
+        const idx = tabIndexByFile(p.file);
+        if (idx < 0) return;
+        selectTemplateTab(idx);
+        moveCaretTo(templateView, p.line, p.col);
+      }
+      function moveCaretTo(view, line, col) {
+        const ln = Math.max(1, Math.min(view.state.doc.lines, line || 1));
+        const lineObj = view.state.doc.line(ln);
+        const pos = Math.min(lineObj.to, lineObj.from + Math.max(0, (col || 1) - 1));
+        view.focus();
+        view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
       }
 
       const SVG_NS = "http://www.w3.org/2000/svg";
@@ -2773,6 +2815,38 @@
         const node = document.createElementNS(SVG_NS, tag);
         for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
         return node;
+      }
+
+      // A hierarchical (tree) layout: BFS depth from `main` becomes the row, nodes
+      // spread across each row. Clearer than the force layout for the usual
+      // main -> partials shape. Returns id -> center {x, y}.
+      function layeredLayout(deps, width, height) {
+        const depth = new Map([["main", 0]]);
+        const queue = ["main"];
+        while (queue.length) {
+          const cur = queue.shift();
+          for (const e of deps.edges) {
+            if (e.from !== cur || e.missing || depth.has(e.to)) continue;
+            depth.set(e.to, depth.get(cur) + 1);
+            queue.push(e.to);
+          }
+        }
+        for (const n of deps.nodes) if (!depth.has(n.id)) depth.set(n.id, 0);
+        const byDepth = new Map();
+        for (const [id, d] of depth) {
+          if (!byDepth.has(d)) byDepth.set(d, []);
+          byDepth.get(d).push(id);
+        }
+        const maxD = Math.max(0, ...byDepth.keys());
+        const m = 48, pos = new Map();
+        for (const [d, ids] of byDepth) {
+          const y = maxD === 0 ? height / 2 : m + (height - 2 * m) * (d / maxD);
+          ids.forEach((id, i) => {
+            const x = ids.length === 1 ? width / 2 : m + (width - 2 * m) * (i / (ids.length - 1));
+            pos.set(id, { x, y });
+          });
+        }
+        return pos;
       }
 
       // A neato-style (Fruchterman-Reingold) force-directed layout: nodes repel,
@@ -2835,7 +2909,9 @@
 
       function renderDeps(body, deps) {
         const W = 520, H = Math.max(340, deps.nodes.length * 64), boxW = 104, boxH = 32;
-        const pos = forceLayout(deps, W, H);
+        const pos = panelState.deps.layout === "tree"
+          ? layeredLayout(deps, W, H)
+          : forceLayout(deps, W, H);
 
         const cyclePairs = new Set();
         for (const c of deps.cycles) {
@@ -2900,10 +2976,19 @@
         if (!deps.edges.length) edges.append(makeEl("li", {}, "no partial references"));
         for (const e of deps.edges.slice(0, 30)) {
           const cyc = cyclePairs.has(e.from + "→" + e.to);
-          edges.append(makeEl("li", { class: cyc ? "cycle" : "" }, [
+          const li = makeEl("li", { class: (cyc ? "cycle" : "") + (e.missing ? "" : " linked") }, [
             e.from, makeEl("span", { class: "arrow" }, " → "),
             e.to + (e.missing ? "  ⚠" : "") + (cyc ? "  ↺ cycle" : ""),
-          ]));
+          ]);
+          // Click a (defined) edge to jump to the target partial's tab.
+          if (!e.missing) {
+            li.title = `open ${e.to}`;
+            li.addEventListener("click", () => {
+              const idx = tabs.findIndex((t) => t.name === e.to);
+              if (idx >= 0) selectTemplateTab(idx);
+            });
+          }
+          edges.append(li);
         }
         side.append(edges);
         if (deps.cycles.length) {
