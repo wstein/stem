@@ -40,6 +40,10 @@ ryu = "1"
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 wasm-bindgen = "0.2"
 serde-wasm-bindgen = "0.6"
+# nimble_parsec_rs pulls in getrandom (via rand); on the browser wasm target it
+# needs the "js" backend to build. wasm32-wasip1 (the conformance bin) has native
+# randomness, so this is scoped to wasm32-unknown-unknown only.
+getrandom = { version = "0.2", features = ["js"] }
 
 [profile.release]
 opt-level = "s"
