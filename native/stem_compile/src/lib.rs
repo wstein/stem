@@ -41,6 +41,10 @@
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
+// Combinator lexer (nimble_parsec_rs port of `Stem.Parser.do_lex`), phase one of
+// migrating the hand-written `tokenize` onto shared combinators with the BEAM.
+mod np_lexer;
+
 const VERSION: &str = "stem-bc/v1";
 
 // The pre-expansion AST wire shape emitted by `parse_ast_to_wire` (distinct from
