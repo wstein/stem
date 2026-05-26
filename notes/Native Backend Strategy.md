@@ -13,14 +13,7 @@ Stem's native backend ships templates as portable bytecode run by one small inte
 - The interpreter boundary is bytes-in / bytes-out: `render(program_bytes, data_msgpack, caps) -> utf8_bytes`. No per-node host callbacks, no shared pointers, no `unsafe` FFI, no per-template native compilation.
 - The goal is **parity and portability** — render the same template identically off-BEAM (browser, edge worker, Python/Node) — **not** beating the BEAM, which wins locally.
 
-### Update — 2026-05-25: Rust as a first-class host
-
-The original framing treated the native core as gated, portability-only ([[Native Backend Phase 2 Gate]]). That gate is now **lifted**: Rust is a first-class Stem host/ecosystem alongside the BEAM. Concretely:
-
-- The **bytes-in / bytes-out JSON boundary is demoted to the Elixir conformance seam** (`handle`/`handle_with_host`, the `stem_native error:` sentinel, the C ABI). It stays byte-identical there as the oracle interface.
-- **In-process Rust uses a typed, idiomatic API**: `compile() -> Result<Program, CompileError>`, `Program::render(&Value, &RenderOptions) -> Result<String, RenderError>`, capabilities via `Group`, host extensions via `RenderOptions::with_host`. The JSON `handle*` path is now a thin wrapper over this same core (a drift-guard test asserts they agree).
-- The "no per-node host callbacks" tenet was always partial for the rlib — custom transformers are host `fn` pointers (`Host`). That is intentional for trusted in-process embedding; the untrusted/WASM path still goes through the byte boundary.
-- Next: **compile-time macros** (a `stem!` proc-macro compiling templates to bytecode at Rust build time) and **leaner WASM/JS interop** (wasm-bindgen / serde-wasm-bindgen instead of the hand-rolled `stem_alloc`/`stem_render` marshalling).
+The Rust-host API update and typed embedding surface live in [[Rust Host API for Native Backend]].
 
 ## Why
 
@@ -31,14 +24,14 @@ The original framing treated the native core as gated, portability-only ([[Nativ
 
 ## How
 
-Deliver in independently-useful phases; never build a later phase on spec:
+Deliver in independently-useful phases:
 
-1. **Spec + conformance vectors** — pin the authoritative rules (single escaping table, truthiness, path resolution, capability set, contract semantics) and generate vectors from the Elixir reference. See [[Cross-Backend Conformance Spec]].
-2. **Bytecode + pure-Elixir VM** — add a second AST backend and an Elixir interpreter; prove `VM(compile(ast), data) == Compiler(ast).(data)` across the suite. De-risks ~80% with zero Rust and yields a serializable compiled-template artifact on its own. *Landed* (`Stem.Bytecode`/`.VM` + differential conformance suite); blocks and regions/yields are next. See [[Portable Stem Bytecode]].
-3. **Rust interpreter → single WASM module** — port the VM and native stdlib, run the same vectors, add differential fuzzing. *Landed* as a PoC (`native/stem_native`): the full built-in transformer stdlib gated by capability group, a host hook for custom transformers, differential fuzzing, and 35/35 conformance vectors green. See [[Native Backend Phase 2 Gate]].
+1. **Spec + conformance vectors** — pin the authoritative rules and generate vectors from the Elixir reference. See [[Cross-Backend Conformance Spec]].
+2. **Bytecode + pure-Elixir VM** — prove `VM(compile(ast), data) == Compiler(ast).(data)` and ship a serializable compiled-template artifact. See [[Portable Stem Bytecode]].
+3. **Rust interpreter -> single WASM module** — port the VM and native stdlib, then run the same vectors and differential fuzzing. See [[Native Backend Phase 2 Gate]].
 4. **Host shims** — thin Python/Node loaders plus an edge-render demo.
 
-Gate phases 3–4 on a real non-BEAM/edge demand signal and a benchmark; until then they live in a separate experimental repo, feature-gated, out of mainline. Custom host transformers *are* supported, mirroring the BEAM `transformers:` binding: a host `TransformerResolver` (consulted before the built-ins) supplies or overrides names, and `i18n`'s `t`/`translate` are delivered this way. As with the BEAM `transformers:` binding, the host logic lives in the embedder, so it carries no cross-backend byte-parity and stays out of the conformance corpus.
+Gate phases 3-4 on a real non-BEAM/edge demand signal and a benchmark; until then they stay feature-gated and out of mainline. Host transformers mirror the BEAM `transformers:` binding, but embedder-specific logic stays out of the conformance corpus.
 
 ## Links
 
@@ -48,3 +41,4 @@ Gate phases 3–4 on a real non-BEAM/edge demand signal and a benchmark; until t
 - [[Universal Architecture Principles]] - Why Stem's constraints are portable in the first place.
 - [[Compile-Time-Only Security Model]] - The existing trust boundary the native path must not weaken.
 - [[Helper Capability Groups]] - The Minimum-only allowlist the bytecode capability header mirrors.
+- [[Rust Host API for Native Backend]] - The typed Rust embedding surface and first-class-host update.
