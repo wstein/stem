@@ -935,7 +935,7 @@
 
       // ── Bootstrap ─────────────────────────────────────────────────────
       const WASM = "./wasm/stem_native_bg.wasm";
-      const LS_SPLIT  = "stem-playground:splits.v2";
+      const LS_SPLIT  = "stem-playground:splits.v3";
       const LS_TWEAKS = "stem-playground:tweaks";
 
       const byId = (id) => document.getElementById(id);
@@ -2005,6 +2005,9 @@
       // height) — so one helper drives both the workspace and the editors, whose
       // orientations are perpendicular and flip with the layout.
       function makeSplitter({ el, container, first, second, axisRow, keyRow, keyCol, min, ratio }) {
+        // Splits are stored as a fraction of the usable space (not pixels), so a
+        // browser-canvas resize keeps the panes' proportions instead of pinning
+        // the first pane to a fixed width.
         function size() {
           if (!container) return;
           const row = axisRow();
@@ -2012,10 +2015,11 @@
           if (total <= 0) return;
           const usable = total - 6;
           const key = row ? keyRow : keyCol;
-          let s = splits[key] ?? Math.round(usable * ratio);
-          s = Math.max(min, Math.min(usable - min, s));
-          splits[key] = s;
-          first.style.flex = `0 0 ${s}px`;
+          const minR = min / usable;
+          let r = splits[key] ?? ratio;
+          r = Math.max(minR, Math.min(1 - minR, r));
+          splits[key] = r;
+          first.style.flex = `0 0 ${r * usable}px`;
           second.style.flex = "1 1 0";
         }
         el.addEventListener("mousedown", (e) => {
@@ -2026,11 +2030,12 @@
           const rect = container.getBoundingClientRect();
           const key = row ? keyRow : keyCol;
           const usable = (row ? rect.width : rect.height) - 6;
-          const startS = splits[key] ?? Math.round(usable * ratio);
+          const startPx = (splits[key] ?? ratio) * usable;
           const startPos = row ? e.clientX : e.clientY;
           const onMove = (ev) => {
             const cur = row ? ev.clientX : ev.clientY;
-            splits[key] = Math.max(min, Math.min(usable - min, startS + (cur - startPos)));
+            const px = Math.max(min, Math.min(usable - min, startPx + (cur - startPos)));
+            splits[key] = px / usable;
             size();
           };
           const onUp = () => {
