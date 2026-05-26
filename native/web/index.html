@@ -64,7 +64,6 @@
 
         --topbar-h: 44px;
         --statusbar-h: 26px;
-        --pane-header-h: 38px;
         /* One tab height across every tab strip (template, output view, and the
            data sub-pane) for a consistent look. */
         --tabs-h: 24px;
@@ -158,22 +157,9 @@
       body.dragging-col *, body.dragging-row * { user-select: none !important; }
       body.dragging-col iframe, body.dragging-row iframe { pointer-events: none !important; }
 
-      /* ── Pane header ─────────────────────────────────────────────── */
-      .pane-header {
-        flex: 0 0 var(--pane-header-h); height: var(--pane-header-h);
-        display: flex; align-items: center; gap: 10px; padding: 0 12px;
-        border-bottom: 1px solid var(--border); background: var(--bg-toolbar);
-      }
-      .pane-title { display: flex; align-items: baseline; gap: 8px; min-width: 0; flex: 0 1 auto; overflow: hidden; }
-      .pane-title h2 {
-        flex: 0 0 auto; margin: 0; font-size: 12px; font-weight: 600;
-        letter-spacing: .04em; text-transform: uppercase; color: var(--fg-secondary);
-      }
-      .pane-title .sub {
-        font-size: 11px; color: var(--fg-faint);
-        white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
-      }
-      .pane-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+      /* The pane focus (maximize) toggle is pushed to the far right of the tab
+         strip (the panes have no separate title header). */
+      .tabs-wrap > .focus-toggle { flex: 0 0 auto; align-self: center; margin-left: auto; margin-right: 6px; }
 
       /* ── Tabs ────────────────────────────────────────────────────── */
       .tabs-wrap {
@@ -523,6 +509,8 @@
       .statusbar:not(.has-error) .status-pill { color: var(--success); }
       .statusbar .status-msg { color: inherit; font-family: var(--font-mono); }
       .statusbar .meta { color: var(--fg-muted); font-family: var(--font-mono); font-size: 11px; }
+      .statusbar .status-sub { color: var(--fg-faint); font-family: var(--font-mono); font-size: 11px; }
+      .statusbar .status-sub:empty { display: none; }
       .statusbar .meta b { color: var(--fg-secondary); font-weight: 600; }
 
       /* ── Command palette ─────────────────────────────────────────── */
@@ -752,22 +740,13 @@
       <main class="workspace">
         <!-- Sources pane: template + partial tabs + data.yaml tab -->
         <section class="pane pane-sources" aria-label="Sources">
-          <header class="pane-header">
-            <div class="pane-title">
-              <h2>Sources</h2>
-              <span class="sub" id="sources-sub"></span>
-            </div>
-            <div class="pane-actions">
-              <button class="focus-toggle" data-pane="sources" title="Focus this pane (Esc to exit)">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
-                  <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/>
-                </svg>
-              </button>
-            </div>
-          </header>
-
           <div class="tabs-wrap">
             <div class="tabs" id="tmpl-tabs"></div>
+            <button class="focus-toggle" data-pane="sources" title="Focus this pane (Esc to exit)">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+                <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/>
+              </svg>
+            </button>
           </div>
 
           <!-- Contextual controls for Sources: the capability groups the engine
@@ -807,19 +786,6 @@
 
         <!-- Output pane -->
         <section class="pane pane-output" aria-label="Output">
-          <header class="pane-header">
-            <div class="pane-title">
-              <h2>Output</h2>
-            </div>
-            <div class="pane-actions">
-              <button class="focus-toggle" data-pane="output" title="Focus this pane (Esc to exit)">
-                <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
-                  <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/>
-                </svg>
-              </button>
-            </div>
-          </header>
-
           <!-- Output view tabs (same layout as the Sources tab strip). "source"
                = the output as text with click-to-source provenance;
                "rendered"/"markdown" = the iframe; "data" = the post-transform
@@ -828,6 +794,11 @@
                renderViewTabs(). -->
           <div class="tabs-wrap">
             <div id="view-tabs" class="view-tabs" role="tablist" aria-label="Output view"></div>
+            <button class="focus-toggle" data-pane="output" title="Focus this pane (Esc to exit)">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+                <path d="M2 6V2h4M14 6V2h-4M2 10v4h4M14 10v4h-4"/>
+              </svg>
+            </button>
           </div>
 
           <!-- Contextual controls for the active view; toggled by setOutputView. -->
@@ -887,6 +858,10 @@
           <span class="dot"></span>
           <span id="status-msg" class="status-msg">no errors</span>
         </span>
+        <!-- Contextual note for the active source tab (e.g. "partial · referenced
+             as {{> styles}}"); empty for main. Lives here now that the panes have
+             no title header. -->
+        <span id="sources-sub" class="status-sub"></span>
         <button id="dock-toggle" class="dock-toggle" title="Show/hide diagnostics dock" aria-pressed="false">
           <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="2.5" width="11" height="11" rx="1"/><path d="M2.5 10.5h11"/></svg>
           Diagnostics
