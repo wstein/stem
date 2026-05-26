@@ -209,7 +209,7 @@ export function buildDependencyGraph(asts) {
   const collect = (nodeList, from) => {
     for (const node of nodeList || []) {
       if (node.t === "partial") {
-        edges.push({ from, to: node.name, missing: !known.has(node.name) });
+        edges.push({ from, to: node.name, missing: !known.has(node.name), span: node.src || null });
       }
       for (const list of childLists(node)) collect(list, from);
     }

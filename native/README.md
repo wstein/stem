@@ -68,9 +68,9 @@ Playground workflow highlights:
   partials as dashed amber nodes. A **Context Inspector** tab snapshots the
   render context (`@this`/`@parent`/`@root`/iteration vars/locals) at a clicked
   output expression via the engine's `inspect_at` — one card per loop iteration.
-  An **AST** tab renders the active template's pre-expansion `parse_ast` as an
-  indented outline; hovering or clicking a row highlights and jumps to its source
-  span in the editor.
+  A **Parse Tree** tab renders the active template's pre-expansion `parse_ast` as
+  an indented outline (source syntax, distinct from the Bytecode disassembly
+  view); hovering or clicking a row highlights and jumps to its source span.
 - A capability-group selector (Strings / Collections / Predicates checkboxes;
   Minimum is always on) in the output header. Unchecking a group makes the
   engine refuse a template that uses one of its transformers, surfacing the
