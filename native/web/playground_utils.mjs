@@ -191,3 +191,69 @@ export function decodeState(encoded) {
 
   return JSON.parse(Buffer.from(encoded, "base64").toString("utf8"));
 }
+
+// Build the partial dependency graph for the Dependencies inspector view.
+// `asts` maps each file name ("main" plus each partial) to its pre-expansion
+// `stem-ast/v1` node list (from the engine's `parse_ast`, which keeps `{{> name}}`
+// as `partial` nodes). Returns `{ nodes, edges, cycles }`:
+//   - nodes: `{ id, isMain, missing }` (missing = referenced but not defined)
+//   - edges: `{ from, to, missing }` inclusion edges
+//   - cycles: arrays of node ids forming a cycle (Stem forbids partial recursion,
+//     so these are the compile-time `partial recursion detected` errors, drawn red)
+export function buildDependencyGraph(asts) {
+  const known = new Set(Object.keys(asts));
+  const nodes = Object.keys(asts).map((id) => ({ id, isMain: id === "main", missing: false }));
+  const edges = [];
+
+  const childLists = (node) => [node.then, node.else, node.body].filter(Array.isArray);
+  const collect = (nodeList, from) => {
+    for (const node of nodeList || []) {
+      if (node.t === "partial") {
+        edges.push({ from, to: node.name, missing: !known.has(node.name) });
+      }
+      for (const list of childLists(node)) collect(list, from);
+    }
+  };
+  for (const [id, ast] of Object.entries(asts)) collect(ast, id);
+
+  // Surface referenced-but-undefined partials as their own (missing) nodes.
+  for (const edge of edges) {
+    if (!known.has(edge.to) && !nodes.some((n) => n.id === edge.to)) {
+      nodes.push({ id: edge.to, isMain: false, missing: true });
+    }
+  }
+
+  return { nodes, edges, cycles: findCycles(nodes, edges) };
+}
+
+// Depth-first back-edge search over the (non-missing) inclusion edges.
+function findCycles(nodes, edges) {
+  const adjacency = new Map();
+  for (const edge of edges) {
+    if (edge.missing) continue;
+    if (!adjacency.has(edge.from)) adjacency.set(edge.from, []);
+    adjacency.get(edge.from).push(edge.to);
+  }
+
+  const cycles = [];
+  const path = [];
+  const inPath = new Set();
+  const seen = new Set();
+
+  const visit = (id) => {
+    if (inPath.has(id)) {
+      cycles.push(path.slice(path.indexOf(id)).concat(id));
+      return;
+    }
+    if (seen.has(id)) return;
+    seen.add(id);
+    path.push(id);
+    inPath.add(id);
+    for (const next of adjacency.get(id) || []) visit(next);
+    path.pop();
+    inPath.delete(id);
+  };
+
+  for (const node of nodes) visit(node.id);
+  return cycles;
+}

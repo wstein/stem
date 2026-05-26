@@ -12,7 +12,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createRenderer } from "./stem.mjs";
-import { disassemble } from "./playground_utils.mjs";
+import { buildDependencyGraph, disassemble } from "./playground_utils.mjs";
 import { load as loadYaml } from "./vendor/js-yaml.mjs";
 import jsonata from "./vendor/jsonata.mjs";
 
@@ -44,7 +44,7 @@ const expected = {
 
 const EXAMPLES_DIR = "native/web/examples";
 
-const { render, compile } = await createRenderer(await readFile(WASM));
+const { render, compile, parseAst } = await createRenderer(await readFile(WASM));
 const manifest = JSON.parse(await readFile(`${EXAMPLES_DIR}.json`, "utf8"));
 
 // Load an example's individual files: main.stem, one .stem per partial, and
@@ -196,3 +196,45 @@ if (disasmFailures > 0) {
   process.exit(1);
 }
 console.log(`disassembly: ${disasmCases.length}/${disasmCases.length} match Stem.Bytecode.disasm/1`);
+
+// Dependency-graph pass: the Dependencies inspector builds its DAG from the
+// engine's `parse_ast` (which keeps `{{> name}}` as `partial` nodes). This
+// checks the edge/cycle/missing-node derivation end-to-end through the wasm.
+function astsOf(files) {
+  const asts = {};
+  for (const [name, source] of Object.entries(files)) {
+    const { ast, error } = parseAst(source);
+    if (error) throw new Error(`parse_ast ${name}: ${error.message}`);
+    asts[name] = ast.nodes;
+  }
+  return asts;
+}
+
+let depFailures = 0;
+const chain = buildDependencyGraph(
+  astsOf({ main: "{{> a}} {{#each xs}}{{> ghost}}{{/each}}", a: "A {{> b}}", b: "B" })
+);
+const chainEdges = chain.edges.map((e) => `${e.from}->${e.to}${e.missing ? "?" : ""}`).sort().join(",");
+if (chainEdges !== "a->b,main->a,main->ghost?") {
+  depFailures++;
+  console.error(`  FAIL dep graph edges: ${chainEdges}`);
+} else if (!chain.nodes.some((n) => n.id === "ghost" && n.missing) || chain.cycles.length !== 0) {
+  depFailures++;
+  console.error(`  FAIL dep graph missing/cycle derivation`);
+} else {
+  console.log(`  ok  dep graph: chain edges + missing partial`);
+}
+
+const cyclic = buildDependencyGraph(astsOf({ main: "{{> a}}", a: "{{> b}}", b: "{{> a}}" }));
+if (cyclic.cycles.length === 1 && cyclic.cycles[0].join("->") === "a->b->a") {
+  console.log(`  ok  dep graph: cycle detected (a->b->a)`);
+} else {
+  depFailures++;
+  console.error(`  FAIL dep graph cycle: ${JSON.stringify(cyclic.cycles)}`);
+}
+
+if (depFailures > 0) {
+  console.error(`dependency graph: ${depFailures} check(s) diverged`);
+  process.exit(1);
+}
+console.log(`dependency graph: 2/2 derive edges, missing nodes, and cycles from parse_ast`);
