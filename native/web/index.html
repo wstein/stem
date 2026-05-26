@@ -406,25 +406,18 @@
         flex: 0 0 30px; display: flex; align-items: stretch;
         border-bottom: 1px solid var(--border); background: var(--bg-1);
       }
-      .dock-tabs { display: flex; align-items: stretch; }
-      .dock-tab {
-        appearance: none; border: 0; background: transparent; cursor: pointer;
-        padding: 0 12px; font: 11px var(--font-ui); color: var(--fg-muted);
-        display: flex; align-items: center; gap: 6px; position: relative;
+      /* Problems is the dock's only view, so its header is a plain title (no tab). */
+      .dock-title {
+        display: flex; align-items: center; gap: 6px; padding: 0 12px;
+        font: 11px var(--font-ui); color: var(--fg-secondary);
       }
-      .dock-tab:hover { background: var(--bg-2); color: var(--fg); }
-      .dock-tab.active { color: var(--fg); background: var(--bg-pane); }
-      .dock-tab.active::after {
-        content: ""; position: absolute; left: 0; right: 0; bottom: -1px;
-        height: 2px; background: var(--accent);
-      }
-      .dock-tab .badge {
+      .dock-title .badge {
         font: 10px var(--font-mono); padding: 0 5px; border-radius: 8px;
         background: var(--bg-3); color: var(--fg-muted);
       }
-      .dock-tab .badge.danger  { background: var(--danger-faint); color: var(--danger); }
-      .dock-tab .badge.warn    { background: var(--warn-faint); color: var(--warn); }
-      .dock-tab .badge.success { background: var(--success-faint); color: var(--success); }
+      .dock-title .badge.danger  { background: var(--danger-faint); color: var(--danger); }
+      .dock-title .badge.warn    { background: var(--warn-faint); color: var(--warn); }
+      .dock-title .badge.success { background: var(--success-faint); color: var(--success); }
       .dock-actions { margin-left: auto; display: flex; align-items: center; padding: 0 8px; }
       .dock-actions button {
         appearance: none; border: 0; background: transparent; cursor: pointer;
@@ -931,10 +924,8 @@
       <aside id="dock" class="dock" aria-label="Diagnostics" hidden>
         <div id="dock-grip" class="dock-grip" title="Drag to resize"></div>
         <header class="dock-header">
-          <div class="dock-tabs">
-            <button class="dock-tab active" data-dock="problems">
-              Problems <span class="badge" id="dock-badge-problems">0</span>
-            </button>
+          <div class="dock-title">
+            Problems <span class="badge" id="dock-badge-problems">0</span>
           </div>
           <div class="dock-actions">
             <button id="dock-collapse" title="Close" aria-label="Close diagnostics">
@@ -3019,7 +3010,6 @@
       // A persistent bottom dock surfacing compile/capability problems and the
       // partial dependency graph (built from the engine's `parse_ast`). Hidden
       // until toggled; refreshed by setOutput() on every run.
-      let dockTab = "problems";
       let ctxTarget = null; // { file, start, end, label } — the last-clicked output span
 
       // A source slice can be a long, multi-line literal (e.g. a whole <style>
@@ -3071,10 +3061,6 @@
           byId("dock-toggle").classList.add("active");
           byId("dock-toggle").setAttribute("aria-pressed", "true");
           byId("dock").classList.remove("collapsed");
-          dockTab = "problems";
-          for (const el of document.querySelectorAll(".dock-tab")) {
-            el.classList.toggle("active", el.dataset.dock === "problems");
-          }
         }
         hadProblems = probCount > 0;
 
@@ -3441,21 +3427,9 @@
         if (visible) renderDock();
       }
 
-      function selectDockTab(tab) {
-        dockTab = tab;
-        for (const el of document.querySelectorAll(".dock-tab")) {
-          el.classList.toggle("active", el.dataset.dock === tab);
-        }
-        if (byId("dock").classList.contains("collapsed")) byId("dock").classList.remove("collapsed");
-        renderDock();
-      }
-
       byId("dock-toggle").addEventListener("click", () => setDockVisible(byId("dock").hidden));
       // Close (hide) the diagnostics dock, like the panel close buttons.
       byId("dock-collapse").addEventListener("click", () => setDockVisible(false));
-      for (const tab of document.querySelectorAll(".dock-tab")) {
-        tab.addEventListener("click", () => selectDockTab(tab.dataset.dock));
-      }
       // Drag the grip to resize the dock height. Pointer capture keeps move/up
       // events flowing to the grip even when the pointer crosses the output
       // iframe (which would otherwise swallow them); the body class belts it.
