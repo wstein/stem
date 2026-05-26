@@ -860,8 +860,8 @@
             </button>
           </div>
           <div class="dock-actions">
-            <button id="dock-collapse" title="Collapse / expand" aria-label="Collapse dock">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8h10"/></svg>
+            <button id="dock-collapse" title="Close" aria-label="Close diagnostics">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg>
             </button>
           </div>
         </header>
@@ -3019,10 +3019,8 @@
       }
 
       byId("dock-toggle").addEventListener("click", () => setDockVisible(byId("dock").hidden));
-      byId("dock-collapse").addEventListener("click", () => {
-        byId("dock").classList.toggle("collapsed");
-        renderDock();
-      });
+      // Close (hide) the diagnostics dock, like the panel close buttons.
+      byId("dock-collapse").addEventListener("click", () => setDockVisible(false));
       for (const tab of document.querySelectorAll(".dock-tab")) {
         tab.addEventListener("click", () => selectDockTab(tab.dataset.dock));
       }
