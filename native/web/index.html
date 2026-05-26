@@ -511,9 +511,15 @@
       .ctx-snap-table .val .ty { color: var(--fg-faint); font-style: italic; margin-left: 6px; }
 
       .ast-pane { padding: 6px 0; font: 12px/1.6 var(--font-mono); }
-      .ast-row { padding: 1px 14px 1px 0; white-space: pre; color: var(--fg-secondary); }
+      .ast-row { display: flex; align-items: baseline; padding: 1px 14px 1px 0; color: var(--fg-secondary); }
       .ast-row.linked { cursor: pointer; color: var(--fg); }
       .ast-row.linked:hover { background: var(--accent-softer); }
+      .ast-ln {
+        flex: 0 0 auto; width: 38px; text-align: right; padding-right: 12px;
+        color: var(--fg-faint); user-select: none;
+      }
+      .ast-content { flex: 1 1 auto; min-width: 0; white-space: pre; }
+      .ast-kw { color: var(--tok-key); }
 
       .dock-toggle {
         appearance: none; border: 1px solid var(--border); background: var(--bg);
@@ -970,7 +976,7 @@
         highlightActiveLineGutter
       } from "https://esm.sh/@codemirror/view@6.38.8/X-ZEBjb2RlbWlycm9yL3N0YXRlQDYuNS4y/es2022/view.mjs";
       import { defaultKeymap, history as cmHistory, historyKeymap, indentWithTab } from "https://esm.sh/@codemirror/commands@6.10.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
-      import { HighlightStyle, bracketMatching, syntaxHighlighting } from "https://esm.sh/@codemirror/language@6.11.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
+      import { HighlightStyle, StreamLanguage, bracketMatching, syntaxHighlighting } from "https://esm.sh/@codemirror/language@6.11.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
       import { tags as t } from "https://esm.sh/@lezer/highlight@1.2.3?target=es2022";
       import { lintGutter, linter, setDiagnosticsEffect } from "https://esm.sh/@codemirror/lint@6.8.5?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8";
       import { yaml } from "https://esm.sh/@codemirror/lang-yaml@6.1.3?deps=@codemirror/state@6.5.2,@codemirror/view@6.38.8,@codemirror/language@6.11.3";
@@ -1157,6 +1163,44 @@
         { tag: [t.angleBracket, t.punctuation, t.separator, t.meta], color: "var(--fg-muted)" },
         { tag: t.invalid, color: "var(--danger)" },
       ]);
+
+      // Lightweight highlighter for the JSONata transform editor: $functions and
+      // variables, strings, numbers, block comments, and operators. Token style
+      // names map through themeHighlight (already in the editors' extensions).
+      const jsonataLang = StreamLanguage.define({
+        token(stream) {
+          if (stream.match(/\/\*/)) {
+            while (!stream.match(/\*\//) && !stream.eol()) stream.next();
+            return "comment";
+          }
+          if (stream.match(/"(?:[^"\\]|\\.)*"/) || stream.match(/'(?:[^'\\]|\\.)*'/)) return "string";
+          if (stream.match(/\$[a-zA-Z_]\w*/) || stream.match(/\$/)) return "keyword";
+          if (stream.match(/-?\d+(\.\d+)?([eE][+-]?\d+)?/)) return "number";
+          if (stream.match(/(?:true|false|null)\b/)) return "atom";
+          if (stream.match(/[a-zA-Z_]\w*/)) return "variableName";
+          if (stream.match(/[+\-*/%=<>!&|~?:^@.]+/)) return "operator";
+          stream.next();
+          return null;
+        },
+      });
+
+      // Highlighter for the Bytecode disassembly view: uppercase opcodes/operands
+      // as keywords, quoted literals as strings, plus numbers and nil/bool atoms.
+      const BC_KEYWORDS =
+        /^(?:EMIT_TEXT|EMIT|IF|THEN|ELSE|EACH|WITH|DO|SCOPE|GET|ASSIGNS|ASSIGN|LOCAL|THIS|PARENT|ROOT|INDEX0|INDEX1|KEY|FIRST|LAST|LIT|CALL|ESCAPE|AS)\b/;
+      const bytecodeLang = StreamLanguage.define({
+        token(stream) {
+          if (stream.sol() && stream.match(/;.*/)) return "comment";
+          if (stream.eatSpace()) return null;
+          if (stream.match(/"(?:[^"\\]|\\.)*"/)) return "string";
+          if (stream.match(BC_KEYWORDS)) return "keyword";
+          if (stream.match(/-?\d+(\.\d+)?/)) return "number";
+          if (stream.match(/(?:true|false|nil|null)\b/)) return "atom";
+          if (stream.match(/[A-Za-z_]\w*/)) return "variableName";
+          stream.next();
+          return null;
+        },
+      });
 
       // The line-number gutter lives in a compartment so the Appearance toggle
       // can switch it on/off live (applyTweaks reconfigures both editors).
@@ -1392,7 +1436,7 @@
         } else {
           setEditorText(dataView, dataTab === "transform" ? transformSrc : yamlSrc);
           dataView.dispatch({
-            effects: dataLangComp.reconfigure(dataTab === "transform" ? [] : [yaml(), yamlHighlighting]),
+            effects: dataLangComp.reconfigure(dataTab === "transform" ? [jsonataLang] : [yaml(), yamlHighlighting]),
           });
         }
         renderDataTabs();
@@ -1578,8 +1622,7 @@
           return;
         }
         if (outputView === "bytecode") {
-          // Disassembly is plain text — no language grammar.
-          outputEditor.dispatch({ effects: outLangComp.reconfigure([]) });
+          outputEditor.dispatch({ effects: outLangComp.reconfigure([bytecodeLang]) });
           return;
         }
         if (outputView !== "source") return;
@@ -2870,11 +2913,16 @@
           return;
         }
         const pane = makeEl("div", { class: "ast-pane" });
-        for (const r of rows) {
-          const row = makeEl("div", {
-            class: "ast-row",
-            style: `padding-left:${10 + r.depth * 16}px`,
-          }, r.text);
+        rows.forEach((r, i) => {
+          const row = makeEl("div", { class: "ast-row" });
+          // A line-number gutter (the inspector panel isn't a CodeMirror editor,
+          // so it has no gutter of its own) and the node-type keyword coloured.
+          row.append(makeEl("span", { class: "ast-ln" }, String(i + 1)));
+          const content = makeEl("span", { class: "ast-content", style: `padding-left:${r.depth * 16}px` });
+          const sp = r.text.indexOf(" ");
+          if (sp > 0) content.append(makeEl("span", { class: "ast-kw" }, r.text.slice(0, sp)), r.text.slice(sp));
+          else content.append(makeEl("span", { class: "ast-kw" }, r.text));
+          row.append(content);
           if (typeof r.start === "number") {
             row.classList.add("linked");
             row.addEventListener("mouseenter", () => {
@@ -2889,7 +2937,7 @@
             });
           }
           pane.append(row);
-        }
+        });
         body.append(pane);
       }
 
