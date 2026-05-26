@@ -795,7 +795,7 @@
             <div class="editor-cell">
               <div class="data-tabs" id="data-tabs"></div>
               <div class="editor-pane" id="data-editor-container"></div>
-              <!-- Read-only introspection panels (Context Inspector / Parse Tree),
+              <!-- Read-only introspection panels (Context Inspector / Syntax Tree),
                    shown in place of the data editor when their tab is active. -->
               <div class="data-inspect" id="data-inspect" hidden></div>
             </div>
@@ -1303,7 +1303,7 @@
       }
 
       // Render the data-pane tab bar, highlighting active. Beyond the data and
-      // transform editors it hosts the read-only Context Inspector and Parse Tree.
+      // transform editors it hosts the read-only Context Inspector and Syntax Tree.
       function renderDataTabs() {
         const bar = byId("data-tabs");
         bar.innerHTML = "";
@@ -1327,11 +1327,11 @@
         mk("data", "data", "YAML 1.2", yamlDirty);
         mk("transform", "transform · JSONata", null, transformDirty);
         mk("context", "Context Inspector", null, false);
-        mk("ast", "Parse Tree", null, false);
+        mk("ast", "Syntax Tree", null, false);
       }
 
       // Show the active data tab: the data/transform editor, or a read-only
-      // inspector panel (Context Inspector / Parse Tree) in its place.
+      // inspector panel (Context Inspector / Syntax Tree) in its place.
       function showDataTab() {
         const inspect = isInspectTab(dataTab);
         byId("data-editor-container").hidden = inspect;
@@ -1385,7 +1385,7 @@
         renderTabs();
         updateStatusMeta();
         caretLinkKey = null; syncOutputToCaret();
-        if (dataTab === "ast") renderDataInspect(); // Parse Tree follows the active tab
+        if (dataTab === "ast") renderDataInspect(); // Syntax Tree follows the active tab
       }
 
       // ── Compile + render ──────────────────────────────────────────────
@@ -1740,7 +1740,7 @@
       function updateStatusMeta() {
         // The inspector tabs have no editor/caret — show a plain label.
         if (activeView === "data" && isInspectTab(dataTab)) {
-          const name = dataTab === "context" ? "Context Inspector" : "Parse Tree";
+          const name = dataTab === "context" ? "Context Inspector" : "Syntax Tree";
           byId("status-meta").innerHTML = `<b>${name}</b>  ·  read-only`;
           return;
         }
