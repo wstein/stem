@@ -166,6 +166,24 @@
       .spacer { flex: 1 1 auto; }
       .hint { font-size: 12px; color: var(--fg-muted); display: flex; align-items: center; gap: 6px; }
 
+      /* Text input with a clear (×) button, shown only when it has content. */
+      .input-wrap { position: relative; display: inline-flex; align-items: center; }
+      .input-wrap > input { padding-right: 22px; }
+      .input-wrap:has(> input[hidden]) { display: none; }
+      .input-clear {
+        position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+        width: 15px; height: 15px; display: grid; place-items: center; padding: 0;
+        border: 0; border-radius: 50%; background: var(--bg-3); color: var(--fg-muted);
+        font: 12px/1 var(--font-ui); cursor: pointer;
+      }
+      .input-clear:hover { background: var(--border-strong); color: var(--fg); }
+      .input-clear[hidden] { display: none; }
+      /* The search and palette inputs fill their container; the highlight input
+         keeps its own width inside an inline wrap. */
+      .search-bar .input-wrap { flex: 1 1 auto; }
+      .search-bar .input-wrap > input { width: 100%; }
+      .palette .input-wrap { display: block; }
+
       /* ── Workspace ───────────────────────────────────────────────── */
       .workspace {
         flex: 1 1 auto; min-height: 0;
@@ -2458,7 +2476,7 @@
           else if (e.key === "Escape") close();
         });
         back.addEventListener("mousedown", (e) => { if (e.target === back) close(); });
-        box.append(input, list);
+        box.append(addClear(input), list);
         back.append(box);
         document.body.append(back);
         renderList();
@@ -2912,7 +2930,7 @@
           mkOpt("word", "⌶", "Whole word"),
           mkOpt("regex", ".*", "Regular expression"),
         ]);
-        const bar = makeEl("div", { class: "search-bar" }, [input, opts]);
+        const bar = makeEl("div", { class: "search-bar" }, [addClear(input), opts]);
         const count = makeEl("div", { class: "search-count" });
         const results = makeEl("div", { class: "search-results" });
         panel.append(header, bar, count, results);
@@ -3033,6 +3051,31 @@
           node.append(typeof c === "string" ? document.createTextNode(c) : c);
         }
         return node;
+      }
+
+      // Wrap a text input with a clear (×) button shown only when it has content;
+      // clicking clears the value, fires input+change so handlers re-run, and
+      // refocuses. Works whether or not the input is already in the DOM.
+      function addClear(input) {
+        const wrap = document.createElement("span");
+        wrap.className = "input-wrap";
+        if (input.parentNode) input.parentNode.insertBefore(wrap, input);
+        wrap.append(input);
+        const btn = document.createElement("button");
+        btn.type = "button"; btn.className = "input-clear"; btn.tabIndex = -1;
+        btn.title = "Clear"; btn.textContent = "×";
+        wrap.append(btn);
+        const sync = () => { btn.hidden = !input.value; };
+        input.addEventListener("input", sync);
+        btn.addEventListener("click", () => {
+          input.value = "";
+          input.dispatchEvent(new Event("input", { bubbles: true }));
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+          input.focus();
+          sync();
+        });
+        sync();
+        return wrap;
       }
 
       // Parse main + every partial to its pre-expansion AST, then derive the DAG.
@@ -3483,6 +3526,7 @@
         }
         const input = byId("out-lang-input");
         input.value = "";
+        addClear(input);
         updateLangPlaceholder();
         // Commit on change/Enter: snap to a known language; empty reverts to example default.
         input.addEventListener("change", () => {
