@@ -18,12 +18,23 @@ Stem expands partials inline at compile time and guards recursion with a call-st
 
 ## How
 
-The graph edges and the per-file AST both need the **pre-expansion** structure, which the wire bytecode does not retain. So the engine adds a `parse_ast(...)` export — **Rust, mirrored in the Elixir reference** — that stops before partial inlining: `{{> name}}` stays a `partial` node, and every node carries its `src` span. Elixir already produces `{:partial, name, args, meta}` pre-expansion in the parser; the Rust assembler gains a mode that emits a `Partial` node instead of calling `expand_partial`. The cyclic-edge detection runs client-side over the parsed partial references and cross-checks the compiler's recursion message. The scope-boundary nodes correspond to the Rust `{"t":"scope",...}` / Elixir `:partial_scope` constructs.
+The graph edges and the per-file AST both need the **pre-expansion** structure, which the wire bytecode does not retain. So both backends expose a `parse_ast` entry that stops before partial inlining: `{{> name}}` stays a `partial` node, every node carries its `src`, and expressions keep their written syntactic form.
+
+- **Rust**: `parse_ast_to_wire` / the `parse_ast` wasm-bindgen export (`stem_compile`/`stem_native`), an `Asm.expand` flag, and a `Node::Partial` variant.
+- **Elixir**: `Stem.Parser.parse_ast/2` (a `:no_expand` sentinel threaded through the existing `collect/4`) plus `Stem.AST.to_wire/1`. Literals resolve through the shared `Stem.Bytecode.literal_value/1` so the two backends agree on literal values.
+
+## stem-ast/v1 conceptual contract
+
+The two backends agree on the **node and expression kinds** (conceptual parity), not byte-for-byte output. `src` is backend-native provenance: **byte spans** (`{start, end}`) in Rust, **line/column** in Elixir.
+
+- Nodes: `text`, `emit` (`expr` + `escape`), `if`, `unless`, `each`/`with` (`subject`, `params`, `body`, `else`), `region`, `yield`, `partial` (`name`, `context`, `hash`), `partial_scope`.
+- Expressions: `identifier`, `path` (`segments`), `context` (`kind` ∈ this/parent/root, `path`), `index`/`index1`/`key`/`first`/`last`, `lit` (`value`), `call` (`name`, `args`), `pipeline` (`lhs`, `stages`); args are `{kind: positional|keyword, ...}`.
+
+**Known Rust↔Elixir differences (pending the Rust parser rewrite, see [[Native: Rust first-class]]):** Rust currently collapses `{{#unless}}` into a swapped `if` node and pre-resolves the default `{{ }}` escape to `"html"`, whereas the Elixir reference keeps a distinct `unless` node and the `"default"` escape atom. Elixir is the canonical model; the `nimble_parsec_rs`-based Rust parser rewrite is what brings Rust fully in line.
+
 
 ## Links
 
 - [[Playground Inspector Suite]] - The panes (diagnostics, bytecode, context) half of the same effort.
 - [[Helper and Partial Resolution]] - How partials expand inline and how `partial_scope` rebinds hash args.
 - [[Native AST Compilation Pipeline]] - Where partial expansion happens; `parse_ast` taps the stage just before it.
-## Links
-

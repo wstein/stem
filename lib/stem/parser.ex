@@ -203,6 +203,32 @@ defmodule Stem.Parser do
     end
   end
 
+  @doc """
+  Parses one template's source to its pre-expansion AST.
+
+  Unlike `parse/2`, `{{> name}}` tags are kept as `:partial` nodes rather than
+  inlined, so a file's own structure and its partial dependency edges stay
+  visible. Takes no partials map: each file is parsed on its own. Serialize the
+  result with `Stem.AST.to_wire/1` for the `stem-ast/v1` wire the playground
+  consumes.
+  """
+  @spec parse_ast(binary(), keyword()) :: {:ok, Stem.AST.t()} | {:error, binary(), meta()}
+  def parse_ast(source, opts \\ []) when is_binary(source) do
+    case parse_ast_with_spans(source, opts) do
+      {:ok, ast} -> {:ok, strip_ast_spans(ast)}
+      {:error, message, meta} -> {:error, message, strip_meta_spans(meta)}
+    end
+  end
+
+  @doc false
+  @spec parse_ast_with_spans(binary(), keyword()) ::
+          {:ok, Stem.AST.t()} | {:error, binary(), meta()}
+  def parse_ast_with_spans(source, opts \\ []) when is_binary(source) do
+    with {:ok, tokens} <- tokenize_with_spans(source, opts) do
+      parse_stream(tokens, :no_expand, [])
+    end
+  end
+
   # Exposed for lexer-level tests (position tracking, trim markers, error
   # messages).  Not part of the stable public API.
   @doc false
@@ -653,6 +679,10 @@ defmodule Stem.Parser do
     {:partial_scope, context, hash, strip_ast_spans(body), strip_meta_spans(meta)}
   end
 
+  defp strip_node_spans({:partial, name, context, hash, meta}) do
+    {:partial, name, context, hash, strip_meta_spans(meta)}
+  end
+
   defp strip_meta_spans(%{line: line, column: column}), do: %{line: line, column: column}
 
   defp strip_token_spans({:text, text, meta}), do: {:text, text, strip_meta_spans(meta)}
@@ -709,6 +739,20 @@ defmodule Stem.Parser do
       collect(rest, partials, stack, [{:yield, raw_name, meta} | acc])
     else
       {:error, message} -> {:error, message, meta}
+    end
+  end
+
+  # In `:no_expand` mode (the `parse_ast/2` path) a partial stays an unexpanded
+  # `:partial` node carrying its parsed context/hash, so a file's own structure
+  # and its dependency edges remain visible. Otherwise it expands inline.
+  defp collect([{:partial, name, args, meta} | rest], :no_expand, stack, acc) do
+    case Expression.parse_partial_args(args) do
+      {:ok, context, hash} ->
+        node = {:partial, String.trim(name), context, hash, meta}
+        collect(rest, :no_expand, stack, [node | acc])
+
+      {:error, message} ->
+        {:error, message, meta}
     end
   end
 

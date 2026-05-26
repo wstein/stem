@@ -463,23 +463,38 @@ defmodule Stem.Bytecode do
     {Enum.reverse(positional), Enum.reverse(keyword)}
   end
 
-  # `null` is Stem's canonical nil literal (the parser stores both `nil` and
-  # `null` as the source "null"); map it to nil, the same value the compiled
-  # backend produces via to_source/2.
-  defp literal_value!("null"), do: nil
+  # Resolve a literal's source to its value via the same parse Elixir uses,
+  # confirming it really is a literal term. `null` is Stem's canonical nil
+  # literal (the parser stores both `nil` and `null` as the source "null").
+  # Returns `:error` for interpolation or any non-literal form (which the
+  # parser's permissive literal check can still admit), letting callers decide
+  # whether to reject or render it. Shared with `Stem.AST.to_wire/1` so the
+  # AST and bytecode backends resolve literals identically.
+  @doc false
+  @spec literal_value(binary()) :: {:ok, term()} | :error
+  def literal_value("null"), do: {:ok, nil}
 
-  # Resolve a literal's source to its value via the same parse Elixir uses, then
-  # confirm it really is a literal term. Interpolation and any non-literal form
-  # (which the parser's permissive literal check can still admit) is rejected so
-  # the program never carries an unevaluated AST fragment.
+  def literal_value(source) do
+    case Code.string_to_quoted(source) do
+      {:ok, quoted} ->
+        if literal_term?(quoted) do
+          {value, _binding} = Code.eval_quoted(quoted)
+          {:ok, value}
+        else
+          :error
+        end
+
+      {:error, _} ->
+        :error
+    end
+  end
+
+  # As `literal_value/1`, but raises on a non-literal so a compiled program
+  # never carries an unevaluated AST fragment.
   defp literal_value!(source) do
-    quoted = Code.string_to_quoted!(source)
-
-    if literal_term?(quoted) do
-      {value, _binding} = Code.eval_quoted(quoted)
-      value
-    else
-      unsupported("non-literal expression #{inspect(source)} in argument position")
+    case literal_value(source) do
+      {:ok, value} -> value
+      :error -> unsupported("non-literal expression #{inspect(source)} in argument position")
     end
   end
 
