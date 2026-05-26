@@ -39,42 +39,9 @@ graph at the bottom.
 
 ## Dependency graph
 
-```mermaid
-graph TD
-  subgraph Cores["Engine cores (existing + ports)"]
-    ELIXIR["Elixir reference (spec oracle)"]
-    RUST["Rust / WASM engine"]
-    JS["JS port (ST4-style)"]
-    JVM["JVM port (ST4-style)"]
-  end
+![Stem backlog dependency graph](backlog-deps.svg)
 
-  subgraph Grammars
-    TM["TextMate grammar"]
-    TS["Tree-sitter grammar"]
-  end
-
-  LSP["LSP language server"]
-  VSC["VS Code extension"]
-  JB["JetBrains plugin"]
-
-  subgraph Playground
-    PV["File AST viewer + scope nodes"]
-    PF["Per-editor find (⌘F)"]
-    PR["Preact + htm migration"]
-  end
-
-  %% the LSP is built on a core; the existing engines suffice, ports are optional
-  RUST --> LSP
-  ELIXIR -.alt.-> LSP
-  JS -.alt.-> LSP
-
-  TM --> VSC
-  LSP --> VSC
-  LSP --> JB
-  JVM -.in-process.-> JB
-  TS -.semantic tokens.-> LSP
-
-  RUST --> PV
-```
-
-Legend: solid = required dependency, dotted = optional / alternative path.
+Solid arrows = required dependency; dashed = optional / alternative path. The
+LSP is the pivot: it builds on a core (Rust today; Elixir/JS as alternatives)
+and feeds both editor integrations. The playground items run on the Rust/WASM
+core and are otherwise independent.

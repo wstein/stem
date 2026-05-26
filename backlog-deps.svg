@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 880 560" font-family="-apple-system, Segoe UI, sans-serif">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#94a3b8"/>
+    </marker>
+    <style>
+      .box { fill:#ffffff; stroke:#cbd5e1; stroke-width:1.5; rx:8; }
+      .box.primary { fill:#f5f3ff; stroke:#7c4dff; }
+      .box.lsp { fill:#f5f3ff; stroke:#7c4dff; stroke-width:2.2; }
+      .lbl { fill:#1e293b; font-size:13px; font-weight:600; }
+      .sub { fill:#64748b; font-size:11px; }
+      .grp { fill:#64748b; font-size:11px; font-weight:700; letter-spacing:.05em; }
+      .edge { stroke:#94a3b8; stroke-width:1.6; fill:none; marker-end:url(#arr); }
+      .edge.opt { stroke-dasharray:5 4; }
+      .elbl { fill:#94a3b8; font-size:10px; }
+    </style>
+  </defs>
+
+  <!-- group labels -->
+  <text x="30" y="24" class="grp">ENGINE CORES</text>
+  <text x="30" y="188" class="grp">GRAMMARS · LANGUAGE SERVER</text>
+  <text x="330" y="348" class="grp">EDITOR INTEGRATIONS</text>
+  <text x="30" y="458" class="grp">PLAYGROUND · runs on the Rust / WASM core</text>
+
+  <!-- edges (drawn first, under the boxes) -->
+  <!-- cores -> LSP -->
+  <path class="edge" d="M270,80 L515,200"/>
+  <path class="edge opt" d="M110,80 L495,200"/>
+  <text x="300" y="150" class="elbl">alt</text>
+  <path class="edge opt" d="M440,80 L535,200"/>
+  <text x="470" y="150" class="elbl">alt</text>
+  <!-- tree-sitter -> LSP (semantic tokens) -->
+  <path class="edge opt" d="M340,222 L460,222"/>
+  <text x="352" y="216" class="elbl">semantic tokens</text>
+  <!-- LSP + TextMate -> VS Code -->
+  <path class="edge" d="M100,244 L380,360"/>
+  <path class="edge" d="M515,244 L425,360"/>
+  <!-- LSP -> JetBrains ; JVM -> JetBrains (in-process) -->
+  <path class="edge" d="M545,244 L615,360"/>
+  <path class="edge opt" d="M620,80 L640,360"/>
+  <text x="648" y="220" class="elbl">in-process</text>
+
+  <!-- ENGINE CORES (y 36..80) -->
+  <rect class="box" x="30"  y="36" width="140" height="44" rx="8"/>
+  <text x="100" y="63" class="lbl" text-anchor="middle">Elixir reference</text>
+  <rect class="box primary" x="200" y="36" width="140" height="44" rx="8"/>
+  <text x="270" y="59" class="lbl" text-anchor="middle">Rust / WASM</text>
+  <text x="270" y="73" class="sub" text-anchor="middle">primary core</text>
+  <rect class="box" x="370" y="36" width="140" height="44" rx="8"/>
+  <text x="440" y="63" class="lbl" text-anchor="middle">JS port (ST4-style)</text>
+  <rect class="box" x="540" y="36" width="140" height="44" rx="8"/>
+  <text x="610" y="63" class="lbl" text-anchor="middle">JVM port (ST4-style)</text>
+
+  <!-- GRAMMARS + LSP (y 200..244) -->
+  <rect class="box" x="30"  y="200" width="140" height="44" rx="8"/>
+  <text x="100" y="227" class="lbl" text-anchor="middle">TextMate grammar</text>
+  <rect class="box" x="200" y="200" width="140" height="44" rx="8"/>
+  <text x="270" y="227" class="lbl" text-anchor="middle">Tree-sitter grammar</text>
+  <rect class="box lsp" x="460" y="200" width="140" height="44" rx="8"/>
+  <text x="530" y="223" class="lbl" text-anchor="middle">LSP server</text>
+  <text x="530" y="237" class="sub" text-anchor="middle">P0 · shared brain</text>
+
+  <!-- INTEGRATIONS (y 360..404) -->
+  <rect class="box" x="330" y="360" width="140" height="44" rx="8"/>
+  <text x="400" y="387" class="lbl" text-anchor="middle">VS Code extension</text>
+  <rect class="box" x="560" y="360" width="140" height="44" rx="8"/>
+  <text x="630" y="387" class="lbl" text-anchor="middle">JetBrains plugin</text>
+
+  <!-- PLAYGROUND (y 470..514) -->
+  <rect class="box" x="30"  y="470" width="140" height="44" rx="8"/>
+  <text x="100" y="497" class="lbl" text-anchor="middle">AST viewer (Ph.2)</text>
+  <rect class="box" x="200" y="470" width="140" height="44" rx="8"/>
+  <text x="270" y="497" class="lbl" text-anchor="middle">Per-editor find</text>
+  <rect class="box" x="370" y="470" width="140" height="44" rx="8"/>
+  <text x="440" y="497" class="lbl" text-anchor="middle">Preact migration</text>
+
+  <!-- legend -->
+  <line x1="560" y1="486" x2="600" y2="486" class="edge"/>
+  <text x="606" y="490" class="sub">required</text>
+  <line x1="560" y1="506" x2="600" y2="506" class="edge opt"/>
+  <text x="606" y="510" class="sub">optional / alternative</text>
+</svg>
