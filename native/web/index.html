@@ -249,6 +249,21 @@
       .data-tab:hover { color: var(--fg-secondary); }
       .data-tab.active { color: var(--tok-key); background: var(--bg-pane); }
       .data-tab .yaml-ver { margin-left: 0; }
+      /* Output-pane view tabs: the same visual language as the data sub-pane
+         tabs, but inline in the pane header in place of a <select>. */
+      .view-tabs {
+        display: inline-flex; height: 24px;
+        border: 1px solid var(--border); border-radius: 5px; overflow: hidden;
+      }
+      .view-tab {
+        height: 100%; display: inline-flex; align-items: center;
+        padding: 0 10px; border: 0; border-right: 1px solid var(--border);
+        background: transparent; color: var(--fg-faint);
+        font: 11px/1 var(--font-mono); cursor: pointer; white-space: nowrap;
+      }
+      .view-tab:last-child { border-right: 0; }
+      .view-tab:hover { color: var(--fg-secondary); }
+      .view-tab.active { color: var(--tok-key); background: var(--accent-softer); }
       /* Read-only inspector panels shown in place of the data editor. */
       .data-inspect { flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--bg-pane); }
       .data-inspect[hidden] { display: none; }
@@ -799,18 +814,12 @@
             </div>
             <div class="divider"></div>
             <div class="pane-controls">
-              <!-- Output view selector. "source" = the output as text with
+              <!-- Output view tabs. "source" = the output as text with
                    click-to-source provenance; "rendered"/"markdown" = the iframe;
-                   "data" = the post-transform view-model as YAML. The view keys
-                   are kept stable (used by examples + URL state). -->
-              <span class="field-label" style="font-size:11px">View</span>
-              <select id="view-select" class="select" aria-label="Output view">
-                <option value="source">Plain Text</option>
-                <option value="rendered">HTML Preview</option>
-                <option value="markdown">Markdown Preview</option>
-                <option value="data">View Model</option>
-                <option value="bytecode">Bytecode</option>
-              </select>
+                   "data" = the post-transform view-model as YAML; "bytecode" =
+                   the wire disassembly. The view keys are kept stable (used by
+                   examples + URL state). Painted by renderViewTabs(). -->
+              <span id="view-tabs" class="view-tabs" role="tablist" aria-label="Output view"></span>
               <span class="field-label" id="out-lang-label" style="font-size:11px" hidden>Highlight</span>
               <input id="out-lang-input" class="select" style="width:130px" list="out-lang-list" aria-label="Plain Text highlight language" title="Type to search ~140 languages" placeholder="Plain text" autocomplete="off" hidden />
               <datalist id="out-lang-list"></datalist>
@@ -1742,6 +1751,34 @@
       const validView = (v) =>
         (["source", "rendered", "markdown", "data", "bytecode"].includes(v) ? v : "rendered");
 
+      // The output view tabs, mirroring the data sub-pane tab strip. Order and
+      // keys match validView; labels are the user-facing names.
+      const VIEW_TABS = [
+        ["source", "Plain Text"],
+        ["rendered", "HTML Preview"],
+        ["markdown", "Markdown Preview"],
+        ["data", "View Model"],
+        ["bytecode", "Bytecode"],
+      ];
+
+      function renderViewTabs() {
+        const bar = byId("view-tabs");
+        bar.innerHTML = "";
+        for (const [view, label] of VIEW_TABS) {
+          const b = document.createElement("button");
+          b.className = "view-tab" + (outputView === view ? " active" : "");
+          b.setAttribute("role", "tab");
+          b.setAttribute("aria-selected", outputView === view ? "true" : "false");
+          b.textContent = label;
+          b.addEventListener("click", () => {
+            if (outputView === view) return;
+            setOutputView(view);
+            run();
+          });
+          bar.append(b);
+        }
+      }
+
       function setOutputView(view) {
         outputView = view;
         // "source" (provenance), "data" (view-model YAML), and "bytecode" (wire
@@ -1750,7 +1787,7 @@
         byId("output-text").hidden = !isText;
         byId("output-preview").hidden = isText;
         hideSegTip(); clearLink();
-        byId("view-select").value = view;
+        renderViewTabs();
         // The highlight picker only applies to Plain Text (View Model is YAML).
         const showLang = view === "source";
         byId("out-lang-input").hidden = !showLang;
@@ -3088,8 +3125,6 @@
           .map((box) => box.value);
         run();
       });
-
-      byId("view-select").addEventListener("change", (e) => { setOutputView(e.target.value); run(); });
 
       byId("allow-scripts").addEventListener("change", (e) => {
         allowScripts = e.target.checked;
