@@ -39,7 +39,7 @@ graph at the bottom.
 
 ## Dependency graph
 
-![Stem backlog dependency graph](backlog-deps.svg)
+![Stem backlog dependency graph](assets/backlog-deps.svg)
 
 Nodes are **backlog tasks** (not existing components); an arrow "A → B" reads
 "A needs B". Solid = required, dashed = optional / alternative.
