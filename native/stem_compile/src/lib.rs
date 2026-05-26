@@ -45,6 +45,10 @@ use std::collections::{HashMap, HashSet};
 // `tokenize` assembler, sharing one conceptual model with the BEAM reference.
 mod np_lexer;
 
+// The expression top-level tokenizer: a nimble_parsec_rs port of the
+// `Stem.Expression` grammar (quote/paren/bracket chunks, separators).
+mod np_expr;
+
 const VERSION: &str = "stem-bc/v1";
 
 // The pre-expansion AST wire shape emitted by `parse_ast_to_wire` (distinct from
@@ -533,7 +537,7 @@ fn parse_partial_args(args: &str, span: Span) -> Result<PartialArgs, CompileErro
     let mut context: Option<Expr> = None;
     let mut hash: Vec<(String, Expr)> = Vec::new();
 
-    for token in split_whitespace(&scan_top_level(trimmed)) {
+    for token in split_whitespace(&np_expr::scan_top_level(trimmed)) {
         match parse_transformer_arg(&token, span)? {
             Arg::Keyword(key, value) => hash.push((key, value)),
             Arg::Positional(expr) if context.is_none() => context = Some(expr),
@@ -751,7 +755,7 @@ struct Stage {
 
 fn parse_expr(raw: &str, span: Span) -> Result<Expr, CompileError> {
     let t = raw.trim();
-    let tokens = scan_top_level(t);
+    let tokens = np_expr::scan_top_level(t);
     if let Some(op) = reserved_op(&tokens) {
         return Err(unsupported(
             format!("the '{op}' operator is not supported"),
@@ -912,7 +916,7 @@ fn reference_segments(t: &str) -> Option<Vec<(String, bool)>> {
 
 // `name arg arg..` with at least one argument and a helper-name head.
 fn parse_transformer(t: &str, span: Span) -> Result<Expr, CompileError> {
-    let parts = split_whitespace(&scan_top_level(t));
+    let parts = split_whitespace(&np_expr::scan_top_level(t));
     match parts.split_first() {
         Some((name, args)) if !args.is_empty() && is_identifier(name) => {
             let args = args
@@ -932,7 +936,7 @@ fn parse_transformer(t: &str, span: Span) -> Result<Expr, CompileError> {
 // expressions or parenthesised sub-calls (no bare transformer), matching
 // `Stem.Expression.helper_argument_expression/1`.
 fn parse_transformer_arg(arg: &str, span: Span) -> Result<Arg, CompileError> {
-    if let Some((key, value)) = split_once(&scan_top_level(arg)) {
+    if let Some((key, value)) = split_once(&np_expr::scan_top_level(arg)) {
         let key = key.trim();
         if !key.is_empty() {
             if !is_identifier(key) {
@@ -989,7 +993,7 @@ fn parse_stage(stage: &str, span: Span) -> Result<Stage, CompileError> {
             span,
         ));
     }
-    let parts = split_whitespace(&scan_top_level(t));
+    let parts = split_whitespace(&np_expr::scan_top_level(t));
     match parts.split_first() {
         Some((name, args)) if is_identifier(name) => {
             let args = args
@@ -1011,6 +1015,7 @@ fn parse_stage(stage: &str, span: Span) -> Result<Stage, CompileError> {
 // strings are absorbed into `Text` so the `|>`, whitespace, `,`, `=`, and `:`
 // separators inside them never split an argument.
 
+#[derive(Debug, PartialEq)]
 enum Tok {
     Pipe,
     // A boolean operator (`||`, `&&`) reserved for future use. Lexed by maximal
@@ -1043,124 +1048,6 @@ fn reserved_op(tokens: &[Tok]) -> Option<&'static str> {
         Tok::Reserved(s) => Some(*s),
         _ => None,
     })
-}
-
-fn scan_top_level(s: &str) -> Vec<Tok> {
-    let chars: Vec<char> = s.chars().collect();
-    let mut out = Vec::new();
-    let mut text = String::new();
-    let mut k = 0;
-
-    while k < chars.len() {
-        let c = chars[k];
-        match c {
-            '"' | '\'' => consume_quoted(&chars, &mut k, &mut text),
-            '(' => consume_parens(&chars, &mut k, &mut text),
-            '[' => consume_bracket(&chars, &mut k, &mut text),
-            // Reserved boolean operators: maximal munch so `||` is never two
-            // pipe stages and `&&` never leaks through as text.
-            '|' if chars.get(k + 1) == Some(&'|') => {
-                flush(&mut text, &mut out);
-                out.push(Tok::Reserved("||"));
-                k += 2;
-            }
-            '&' if chars.get(k + 1) == Some(&'&') => {
-                flush(&mut text, &mut out);
-                out.push(Tok::Reserved("&&"));
-                k += 2;
-            }
-            // Pipe separator: `value | transformer arg`.
-            '|' => {
-                flush(&mut text, &mut out);
-                out.push(Tok::Pipe);
-                k += 1;
-            }
-            ',' => push_sep(Tok::Comma, &mut text, &mut out, &mut k),
-            '=' => push_sep(Tok::Eq, &mut text, &mut out, &mut k),
-            ':' => push_sep(Tok::Colon, &mut text, &mut out, &mut k),
-            ' ' | '\t' | '\n' | '\r' => push_sep(Tok::Ws(c), &mut text, &mut out, &mut k),
-            _ => {
-                text.push(c);
-                k += 1;
-            }
-        }
-    }
-    flush(&mut text, &mut out);
-    out
-}
-
-fn flush(text: &mut String, out: &mut Vec<Tok>) {
-    if !text.is_empty() {
-        out.push(Tok::Text(std::mem::take(text)));
-    }
-}
-
-fn push_sep(sep: Tok, text: &mut String, out: &mut Vec<Tok>, k: &mut usize) {
-    flush(text, out);
-    out.push(sep);
-    *k += 1;
-}
-
-fn consume_quoted(chars: &[char], k: &mut usize, text: &mut String) {
-    let quote = chars[*k];
-    text.push(quote);
-    *k += 1;
-    while *k < chars.len() {
-        let d = chars[*k];
-        text.push(d);
-        *k += 1;
-        if d == '\\' {
-            if *k < chars.len() {
-                text.push(chars[*k]);
-                *k += 1;
-            }
-        } else if d == quote {
-            break;
-        }
-    }
-}
-
-fn consume_parens(chars: &[char], k: &mut usize, text: &mut String) {
-    text.push('(');
-    *k += 1;
-    let mut depth = 1;
-    while *k < chars.len() && depth > 0 {
-        let d = chars[*k];
-        match d {
-            '(' => {
-                depth += 1;
-                text.push(d);
-                *k += 1;
-            }
-            ')' => {
-                depth -= 1;
-                text.push(d);
-                *k += 1;
-            }
-            '"' | '\'' => consume_quoted(chars, k, text),
-            '[' => consume_bracket(chars, k, text),
-            _ => {
-                text.push(d);
-                *k += 1;
-            }
-        }
-    }
-}
-
-// A bracketed literal key (`[my name]`) is atomic, like a quoted chunk: its
-// content runs to the first `]` with no nesting or escapes, so spaces, commas,
-// `=`, and `:` inside it are part of the key, not token separators.
-fn consume_bracket(chars: &[char], k: &mut usize, text: &mut String) {
-    text.push('[');
-    *k += 1;
-    while *k < chars.len() {
-        let d = chars[*k];
-        text.push(d);
-        *k += 1;
-        if d == ']' {
-            break;
-        }
-    }
 }
 
 fn split_pipes(tokens: &[Tok]) -> Vec<String> {
