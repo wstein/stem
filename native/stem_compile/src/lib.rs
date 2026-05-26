@@ -16,9 +16,10 @@
 //   * block helpers `{{#if}}` / `{{#unless}}` / `{{#each}}` / `{{#with}}` with
 //     `{{else}}` and `as |..|` block params;
 //   * `{{#region}}` definitions with `{{yield}}` inlining (recursion-guarded);
-//   * expressions: identifiers, dotted paths, `this`/`this.x`,
-//     `@index`/`@index1`/`@key`, and parent (`../name`) references, with the
-//     same local/`this`/assign scope resolution the BEAM uses;
+//   * expressions: identifiers, dotted paths (with numeric `[n]` list indices),
+//     the contextual references `@this`/`@parent`/`@root` (with paths), and the
+//     iteration variables `@index`/`@index1`/`@key`/`@first`/`@last`, with the
+//     same local/context/assign scope resolution the BEAM uses;
 //   * literal variable keys: bracketed segments (`[first-name]`, `[a.b]`) and
 //     uppercase block params (`as |Item|`), so keys/params that are not valid
 //     identifiers resolve by name, mirroring `Stem.Expression`;
@@ -797,18 +798,25 @@ fn named_params(params: &[String]) -> Vec<String> {
 
 enum Expr {
     Identifier(String),
-    // A dotted path. `Implicit` carries `[root, rest..]`; `This` carries the
-    // segments after `this.`.
+    // A dotted implicit path: `[root, rest..]`.
     PathImplicit(Vec<String>),
-    PathThis(Vec<String>),
+    // A contextual reference (`@this`/`@parent`/`@root`) plus an optional path.
+    Context(CtxKind, Vec<String>),
     Index0,
     Index1,
     Key,
-    This,
-    Parent(String),
+    First,
+    Last,
     Lit(Value),
     Transformer { name: String, args: Vec<Arg> },
     Pipeline { lhs: Box<Expr>, stages: Vec<Stage> },
+}
+
+#[derive(Clone, Copy)]
+enum CtxKind {
+    This,
+    Parent,
+    Root,
 }
 
 // A transformer/pipeline-stage argument: positional or `key=value`.
@@ -856,25 +864,60 @@ fn parse_structured(t: &str, span: Span) -> Result<Expr, CompileError> {
     if let Some(literal) = literal_kind(t) {
         return literal.into_expr(t, span);
     }
-    match t {
-        "@index" => Ok(Expr::Index0),
-        "@index1" => Ok(Expr::Index1),
-        "@key" => Ok(Expr::Key),
-        "this" | "." => Ok(Expr::This),
-        _ if t.starts_with("../") => parse_parent(t, span),
-        _ => match parse_reference(t) {
-            Some(expr) => Ok(expr),
-            None => parse_transformer(t, span),
-        },
+    if let Some(special) = iteration_special(t) {
+        return Ok(special);
+    }
+    match context_path(t) {
+        Some(Ok(expr)) => return Ok(expr),
+        Some(Err(())) => return Err(not_supported(t, span)),
+        None => {}
+    }
+    match parse_reference(t) {
+        Some(expr) => Ok(expr),
+        None => parse_transformer(t, span),
     }
 }
 
-fn parse_parent(t: &str, span: Span) -> Result<Expr, CompileError> {
-    let name = t.trim_start_matches("../");
-    if is_identifier(name) {
-        Ok(Expr::Parent(name.to_string()))
+// The iteration-only data variables; `None` otherwise. Their use outside an
+// `#each` is rejected during lowering, not parsing.
+fn iteration_special(t: &str) -> Option<Expr> {
+    match t {
+        "@index" => Some(Expr::Index0),
+        "@index1" => Some(Expr::Index1),
+        "@key" => Some(Expr::Key),
+        "@first" => Some(Expr::First),
+        "@last" => Some(Expr::Last),
+        _ => None,
+    }
+}
+
+// `@this`/`@parent`/`@root` plus an optional dotted path. `Some(Ok(..))` on a
+// context reference, `Some(Err(()))` when the context word is followed by a
+// malformed path, `None` when not a context reference at all.
+fn context_path(t: &str) -> Option<Result<Expr, ()>> {
+    let (kind, rest) = if let Some(rest) = t.strip_prefix("@this") {
+        (CtxKind::This, rest)
+    } else if let Some(rest) = t.strip_prefix("@parent") {
+        (CtxKind::Parent, rest)
+    } else if let Some(rest) = t.strip_prefix("@root") {
+        (CtxKind::Root, rest)
     } else {
-        Err(not_supported(t, span))
+        return None;
+    };
+
+    if rest.is_empty() {
+        return Some(Ok(Expr::Context(kind, Vec::new())));
+    }
+
+    // `@thisx` is not a context reference; a path must follow a dot.
+    let path = rest.strip_prefix('.')?;
+
+    match reference_segments(path) {
+        Some(segments) => Some(Ok(Expr::Context(
+            kind,
+            segments.into_iter().map(|(key, _)| key).collect(),
+        ))),
+        None => Some(Err(())),
     }
 }
 
@@ -884,16 +927,13 @@ fn parse_parent(t: &str, span: Span) -> Result<Expr, CompileError> {
 // identifier cannot carry. Returns `None` for anything that is not a clean
 // dotted reference, so the caller falls back to transformer parsing.
 fn parse_reference(t: &str) -> Option<Expr> {
-    let segments = reference_segments(t)?;
-    let (first_key, first_bracketed) = &segments[0];
-    let first_bare_this = !first_bracketed && first_key == "this";
-    let keys: Vec<String> = segments.iter().map(|(key, _)| key.clone()).collect();
+    let keys: Vec<String> = reference_segments(t)?
+        .into_iter()
+        .map(|(key, _)| key)
+        .collect();
 
     match keys.len() {
-        // Bare `this` alone is handled by the caller as `Expr::This`.
-        1 if first_bare_this => None,
         1 => Some(Expr::Identifier(keys.into_iter().next().unwrap())),
-        _ if first_bare_this => Some(Expr::PathThis(keys[1..].to_vec())),
         _ => Some(Expr::PathImplicit(keys)),
     }
 }
@@ -999,16 +1039,17 @@ fn parse_helper_value(t: &str, span: Span) -> Result<Expr, CompileError> {
     if let Some(literal) = literal_kind(t) {
         return literal.into_expr(t, span);
     }
-    match t {
-        "@index" => Ok(Expr::Index0),
-        "@index1" => Ok(Expr::Index1),
-        "@key" => Ok(Expr::Key),
-        "this" | "." => Ok(Expr::This),
-        _ if t.starts_with("../") => parse_parent(t, span),
-        _ => match parse_reference(t) {
-            Some(expr) => Ok(expr),
-            None => Err(not_supported(t, span)),
-        },
+    if let Some(special) = iteration_special(t) {
+        return Ok(special);
+    }
+    match context_path(t) {
+        Some(Ok(expr)) => return Ok(expr),
+        Some(Err(())) => return Err(not_supported(t, span)),
+        None => {}
+    }
+    match parse_reference(t) {
+        Some(expr) => Ok(expr),
+        None => Err(not_supported(t, span)),
     }
 }
 
@@ -1348,7 +1389,7 @@ fn is_number(t: &str) -> bool {
 #[derive(Clone)]
 struct Scope {
     in_each: bool,
-    has_this: bool,
+    has_parent: bool,
     locals: HashSet<String>,
 }
 
@@ -1356,7 +1397,7 @@ impl Scope {
     fn root() -> Self {
         Scope {
             in_each: false,
-            has_this: false,
+            has_parent: false,
             locals: HashSet::new(),
         }
     }
@@ -1364,7 +1405,7 @@ impl Scope {
     fn each_body(&self, params: &[String]) -> Self {
         Scope {
             in_each: true,
-            has_this: true,
+            has_parent: true,
             locals: self.with_locals(params),
         }
     }
@@ -1372,7 +1413,7 @@ impl Scope {
     fn with_body(&self, params: &[String]) -> Self {
         Scope {
             in_each: self.in_each,
-            has_this: true,
+            has_parent: true,
             locals: self.with_locals(params),
         }
     }
@@ -1380,7 +1421,7 @@ impl Scope {
     fn each_else(&self) -> Self {
         Scope {
             in_each: false,
-            has_this: self.has_this,
+            has_parent: self.has_parent,
             locals: self.locals.clone(),
         }
     }
@@ -1559,28 +1600,27 @@ fn lower_value(expr: &Expr, scope: &Scope, span: Span) -> Result<Value, CompileE
                 get(assign(root), rest)
             })
         }
-        Expr::PathThis(segments) => {
-            if scope.has_this {
-                Ok(get(this(), segments))
+        Expr::Context(CtxKind::This, segments) => Ok(get_chain(this(), segments)),
+        Expr::Context(CtxKind::Root, segments) => Ok(get_chain(root(), segments)),
+        Expr::Context(CtxKind::Parent, segments) => {
+            if scope.has_parent {
+                Ok(get_chain(parent(), segments))
             } else {
                 Err(unsupported(
-                    "`this` paths are only valid inside a block helper",
+                    "@parent is only available inside a block (#each / #with)",
                     span,
                 ))
             }
         }
         Expr::Index0 if scope.in_each => Ok(json!({ "t": "index" })),
-        Expr::Index0 => Ok(assign("index0")),
         Expr::Index1 if scope.in_each => Ok(json!({ "t": "index1" })),
-        Expr::Index1 => Ok(assign("index1")),
         Expr::Key if scope.in_each => Ok(json!({ "t": "key" })),
-        Expr::Key => Ok(assign("key")),
-        Expr::This if scope.has_this => Ok(this()),
-        Expr::This => Err(unsupported(
-            "`this` is only bound inside a block helper",
+        Expr::First if scope.in_each => Ok(json!({ "t": "first" })),
+        Expr::Last if scope.in_each => Ok(json!({ "t": "last" })),
+        Expr::Index0 | Expr::Index1 | Expr::Key | Expr::First | Expr::Last => Err(unsupported(
+            "@index/@index1/@key/@first/@last are only available inside an #each",
             span,
         )),
-        Expr::Parent(name) => Ok(assign(name)),
         Expr::Lit(value) => Ok(json!({ "t": "lit", "value": value })),
         Expr::Transformer { name, args } => lower_call(name, None, args, scope, span),
         Expr::Pipeline { lhs, stages } => {
@@ -1631,8 +1671,37 @@ fn this() -> Value {
     json!({ "t": "this" })
 }
 
+fn parent() -> Value {
+    json!({ "t": "parent" })
+}
+
+fn root() -> Value {
+    json!({ "t": "root" })
+}
+
+// A bare contextual reference is the context op itself; a path wraps it in a get.
+fn get_chain(base: Value, segments: &[String]) -> Value {
+    if segments.is_empty() {
+        base
+    } else {
+        get(base, segments)
+    }
+}
+
 fn get(base: Value, segments: &[String]) -> Value {
-    json!({ "t": "get", "base": base, "segments": segments })
+    json!({ "t": "get", "base": base, "segments": wire_segments(segments) })
+}
+
+// A numeric segment crosses the boundary as a number (list index); a named
+// segment as a string (map key), keeping the list-vs-map distinction.
+fn wire_segments(segments: &[String]) -> Vec<Value> {
+    segments
+        .iter()
+        .map(|segment| match segment.parse::<i64>() {
+            Ok(index) => json!(index),
+            Err(_) => json!(segment),
+        })
+        .collect()
 }
 
 // ── Small grammar helpers (mirror Stem.Expression's regexes) ─────────────────
@@ -1746,7 +1815,7 @@ mod tests {
     #[test]
     fn each_this_and_else() {
         assert_wire(
-            "{{#each items}}{{this}};{{/each}}",
+            "{{#each items}}{{@this}};{{/each}}",
             r#"{"version":"stem-bc/v1","instructions":[{"body":[{"escape":"html","t":"emit","value":{"t":"this"}},{"t":"text","text":";"}],"else":[],"params":[],"subject":{"name":"items","t":"assign"},"t":"each"}]}"#,
         );
         assert_wire(
@@ -1791,9 +1860,9 @@ mod tests {
     }
 
     #[test]
-    fn dot_is_an_alias_for_this() {
+    fn this_is_the_block_context() {
         assert_wire(
-            "Hello {{#with name}}{{.}}{{/with}}!",
+            "Hello {{#with name}}{{@this}}{{/with}}!",
             r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"Hello "},{"body":[{"escape":"html","t":"emit","value":{"t":"this"}}],"else":[],"params":[],"subject":{"name":"name","t":"assign"},"t":"with"},{"t":"text","text":"!"}]}"#,
         );
     }
@@ -1802,7 +1871,7 @@ mod tests {
     fn partials_expand_inline() {
         let mut partials = Partials::new();
         partials.insert("header".into(), "<h1>{{title}}</h1>".into());
-        partials.insert("row".into(), "<li>{{this.name}}</li>".into());
+        partials.insert("row".into(), "<li>{{@this.name}}</li>".into());
         let got = compile_to_wire(
             "{{> header}}<ul>{{#each items}}{{> row}}{{/each}}</ul>",
             &partials,
@@ -1843,7 +1912,7 @@ mod tests {
     fn partial_context_inside_each_uses_this() {
         let mut partials = Partials::new();
         partials.insert("card".into(), "{{name}}".into());
-        let got = compile_to_wire("{{#each users}}{{> card this}}{{/each}}", &partials)
+        let got = compile_to_wire("{{#each users}}{{> card @this}}{{/each}}", &partials)
             .expect("compiles");
         let want: Value = serde_json::from_str(
             r#"{"instructions":[{"body":[{"base":{"t":"this"},"body":[{"escape":"html","t":"emit","value":{"name":"name","t":"assign"}}],"hash":{},"t":"scope"}],"else":[],"params":[],"subject":{"name":"users","t":"assign"},"t":"each"}],"version":"stem-bc/v1"}"#,
@@ -1889,7 +1958,7 @@ mod tests {
     #[test]
     fn each_index1_and_this_path() {
         assert_wire(
-            "{{#each rows}}{{@index1}}. {{this.name}}{{/each}}",
+            "{{#each rows}}{{@index1}}. {{@this.name}}{{/each}}",
             r#"{"version":"stem-bc/v1","instructions":[{"body":[{"escape":"html","t":"emit","value":{"t":"index1"}},{"t":"text","text":". "},{"escape":"html","t":"emit","value":{"base":{"t":"this"},"segments":["name"],"t":"get"}}],"else":[],"params":[],"subject":{"name":"rows","t":"assign"},"t":"each"}]}"#,
         );
     }
@@ -1903,10 +1972,30 @@ mod tests {
     }
 
     #[test]
-    fn parent_reference_is_a_top_level_assign() {
+    fn parent_reference_gets_the_enclosing_context() {
         assert_wire(
-            "{{#each items}}{{../title}}: {{this}}{{/each}}",
-            r#"{"version":"stem-bc/v1","instructions":[{"body":[{"escape":"html","t":"emit","value":{"name":"title","t":"assign"}},{"t":"text","text":": "},{"escape":"html","t":"emit","value":{"t":"this"}}],"else":[],"params":[],"subject":{"name":"items","t":"assign"},"t":"each"}]}"#,
+            "{{#each items}}{{@parent.title}}: {{@this}}{{/each}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"body":[{"escape":"html","t":"emit","value":{"base":{"t":"parent"},"segments":["title"],"t":"get"}},{"t":"text","text":": "},{"escape":"html","t":"emit","value":{"t":"this"}}],"else":[],"params":[],"subject":{"name":"items","t":"assign"},"t":"each"}]}"#,
+        );
+    }
+
+    #[test]
+    fn this_and_root_resolve_to_gets_over_the_context() {
+        assert_wire(
+            "{{@this.name}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"base":{"t":"this"},"segments":["name"],"t":"get"}}]}"#,
+        );
+        assert_wire(
+            "{{@root.title}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"base":{"t":"root"},"segments":["title"],"t":"get"}}]}"#,
+        );
+    }
+
+    #[test]
+    fn numeric_segments_index_lists() {
+        assert_wire(
+            "{{items.[2]}}",
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"base":{"name":"items","t":"assign"},"segments":[2],"t":"get"}}]}"#,
         );
     }
 
@@ -1933,11 +2022,29 @@ mod tests {
     }
 
     #[test]
-    fn top_level_specials_resolve_to_assigns() {
-        assert_wire(
+    fn iteration_variables_outside_each_are_rejected() {
+        for source in [
             "{{@index}}",
-            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"name":"index0","t":"assign"}}]}"#,
-        );
+            "{{@index1}}",
+            "{{@key}}",
+            "{{@first}}",
+            "{{@last}}",
+        ] {
+            let err = wire(source).unwrap_err();
+            assert!(
+                err.message.contains("only available inside an #each"),
+                "for {source:?}: {}",
+                err.message
+            );
+        }
+    }
+
+    #[test]
+    fn parent_outside_a_block_is_rejected() {
+        let err = wire("{{@parent.x}}").unwrap_err();
+        assert!(err
+            .message
+            .contains("@parent is only available inside a block"));
     }
 
     #[test]

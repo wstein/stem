@@ -46,31 +46,32 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "{{{raw}}}",
     "{{{user.bio}}}",
     "prefix {{x}} mid {{y.z}} suffix",
-    "{{@index}} {{@index1}} {{@key}}",
-    "{{../name}}",
+    "{{#each rows}}{{@index}}/{{@index1}}/{{@key}}/{{@first}}/{{@last}} {{/each}}",
+    "{{@root.name}}",
+    "{{items.[2]}}",
     # Block helpers
     "{{#if active}}on{{else}}off{{/if}}",
     "{{#unless active}}off{{/unless}}",
-    "{{#each items}}{{this}};{{/each}}",
+    "{{#each items}}{{@this}};{{/each}}",
     "{{#each items}}x{{else}}none{{/each}}",
     "{{#each items as |item|}}{{item}} {{/each}}",
     "{{#each items as |item idx|}}{{idx}}:{{item}} {{/each}}",
     "{{#each rows as |row i0 i1|}}{{i0}}/{{i1}} {{/each}}",
-    "{{#each rows}}{{@index1}}. {{this.name}}{{/each}}",
-    "{{#with user}}{{this.name}}{{/with}}",
-    "Hello {{#with name}}{{.}}{{/with}}!",
-    "{{#each items}}{{.}};{{/each}}",
+    "{{#each rows}}{{@index1}}. {{@this.name}}{{/each}}",
+    "{{#with user}}{{@this.name}}{{/with}}",
+    "Hello {{#with name}}{{@this}}{{/with}}!",
+    "{{#each items}}{{@this}};{{/each}}",
     "{{#with user as |u|}}{{u.name}} <{{u.email}}>{{/with}}",
-    "<ul>{{#each items}}<li>{{@index1}}. {{this}}</li>{{/each}}</ul>",
-    "{{#each items}}{{../title}}: {{this}}{{/each}}",
-    "{{#each rows}}{{#if this.active}}[{{this.name}}]{{/if}}{{/each}}",
+    "<ul>{{#each items}}<li>{{@index1}}. {{@this}}</li>{{/each}}</ul>",
+    "{{#each items}}{{@parent.title}}: {{@this}}{{/each}}",
+    "{{#each rows}}{{#if @this.active}}[{{@this.name}}]{{/if}}{{/each}}",
     # Literal variable keys: bracket segments + uppercase block params
     "{{[first-name]}}",
     "{{user.[first-name]}}",
     "{{[a.b]}}",
     "{{#each people as |p _ I1|}}{{I1}}:{{p.[first-name]}} {{/each}}",
     "{{#each rows as |_ _ i1|}}{{i1}} {{/each}}",
-    "{{#each rows}}{{this.[full name]}}{{/each}}",
+    "{{#each rows}}{{@this.[full name]}}{{/each}}",
     "{{#with user as |u|}}{{u.[full name]}}{{/with}}",
     # Transformers and pipelines
     "{{name | upcase}}",
@@ -83,7 +84,7 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "{{default (upcase name) \"X\"}}",
     "{{link url text=label}}",
     "{{x | wrap tag=\"b\"}}",
-    "{{#each items}}{{this.name | upcase}}{{/each}}",
+    "{{#each items}}{{@this.name | upcase}}{{/each}}",
     "{{42}} {{-3}} {{true}} {{null}}",
     # Single-quoted strings lower to the same value as double-quoted ones.
     "{{'single'}}",
@@ -94,11 +95,11 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "a {{! c }} b",
     "{{!-- c --}}x",
     "a {{x ~}}   b",
-    "{{#each items}}{{this}}{{~/each}}",
+    "{{#each items}}{{@this}}{{~/each}}",
     # Regions and yields
     "{{#region head}}H{{/region}}before{{yield head}}after",
     "{{yield undefined}}",
-    "{{#region row}}{{this.name}}{{/region}}{{#each rows}}{{yield row}};{{/each}}",
+    "{{#region row}}{{@this.name}}{{/region}}{{#each rows}}{{yield row}};{{/each}}",
     # Not yet ported — should be reported as pending, not mismatched.
     # (A string with escape sequences still compiles on the BEAM, so it
     # exercises the pending bucket.)
@@ -110,11 +111,11 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
   @partial_cases [
     {"{{> greeting}}", %{"greeting" => "Hi {{name}}!"}},
     {"{{> header}}<ul>{{#each items}}{{> row}}{{/each}}</ul>",
-     %{"header" => "<h1>{{title}}</h1>", "row" => "<li>{{this.name}}</li>"}},
+     %{"header" => "<h1>{{title}}</h1>", "row" => "<li>{{@this.name}}</li>"}},
     {"{{> card user}}", %{"card" => "{{name}}"}},
     {~s({{> badge label="VIP"}}), %{"badge" => "[{{label}}]"}},
     {~s({{> card user role="admin"}}), %{"card" => "{{name}} ({{role}})"}},
-    {"{{#each users}}{{> card this}}{{/each}}", %{"card" => "[{{name}}]"}}
+    {"{{#each users}}{{> card @this}}{{/each}}", %{"card" => "[{{name}}]"}}
   ]
 
   # The reserved boolean operators `||`/`&&`. Both compilers must refuse these at

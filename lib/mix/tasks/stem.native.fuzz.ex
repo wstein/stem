@@ -133,7 +133,7 @@ defmodule Mix.Tasks.Stem.Native.Fuzz do
       11 -> "{{rows | map \"name\" | join \" \"}}"
       12 -> "{{contains words #{quoted(ascii(1..3))}}}"
       13 -> "{{#if flag}}#{literal()}{{else}}#{literal()}{{/if}}"
-      14 -> "{{#each items}}{{this | upcase}};{{/each}}"
+      14 -> "{{#each items}}{{@this | upcase}};{{/each}}"
       15 -> "{{#each rows as |r i0 i1|}}{{i0}}/{{i1}}:{{r.name}};{{/each}}"
       16 -> "{{#with obj as |o|}}{{o.k}}={{o.v}}{{/with}}"
       # Exercises float rendering across magnitudes (the `:short` format the

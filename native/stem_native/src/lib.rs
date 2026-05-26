@@ -105,12 +105,18 @@ enum Op {
     },
     Assigns,
     This,
+    Parent,
+    Root,
     Index,
     Index1,
     Key,
+    First,
+    Last,
     Get {
         base: Box<Op>,
-        segments: Vec<String>,
+        // Named segments are strings (map keys); numeric segments are numbers
+        // (list indices), so the list-vs-map distinction survives the wire.
+        segments: Vec<Value>,
     },
     Call {
         name: String,
@@ -160,8 +166,11 @@ struct Segment {
 struct Ctx {
     root: Value,
     this: Value,
+    parent: Value,
     index: i64,
     key: Value,
+    first: Value,
+    last: Value,
     in_each: bool,
     locals: HashMap<String, Value>,
     transform: TransformerResolver,
@@ -528,9 +537,14 @@ fn parse_partials(value: Option<&Value>) -> compile::Partials {
 fn root_ctx(data: &Value, host: &Host, groups: u8) -> Ctx {
     Ctx {
         root: data.clone(),
-        this: Value::Null,
+        // At the root the current context is the render assigns, so `@this`
+        // resolves there too; there is no enclosing context.
+        this: data.clone(),
+        parent: Value::Null,
         index: 0,
         key: Value::Null,
+        first: Value::Null,
+        last: Value::Null,
         in_each: false,
         locals: HashMap::new(),
         transform: host.transform,
@@ -877,8 +891,11 @@ fn exec(instr: &Instr, ctx: &Ctx, out: &mut String, segs: &mut Vec<Segment>) {
                 };
                 exec_all(otherwise, &else_ctx, out, segs);
             } else {
+                let last_index = entries.len() - 1;
                 for (index, (current, key)) in entries.into_iter().enumerate() {
-                    let inner = each_context(ctx, params, current, key, index as i64);
+                    let first = index == 0;
+                    let last = index == last_index;
+                    let inner = each_context(ctx, params, current, key, index as i64, first, last);
                     exec_all(body, &inner, out, segs);
                 }
             }
@@ -916,11 +933,16 @@ fn scope_context(ctx: &Ctx, base: &Op, hash: &HashMap<String, Op>) -> Ctx {
         scope.insert(key.clone(), eval(value_op, ctx));
     }
 
+    let scope = Value::Object(scope);
+
     Ctx {
-        root: Value::Object(scope),
-        this: Value::Null,
+        root: scope.clone(),
+        this: scope,
+        parent: Value::Null,
         index: 0,
         key: Value::Null,
+        first: Value::Null,
+        last: Value::Null,
         in_each: false,
         locals: HashMap::new(),
         transform: ctx.transform,
@@ -928,7 +950,15 @@ fn scope_context(ctx: &Ctx, base: &Op, hash: &HashMap<String, Op>) -> Ctx {
     }
 }
 
-fn each_context(ctx: &Ctx, params: &[String], current: Value, key: Value, index: i64) -> Ctx {
+fn each_context(
+    ctx: &Ctx,
+    params: &[String],
+    current: Value,
+    key: Value,
+    index: i64,
+    first: bool,
+    last: bool,
+) -> Ctx {
     let mut locals = ctx.locals.clone();
     match params {
         [] => {}
@@ -957,8 +987,11 @@ fn each_context(ctx: &Ctx, params: &[String], current: Value, key: Value, index:
     Ctx {
         root: ctx.root.clone(),
         this: current,
+        parent: ctx.this.clone(),
         index,
         key,
+        first: Value::from(first),
+        last: Value::from(last),
         in_each: true,
         locals,
         transform: ctx.transform,
@@ -974,6 +1007,7 @@ fn with_context(ctx: &Ctx, params: &[String], subject: Value) -> Ctx {
 
     Ctx {
         this: subject,
+        parent: ctx.this.clone(),
         locals,
         ..clone_ctx(ctx)
     }
@@ -983,8 +1017,11 @@ fn clone_ctx(ctx: &Ctx) -> Ctx {
     Ctx {
         root: ctx.root.clone(),
         this: ctx.this.clone(),
+        parent: ctx.parent.clone(),
         index: ctx.index,
         key: ctx.key.clone(),
+        first: ctx.first.clone(),
+        last: ctx.last.clone(),
         in_each: ctx.in_each,
         locals: ctx.locals.clone(),
         transform: ctx.transform,
@@ -999,9 +1036,13 @@ fn eval(op: &Op, ctx: &Ctx) -> Value {
         Op::Local { name } => ctx.locals.get(name).cloned().unwrap_or(Value::Null),
         Op::Assigns => ctx.root.clone(),
         Op::This => ctx.this.clone(),
+        Op::Parent => ctx.parent.clone(),
+        Op::Root => ctx.root.clone(),
         Op::Index => Value::from(ctx.index),
         Op::Index1 => Value::from(ctx.index + 1),
         Op::Key => ctx.key.clone(),
+        Op::First => ctx.first.clone(),
+        Op::Last => ctx.last.clone(),
         Op::Get { base, segments } => {
             let mut value = eval(base, ctx);
             for segment in segments {
@@ -1059,9 +1100,28 @@ fn eval(op: &Op, ctx: &Ctx) -> Value {
     }
 }
 
-fn get_field(value: &Value, segment: &str) -> Value {
-    match value {
-        Value::Object(map) => map.get(segment).cloned().unwrap_or(Value::Null),
+// Resolve one path segment, tolerantly: a string keys a map, a number indexes a
+// list (negative counts from the end, like the BEAM's `Enum.at/2`). Anything
+// else — a missing key, an out-of-range index, a scalar — yields null.
+fn get_field(value: &Value, segment: &Value) -> Value {
+    match (value, segment) {
+        (Value::Object(map), Value::String(key)) => map.get(key).cloned().unwrap_or(Value::Null),
+        (Value::Array(items), Value::Number(number)) => {
+            let Some(raw) = number.as_i64() else {
+                return Value::Null;
+            };
+            let index = if raw < 0 {
+                items.len() as i64 + raw
+            } else {
+                raw
+            };
+
+            usize::try_from(index)
+                .ok()
+                .and_then(|index| items.get(index))
+                .cloned()
+                .unwrap_or(Value::Null)
+        }
         _ => Value::Null,
     }
 }
@@ -1824,7 +1884,7 @@ mod scope_tests {
     #[test]
     fn context_argument_works_inside_each() {
         let out = render_template(
-            "{{#each users}}{{> card this}}{{/each}}",
+            "{{#each users}}{{> card @this}}{{/each}}",
             &[("card", "[{{name}}]")],
             json!({ "users": [{ "name": "A" }, { "name": "B" }] }),
         );
@@ -2567,7 +2627,7 @@ mod source_map_tests {
 
     #[test]
     fn block_output_is_attributed_through_recursion() {
-        let program = compile_mapped("{{#each xs}}{{this}}{{/each}}", &[]);
+        let program = compile_mapped("{{#each xs}}{{@this}}{{/each}}", &[]);
         let result = render_mapped_req(&program, json!({ "xs": ["a", "b", "c"] }));
         assert_eq!(result["output"], "abc");
         // Each iteration's emit records a global-offset segment tiling the output.
