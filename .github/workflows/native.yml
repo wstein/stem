@@ -67,3 +67,22 @@ jobs:
 
       - name: Browser glue renders correctly (no WASI)
         run: node native/web/validate.mjs
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Elixir/OTP
+        uses: erlef/setup-beam@v1
+        with:
+          elixir-version: "1.18"
+          otp-version: "27"
+
+      - name: Fetch deps
+        run: mix deps.get
+
+      # The hand-written docs/ AsciiDoc sources rot silently when APIs are
+      # renamed/removed; fail on known dead terms (see CLAUDE.md doc model).
+      - name: Docs drift — no dead terms in hand-written docs
+        run: mix stem.docs.drift
