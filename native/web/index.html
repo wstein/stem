@@ -1923,13 +1923,10 @@
         const onTransform = activeView === "data" && dataTab === "transform";
         const fileName = activeView !== "data" ? activeTab().name
           : onTransform ? "transform" : "data.yaml";
-        // The template editor's language is Stem (Handlebars-inspired, but not
-        // Handlebars). Escape mode is shown in the Output toolbar, not here.
-        const lang = activeView !== "data" ? "Stem"
-          : onTransform ? "JSONata" : "YAML";
+        // Just the caret location — the language is implied by the active tab and
+        // the encoding is always UTF-8, so both were noise.
         byId("status-meta").innerHTML =
-          `<b>${escapeHtml(fileName)} · Ln ${line.number}, Col ${col}</b>` +
-          `  ·  ${lang}  ·  UTF-8`;
+          `<b>${escapeHtml(fileName)} · Ln ${line.number}, Col ${col}</b>`;
       }
 
       // ── Output view ───────────────────────────────────────────────────
