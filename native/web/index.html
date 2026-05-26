@@ -139,6 +139,34 @@
       }
       button.btn .kbd-inline { color: var(--fg-faint); margin-left: 6px; font: 11px/1 var(--font-mono); }
 
+      /* Custom example dropdown — always opens downward (top: 100%). */
+      .dropdown { position: relative; }
+      .dropdown-trigger {
+        height: 26px; min-width: 210px; padding: 0 8px;
+        display: inline-flex; align-items: center; justify-content: space-between; gap: 8px;
+        border: 1px solid var(--border-strong); border-radius: var(--radius);
+        background: var(--bg); color: var(--fg); font-size: 12px; cursor: pointer;
+        transition: background 80ms ease, border-color 80ms ease;
+      }
+      .dropdown-trigger:hover { background: var(--bg-2); }
+      .dropdown-trigger:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+      .dropdown-trigger #example-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .dropdown-caret { width: 11px; height: 11px; flex: 0 0 auto; opacity: .6; }
+      .dropdown[data-open="true"] .dropdown-caret { transform: rotate(180deg); }
+      .dropdown-menu {
+        position: absolute; top: calc(100% + 4px); left: 0; z-index: 60;
+        min-width: 100%; max-height: 60vh; overflow-y: auto;
+        margin: 0; padding: 4px; list-style: none;
+        background: var(--bg-pane); border: 1px solid var(--border); border-radius: 6px;
+        box-shadow: 0 10px 30px rgba(0,0,0,.18);
+      }
+      .dropdown-menu[hidden] { display: none; }
+      .dropdown-item {
+        padding: 5px 10px; border-radius: 4px; cursor: pointer; white-space: nowrap;
+        font: 12px var(--font-ui); color: var(--fg-secondary);
+      }
+      .dropdown-item:hover, .dropdown-item.active { background: var(--accent-soft); color: var(--accent-2); }
+
       .spacer { flex: 1 1 auto; }
       .hint { font-size: 12px; color: var(--fg-muted); display: flex; align-items: center; gap: 6px; }
 
@@ -737,7 +765,17 @@
         <div class="divider"></div>
         <div class="topbar-group">
           <span class="field-label">Example</span>
-          <select id="example-select" class="select" aria-label="Load example"></select>
+          <!-- Custom dropdown (not a native <select>) so the menu always opens
+               downward — a native select centres its popup on the selection and
+               can overflow above the control. -->
+          <div id="example-select" class="dropdown">
+            <button id="example-trigger" class="select dropdown-trigger" type="button"
+                    aria-haspopup="listbox" aria-expanded="false" aria-label="Load example">
+              <span id="example-label">(custom)</span>
+              <svg class="dropdown-caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <ul id="example-menu" class="dropdown-menu" role="listbox" hidden></ul>
+          </div>
         </div>
         <div class="topbar-group">
           <button id="share-btn" class="btn" title="Copy a link that restores this template and data">Copy link</button>
@@ -2105,16 +2143,47 @@
       function toggleFocus(mode) { setFocus(focusMode === mode ? null : mode); }
 
       // ── Examples ──────────────────────────────────────────────────────
+      // The example picker is a custom dropdown (see the markup note): build the
+      // menu items, wire the trigger to open it downward, and close on
+      // click-outside / Escape.
       function buildExampleSelect() {
-        const sel = byId("example-select");
-        const custom = document.createElement("option");
-        custom.value = "-1"; custom.textContent = "(custom)";
-        sel.append(custom);
+        const menu = byId("example-menu");
+        menu.innerHTML = "";
         examples.forEach((ex, i) => {
-          const opt = document.createElement("option");
-          opt.value = String(i); opt.textContent = ex.label;
-          sel.append(opt);
+          const li = document.createElement("li");
+          li.className = "dropdown-item";
+          li.setAttribute("role", "option");
+          li.dataset.idx = String(i);
+          li.textContent = ex.label;
+          li.addEventListener("click", () => { closeExampleMenu(); loadExample(i); });
+          menu.append(li);
         });
+
+        const trigger = byId("example-trigger");
+        trigger.addEventListener("click", () => {
+          byId("example-menu").hidden ? openExampleMenu() : closeExampleMenu();
+        });
+      }
+
+      function openExampleMenu() {
+        const menu = byId("example-menu");
+        // Mark the loaded example active.
+        menu.querySelectorAll(".dropdown-item").forEach((li) => {
+          li.classList.toggle("active", Number(li.dataset.idx) === loadedExampleIdx);
+        });
+        menu.hidden = false;
+        byId("example-select").dataset.open = "true";
+        byId("example-trigger").setAttribute("aria-expanded", "true");
+      }
+
+      function closeExampleMenu() {
+        byId("example-menu").hidden = true;
+        byId("example-select").dataset.open = "false";
+        byId("example-trigger").setAttribute("aria-expanded", "false");
+      }
+
+      function setExampleLabel(text) {
+        byId("example-label").textContent = text;
       }
 
       async function loadExample(idx) {
@@ -2140,8 +2209,7 @@
         byId("escape-select").value = "";
         groups = [...(ex.groups ?? [])]; // activate only what the example needs
         syncCapsUI();
-        byId("example-select").options[0].textContent = "(custom)";
-        byId("example-select").value = String(idx);
+        setExampleLabel(ex.label);
         loadedExampleIdx = idx;
         exampleModified = false;
         tabs.forEach(t => { t.dirty = false; });
@@ -2164,9 +2232,9 @@
         const prevIdx = loadedExampleIdx;
         exampleModified = true;
         loadedExampleIdx = -1;
-        const sel = byId("example-select");
-        sel.options[0].textContent = examples[prevIdx].label;
-        sel.value = "-1";
+        // The dropdown keeps showing the example name; the URL state flips to
+        // custom (-1) so a share link records the edits, not the pristine example.
+        setExampleLabel(examples[prevIdx].label);
       }
 
       // ── URL state ─────────────────────────────────────────────────────
@@ -2228,7 +2296,7 @@
             : [...DEFAULT_GROUPS];
           syncCapsUI();
           loadedExampleIdx = -1;
-          byId("example-select").value = "-1";
+          setExampleLabel("(custom)");
           setOutputView(validView(s.v));
           showActiveTab(); run();
           return true;
@@ -2600,9 +2668,14 @@
       byId("tweaks-btn").addEventListener("click", showTweaks);
       byId("deps-btn").addEventListener("click", showDeps);
 
-      byId("example-select").addEventListener("change", (e) => {
-        const v = Number(e.target.value);
-        if (v >= 0) loadExample(v);
+      // Close the example dropdown on an outside click or Escape.
+      document.addEventListener("pointerdown", (e) => {
+        if (!byId("example-menu").hidden && !byId("example-select").contains(e.target)) {
+          closeExampleMenu();
+        }
+      });
+      window.addEventListener("keydown", (e) => {
+        if (e.key === "Escape" && !byId("example-menu").hidden) closeExampleMenu();
       });
 
       byId("escape-select").addEventListener("change", (e) => {
