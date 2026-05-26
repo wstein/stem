@@ -15,8 +15,10 @@ here="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
 cargo build --release --target wasm32-unknown-unknown --lib \
   --manifest-path "$here/../stem_native/Cargo.toml"
 
+# stem_native is a member of the `native/` cargo workspace, so build artifacts
+# land in the workspace target dir (`native/target/`), not a per-crate one.
 wasm-bindgen --target web --no-typescript \
   --out-dir "$here/wasm" \
-  "$here/../stem_native/target/wasm32-unknown-unknown/release/stem_native.wasm"
+  "$here/../target/wasm32-unknown-unknown/release/stem_native.wasm"
 
 echo "wrote $here/wasm/{stem_native.js, stem_native_bg.wasm}"

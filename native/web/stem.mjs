@@ -10,7 +10,11 @@
 // `compile(source, partials)` (template text -> bytecode, fully backend-free)
 // and `render(program, data)`.
 
-import init, { compile as wasmCompile, render as wasmRender } from "./wasm/stem_native.js";
+import init, {
+  compile as wasmCompile,
+  render as wasmRender,
+  parse_ast as wasmParseAst,
+} from "./wasm/stem_native.js";
 
 // The capability groups the playground loads. The playground author is trusted,
 // so it enables every group with a native byte-parity implementation (i18n is
@@ -48,5 +52,18 @@ export async function createRenderer(wasmInput) {
     return wasmRender(program, data, transformers, map);
   }
 
-  return { render, compile };
+  // Parse one template's source to its pre-expansion AST (`stem-ast/v1`),
+  // `{ version, nodes }`. Unlike `compile`, `{{> name}}` tags stay as `partial`
+  // nodes (the dependency-graph edges) and every node carries its byte `src`
+  // span. Returns `{ ast }` on success or `{ error: { message, start, end } }`
+  // on a parse error. No partials map: each file is parsed on its own.
+  function parseAst(source) {
+    try {
+      return { ast: wasmParseAst(source) };
+    } catch (error) {
+      return { error };
+    }
+  }
+
+  return { render, compile, parseAst };
 }

@@ -31,8 +31,11 @@ the host, escaping done natively.
   factored into its own crate so the macros can use it without the renderer.
 - `stem_native/` — the engine crate. `src/lib.rs` is the renderer: the typed
   Rust API ([`compile`/`Program::render`](#idiomatic-rust-api)), the JSON
-  `handle*` Elixir seam, and the wasm-bindgen `compile`/`render` browser exports;
-  `src/main.rs` is a thin WASI bin reading stdin / writing stdout.
+  `handle*` Elixir seam, and the wasm-bindgen `compile`/`render`/`parse_ast`
+  browser exports; `src/main.rs` is a thin WASI bin reading stdin / writing
+  stdout. `parse_ast` returns a template's pre-expansion AST (`stem-ast/v1`) with
+  `{{> name}}` kept as `partial` nodes and a byte `src` span on every node, for
+  the playground's dependency-graph and AST views.
 - `stem_macros/` — the `stem!` compile-time macro: compiles a template literal to
   bytecode at Rust build time (syntax errors become compile errors).
 - `stem_examples/` — runnable embedder examples written against the typed API.

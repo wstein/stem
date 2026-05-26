@@ -461,6 +461,20 @@ mod wasm {
         }
     }
 
+    /// Parses one template's `source` to its pre-expansion AST (`stem-ast/v1`),
+    /// returned as a JS object `{ version, nodes }`. `{{> name}}` tags stay as
+    /// `partial` nodes (the dependency-graph edges) and every node carries its
+    /// byte `src` span. Throws `{message, start, end}` on a parse error.
+    #[wasm_bindgen]
+    pub fn parse_ast(source: &str) -> Result<JsValue, JsValue> {
+        match crate::compile::parse_ast_to_wire(source) {
+            Ok(ast) => to_js(&ast),
+            Err(err) => Err(to_js(&serde_json::json!({
+                "message": err.message, "start": err.start, "end": err.end,
+            }))?),
+        }
+    }
+
     /// Renders a wire `program` against `data` with the named capability
     /// `groups`. With `map`, returns `{ output, segments }` (the source map);
     /// otherwise the output string. A refusal surfaces as a `stem_native error:`

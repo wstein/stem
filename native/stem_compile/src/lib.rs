@@ -43,6 +43,12 @@ use std::collections::{HashMap, HashSet};
 
 const VERSION: &str = "stem-bc/v1";
 
+// The pre-expansion AST wire shape emitted by `parse_ast_to_wire` (distinct from
+// the lowered `stem-bc/v1` bytecode). It keeps source structure — `{{> name}}`
+// stays a `partial` node, every node carries its byte `src` span — so the
+// playground can draw the partial dependency graph and the per-file AST viewer.
+const AST_VERSION: &str = "stem-ast/v1";
+
 // A partial-source map (name -> template source), mirroring the `:partials`
 // option on `Stem.Parser`. Partials are expanded inline at parse time.
 pub type Partials = HashMap<String, String>;
@@ -52,6 +58,10 @@ pub type Partials = HashMap<String, String>;
 struct Asm<'a> {
     partials: &'a Partials,
     stack: Vec<String>,
+    // When false (the `parse_ast` path), `{{> name}}` tags are kept as `Partial`
+    // nodes instead of being expanded inline, so a single file's pre-expansion
+    // structure (and its partial dependency edges) stays visible.
+    expand: bool,
 }
 
 // A parse/compile failure carrying a byte span into the source, so the editor
@@ -85,6 +95,23 @@ pub fn compile_to_wire_string(source: &str) -> Result<String, CompileError> {
     Ok(serde_json::to_string(&wire).expect("wire program serializes"))
 }
 
+/// Parses one template's source to its pre-expansion AST (`stem-ast/v1`),
+/// `{"version", "nodes"}`. Unlike `compile_to_wire`, `{{> name}}` tags are kept
+/// as `partial` nodes rather than inlined, so a file's own structure and its
+/// partial dependency edges stay visible; every node carries its byte `src`
+/// span for bidirectional editor highlighting. Mirrors `Stem.parse_ast/1`.
+pub fn parse_ast_to_wire(source: &str) -> Result<Value, CompileError> {
+    let tokens = tokenize(source)?;
+    let empty = Partials::new();
+    let mut asm = Asm {
+        partials: &empty,
+        stack: Vec::new(),
+        expand: false,
+    };
+    let nodes = assemble(tokens, &mut asm)?;
+    Ok(json!({ "version": AST_VERSION, "nodes": ast_nodes_to_json(&nodes) }))
+}
+
 // Same as `compile_to_wire`, but annotates each `text`/`emit` instruction with
 // a `src` provenance object (`{file, start, end}`) so a render-time segment map
 // can attribute output back to the originating template/partial. This produces a
@@ -106,6 +133,7 @@ fn compile_inner(
     let mut asm = Asm {
         partials,
         stack: Vec::new(),
+        expand: true,
     };
     let nodes = assemble(tokens, &mut asm)?;
     let instructions = lower_nodes(&nodes, &Scope::root(), &Regions::new(), &[], with_spans)?;
@@ -499,6 +527,14 @@ enum Node {
         body: Vec<Node>,
         span: Span,
     },
+    // An unexpanded `{{> name args}}` reference, produced only on the
+    // `parse_ast` path (`Asm::expand == false`). Never reaches lowering.
+    Partial {
+        name: String,
+        context: Option<Expr>,
+        hash: Vec<(String, Expr)>,
+        span: Span,
+    },
 }
 
 fn assemble(tokens: Vec<Token>, asm: &mut Asm) -> Result<Vec<Node>, CompileError> {
@@ -554,7 +590,17 @@ fn collect(
             }
             Some(Token::Yield { name, span }) => nodes.push(Node::Yield { name, span }),
             Some(Token::Partial { name, args, span }) => {
-                expand_partial(&name, &args, span, asm, &mut nodes)?
+                if asm.expand {
+                    expand_partial(&name, &args, span, asm, &mut nodes)?
+                } else {
+                    let (context, hash) = parse_partial_args(&args, span)?;
+                    nodes.push(Node::Partial {
+                        name: name.trim().to_string(),
+                        context,
+                        hash,
+                        span,
+                    });
+                }
             }
         }
     }
@@ -1595,6 +1641,12 @@ fn lower_node<'a>(
                 "body": lower_nodes(body, &Scope::root(), regions, stack, with_spans)?,
             }))
         }
+        // `Partial` nodes exist only on the `parse_ast` path; compilation always
+        // expands partials inline, so one reaching lowering is a bug.
+        Node::Partial { span, .. } => Err(unsupported(
+            "internal error: unexpanded partial reached lowering",
+            *span,
+        )),
     }
 }
 
@@ -1720,6 +1772,171 @@ fn wire_segments(segments: &[String]) -> Vec<Value> {
             Err(_) => json!(segment),
         })
         .collect()
+}
+
+// ── Pre-expansion AST serialization (`stem-ast/v1`) ──────────────────────────
+//
+// A syntactic rendering of the assembled `Node`/`Expr` tree, distinct from the
+// scope-aware bytecode lowering above. It preserves source structure (partials
+// stay references; expressions keep their written form) and tags every node
+// with its byte `src` span, so the playground can map AST nodes back to the
+// editor and build the partial dependency graph. Mirrored by `Stem.AST.to_wire/1`.
+
+fn ast_nodes_to_json(nodes: &[Node]) -> Vec<Value> {
+    nodes.iter().map(ast_node_to_json).collect()
+}
+
+fn src(span: Span) -> Value {
+    json!({ "start": span.0, "end": span.1 })
+}
+
+fn ast_node_to_json(node: &Node) -> Value {
+    match node {
+        Node::Text { text, span, .. } => {
+            json!({ "t": "text", "text": text, "src": src(*span) })
+        }
+        Node::Emit {
+            expr, escape, span, ..
+        } => json!({
+            "t": "emit",
+            "expr": expr_to_ast_json(expr),
+            "escape": escape,
+            "src": src(*span),
+        }),
+        Node::If {
+            cond,
+            then,
+            otherwise,
+            span,
+        } => json!({
+            "t": "if",
+            "cond": expr_to_ast_json(cond),
+            "then": ast_nodes_to_json(then),
+            "else": ast_nodes_to_json(otherwise),
+            "src": src(*span),
+        }),
+        Node::Each {
+            subject,
+            params,
+            body,
+            otherwise,
+            span,
+        } => json!({
+            "t": "each",
+            "subject": expr_to_ast_json(subject),
+            "params": params,
+            "body": ast_nodes_to_json(body),
+            "else": ast_nodes_to_json(otherwise),
+            "src": src(*span),
+        }),
+        Node::With {
+            subject,
+            params,
+            body,
+            otherwise,
+            span,
+        } => json!({
+            "t": "with",
+            "subject": expr_to_ast_json(subject),
+            "params": params,
+            "body": ast_nodes_to_json(body),
+            "else": ast_nodes_to_json(otherwise),
+            "src": src(*span),
+        }),
+        Node::Region { name, body } => json!({
+            "t": "region",
+            "name": name,
+            "body": ast_nodes_to_json(body),
+        }),
+        Node::Yield { name, span } => json!({
+            "t": "yield",
+            "name": name,
+            "src": src(*span),
+        }),
+        Node::PartialScope {
+            context,
+            hash,
+            body,
+            span,
+        } => json!({
+            "t": "partial_scope",
+            "context": context.as_ref().map(expr_to_ast_json),
+            "hash": hash_to_ast_json(hash),
+            "body": ast_nodes_to_json(body),
+            "src": src(*span),
+        }),
+        Node::Partial {
+            name,
+            context,
+            hash,
+            span,
+        } => json!({
+            "t": "partial",
+            "name": name,
+            "context": context.as_ref().map(expr_to_ast_json),
+            "hash": hash_to_ast_json(hash),
+            "src": src(*span),
+        }),
+    }
+}
+
+fn hash_to_ast_json(hash: &[(String, Expr)]) -> Value {
+    let mut map = serde_json::Map::new();
+    for (key, value) in hash {
+        map.insert(key.clone(), expr_to_ast_json(value));
+    }
+    Value::Object(map)
+}
+
+fn ctx_kind_str(kind: CtxKind) -> &'static str {
+    match kind {
+        CtxKind::This => "this",
+        CtxKind::Parent => "parent",
+        CtxKind::Root => "root",
+    }
+}
+
+fn expr_to_ast_json(expr: &Expr) -> Value {
+    match expr {
+        Expr::Identifier(name) => json!({ "t": "identifier", "name": name }),
+        Expr::PathImplicit(segments) => json!({ "t": "path", "segments": segments }),
+        Expr::Context(kind, path) => json!({
+            "t": "context",
+            "kind": ctx_kind_str(*kind),
+            "path": path,
+        }),
+        Expr::Index0 => json!({ "t": "index" }),
+        Expr::Index1 => json!({ "t": "index1" }),
+        Expr::Key => json!({ "t": "key" }),
+        Expr::First => json!({ "t": "first" }),
+        Expr::Last => json!({ "t": "last" }),
+        Expr::Lit(value) => json!({ "t": "lit", "value": value }),
+        Expr::Transformer { name, args } => json!({
+            "t": "call",
+            "name": name,
+            "args": args.iter().map(arg_to_ast_json).collect::<Vec<_>>(),
+        }),
+        Expr::Pipeline { lhs, stages } => json!({
+            "t": "pipeline",
+            "lhs": expr_to_ast_json(lhs),
+            "stages": stages
+                .iter()
+                .map(|stage| json!({
+                    "name": stage.name,
+                    "args": stage.args.iter().map(arg_to_ast_json).collect::<Vec<_>>(),
+                }))
+                .collect::<Vec<_>>(),
+        }),
+    }
+}
+
+fn arg_to_ast_json(arg: &Arg) -> Value {
+    match arg {
+        Arg::Positional(expr) => json!({ "kind": "positional", "value": expr_to_ast_json(expr) }),
+        Arg::Keyword(key, expr) => {
+            json!({ "kind": "keyword", "key": key, "value": expr_to_ast_json(expr) })
+        }
+    }
 }
 
 // ── Small grammar helpers (mirror Stem.Expression's regexes) ─────────────────
@@ -2284,6 +2501,84 @@ mod tests {
         assert_wire(
             "{{{{#mycodeblock}}}}raw content{{{{/mycodeblock}}}}",
             r#"{"version":"stem-bc/v1","instructions":[{"t":"text","text":"raw content"}]}"#,
+        );
+    }
+
+    // ── parse_ast (pre-expansion AST) ────────────────────────────────────────
+
+    fn ast(source: &str) -> Value {
+        parse_ast_to_wire(source).expect("should parse")
+    }
+
+    fn ast_nodes(source: &str) -> Value {
+        ast(source)["nodes"].clone()
+    }
+
+    #[test]
+    fn ast_keeps_partials_unexpanded() {
+        // A partial reference stays a `partial` node (no inlining), even when no
+        // partial map is supplied — this is what powers the dependency graph.
+        assert_eq!(
+            ast_nodes("a {{> header}} b"),
+            json!([
+                { "t": "text", "text": "a ", "src": { "start": 0, "end": 2 } },
+                { "t": "partial", "name": "header", "context": null, "hash": {},
+                  "src": { "start": 2, "end": 14 } },
+                { "t": "text", "text": " b", "src": { "start": 14, "end": 16 } },
+            ])
+        );
+    }
+
+    #[test]
+    fn ast_partial_args_carry_context_and_hash() {
+        assert_eq!(
+            ast_nodes(r#"{{> card user role="admin"}}"#),
+            json!([{
+                "t": "partial",
+                "name": "card",
+                "context": { "t": "identifier", "name": "user" },
+                "hash": { "role": { "t": "lit", "value": "admin" } },
+                "src": { "start": 0, "end": 28 },
+            }])
+        );
+    }
+
+    #[test]
+    fn ast_version_and_expr_shapes() {
+        assert_eq!(ast("x")["version"], json!("stem-ast/v1"));
+        // Expressions keep their written syntactic form, not the scope-aware op.
+        assert_eq!(
+            ast_nodes("{{user.name | upcase}}"),
+            json!([{
+                "t": "emit",
+                "escape": "html",
+                "expr": {
+                    "t": "pipeline",
+                    "lhs": { "t": "path", "segments": ["user", "name"] },
+                    "stages": [{ "name": "upcase", "args": [] }],
+                },
+                "src": { "start": 0, "end": 22 },
+            }])
+        );
+    }
+
+    #[test]
+    fn ast_blocks_and_context_refs() {
+        assert_eq!(
+            ast_nodes("{{#each items}}{{@this.name}}{{/each}}"),
+            json!([{
+                "t": "each",
+                "subject": { "t": "identifier", "name": "items" },
+                "params": [],
+                "body": [{
+                    "t": "emit",
+                    "escape": "html",
+                    "expr": { "t": "context", "kind": "this", "path": ["name"] },
+                    "src": { "start": 15, "end": 29 },
+                }],
+                "else": [],
+                "src": { "start": 0, "end": 15 },
+            }])
         );
     }
 }
