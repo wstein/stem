@@ -876,6 +876,29 @@
       </footer>
     </div>
 
+    <!-- Apply the stored split ratios synchronously, before first paint, so the
+         layout doesn't flash the CSS default and then snap when the deferred
+         module's applySplits() runs. Uses flex-basis percentages (no measuring);
+         the module later refines them to exact pixels, imperceptibly. -->
+    <script>
+      (function () {
+        try {
+          var splits = JSON.parse(localStorage.getItem("stem-playground:splits.v3") || "{}");
+          var tweaks = JSON.parse(localStorage.getItem("stem-playground:tweaks") || "{}");
+          var stacked = tweaks.layout === "stacked";
+          var panes = document.querySelectorAll(".workspace > .pane");
+          var w = splits[stacked ? "h0" : "w0"];
+          if (panes[0] && typeof w === "number") {
+            panes[0].style.flex = "0 0 " + w * 100 + "%";
+            if (panes[1]) panes[1].style.flex = "1 1 0";
+          }
+          var e = splits[stacked ? "ew" : "eh"];
+          var tpl = document.getElementById("template-editor-container");
+          if (tpl && typeof e === "number") tpl.style.flex = "0 0 " + e * 100 + "%";
+        } catch (e) {}
+      })();
+    </script>
+
     <script type="module">
       import { createRenderer } from "./stem.mjs";
       import {
