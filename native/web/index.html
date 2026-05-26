@@ -117,9 +117,8 @@
       .brand .brand-name { font-weight: 400; color: var(--fg-secondary); }
       .brand .brand-name b { font-weight: 700; color: var(--fg); }
       .brand .brand-ver {
-        font: 500 10px/1 var(--font-mono); letter-spacing: .02em;
-        color: var(--accent-2); background: var(--accent-soft);
-        padding: 2px 5px; border-radius: 4px;
+        font: 400 11px/1 var(--font-mono); letter-spacing: .02em;
+        color: var(--fg-faint); align-self: center;
       }
       .brand .brand-ver:empty { display: none; }
       .topbar .divider { width: 1px; height: 18px; background: var(--border); }
@@ -688,7 +687,16 @@
         background: var(--bg-pane); color: var(--fg); font: 12px var(--font-mono);
       }
       .search-bar input[type="text"]:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
-      .search-case { font: 11px var(--font-mono); color: var(--fg-muted); display: inline-flex; align-items: center; gap: 4px; cursor: pointer; white-space: nowrap; }
+      .search-opts { flex: 0 0 auto; display: inline-flex; gap: 2px; }
+      .search-opt {
+        font: 11px var(--font-mono); color: var(--fg-muted); cursor: pointer;
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 24px; height: 24px; padding: 0 5px; border-radius: 4px;
+        border: 1px solid transparent; white-space: nowrap; user-select: none;
+      }
+      .search-opt:hover { background: var(--bg-2); }
+      .search-opt input { display: none; }
+      .search-opt:has(input:checked) { color: var(--accent-2); background: var(--accent-soft); border-color: var(--accent-soft); }
       .search-results { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 4px 0; }
       .search-file { padding: 6px 10px 2px; font: 600 11px var(--font-mono); color: var(--tok-key); position: sticky; top: 0; background: var(--bg); }
       .search-file .n { color: var(--fg-faint); font-weight: 400; margin-left: 6px; }
@@ -2785,17 +2793,33 @@
         return out;
       }
 
+      // Build the match regex from the query and options. Plain queries are
+      // escaped to a literal; `regex` uses the query verbatim; `wholeWord` wraps
+      // it in word boundaries. Returns null on an invalid regex pattern.
+      function buildSearchMatcher(query, { caseSensitive, regex, wholeWord }) {
+        let pattern = regex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        if (wholeWord) pattern = `\\b(?:${pattern})\\b`;
+        try {
+          return new RegExp(pattern, "g" + (caseSensitive ? "" : "i"));
+        } catch {
+          return null;
+        }
+      }
+
       // Every occurrence of `query` across all sources, grouped by file, each hit
-      // carrying its line/column and the full line for a preview.
-      function searchAll(query, caseSensitive) {
-        if (!query) return [];
-        const needle = caseSensitive ? query : query.toLowerCase();
+      // carrying its line/column, matched length, and the full line for a preview.
+      // Returns `{ groups, error }` (error = invalid regex pattern).
+      function searchAll(query, opts) {
+        if (!query) return { groups: [], error: false };
+        const re = buildSearchMatcher(query, opts);
+        if (!re) return { groups: [], error: true };
         const groups = [];
         for (const f of searchSources()) {
-          const hay = caseSensitive ? f.source : f.source.toLowerCase();
           const hits = [];
-          let from = 0, idx;
-          while ((idx = hay.indexOf(needle, from)) !== -1) {
+          re.lastIndex = 0;
+          let m;
+          while ((m = re.exec(f.source)) !== null) {
+            const idx = m.index;
             const lineStart = f.source.lastIndexOf("\n", idx - 1) + 1;
             const nl = f.source.indexOf("\n", idx);
             const lineEnd = nl === -1 ? f.source.length : nl;
@@ -2804,17 +2828,19 @@
               col: idx - lineStart + 1,
               lineText: f.source.slice(lineStart, lineEnd),
               matchInLine: idx - lineStart,
+              matchLen: m[0].length,
             });
-            from = idx + needle.length;
+            if (m[0].length === 0) re.lastIndex++; // avoid looping on zero-width matches
             if (hits.length >= 999) break; // guard against pathological inputs
           }
           if (hits.length) groups.push({ file: f.file, kind: f.kind, hits });
         }
-        return groups;
+        return { groups, error: false };
       }
 
       function renderSearchResults(panel, query) {
-        const caseSensitive = panel.querySelector(".search-case input").checked;
+        const opt = (name) => panel.querySelector(`.search-opt[data-opt="${name}"] input`).checked;
+        const opts = { caseSensitive: opt("case"), regex: opt("regex"), wholeWord: opt("word") };
         const results = panel.querySelector(".search-results");
         const count = panel.querySelector(".search-count");
         results.innerHTML = "";
@@ -2823,7 +2849,12 @@
           results.append(makeEl("div", { class: "search-empty" }, "Type to search all files."));
           return;
         }
-        const groups = searchAll(query, caseSensitive);
+        const { groups, error } = searchAll(query, opts);
+        if (error) {
+          count.textContent = "";
+          results.append(makeEl("div", { class: "search-empty" }, "Invalid regular expression."));
+          return;
+        }
         const total = groups.reduce((n, g) => n + g.hits.length, 0);
         count.textContent = total
           ? `${total} match${total === 1 ? "" : "es"} in ${groups.length} file${groups.length === 1 ? "" : "s"}`
@@ -2832,19 +2863,18 @@
           results.append(makeEl("div", { class: "search-empty" }, "No matches."));
           return;
         }
-        const qlen = query.length;
         for (const g of groups) {
           results.append(makeEl("div", { class: "search-file" }, [g.file, makeEl("span", { class: "n" }, String(g.hits.length))]));
           for (const h of g.hits) {
             const txt = makeEl("span", { class: "txt" }, [
               h.lineText.slice(0, h.matchInLine),
-              makeEl("mark", {}, h.lineText.slice(h.matchInLine, h.matchInLine + qlen)),
-              h.lineText.slice(h.matchInLine + qlen),
+              makeEl("mark", {}, h.lineText.slice(h.matchInLine, h.matchInLine + h.matchLen)),
+              h.lineText.slice(h.matchInLine + h.matchLen),
             ]);
             const row = makeEl("div", { class: "search-hit", title: `${g.file}:${h.line}:${h.col}` }, [
               makeEl("span", { class: "ln" }, `${h.line}:${h.col}`), txt,
             ]);
-            row.addEventListener("click", () => openSearchResult(g.file, g.kind, h.line, h.col, qlen));
+            row.addEventListener("click", () => openSearchResult(g.file, g.kind, h.line, h.col, h.matchLen));
             results.append(row);
           }
         }
@@ -2883,15 +2913,23 @@
           close,
         ]);
         const input = makeEl("input", { type: "text", class: "search-input", placeholder: "Find in all files…", autocomplete: "off", spellcheck: "false" });
-        const caseBox = makeEl("input", { type: "checkbox" });
-        const caseLabel = makeEl("label", { class: "search-case", title: "Case sensitive" }, [caseBox, "Aa"]);
-        const bar = makeEl("div", { class: "search-bar" }, [input, caseLabel]);
+        const mkOpt = (name, label, title) => {
+          const box = makeEl("input", { type: "checkbox" });
+          const lbl = makeEl("label", { class: "search-opt", "data-opt": name, title }, [box, label]);
+          box.addEventListener("change", () => renderSearchResults(panel, input.value));
+          return lbl;
+        };
+        const opts = makeEl("div", { class: "search-opts" }, [
+          mkOpt("case", "Aa", "Case sensitive"),
+          mkOpt("word", "⌶", "Whole word"),
+          mkOpt("regex", ".*", "Regular expression"),
+        ]);
+        const bar = makeEl("div", { class: "search-bar" }, [input, opts]);
         const count = makeEl("div", { class: "search-count" });
         const results = makeEl("div", { class: "search-results" });
         panel.append(header, bar, count, results);
         const rerun = debounce(() => renderSearchResults(panel, input.value), 120);
         input.addEventListener("input", rerun);
-        caseBox.addEventListener("change", () => renderSearchResults(panel, input.value));
         input.addEventListener("keydown", (e) => { if (e.key === "Escape") hideSearch(); });
         makeDraggable(panel, header, panelState.search);
         searchResizeObserver = new ResizeObserver(() => {
