@@ -308,7 +308,7 @@
       .workspace.stacked .esplitter { cursor: col-resize; }
       .esplitter:hover, .esplitter.dragging { background: var(--accent); }
 
-      .editor-pane .cm-editor { height: 100%; font-size: 12.5px; }
+      .editor-pane .cm-editor { height: 100%; font-size: var(--editor-font-size, 13px); }
       .editor-pane .cm-scroller { overflow: auto; }
       .editor-pane .cm-gutters {
         background: var(--bg-gutter); border-right: 1px solid var(--border);
@@ -339,7 +339,7 @@
       /* The Plain Text + Render Data outputs share one read-only CodeMirror editor
          (syntax-highlighted, language auto-switched). It overlays the iframe area. */
       .src-view { position: absolute; inset: 0; background: var(--bg-1); }
-      #output-text .cm-editor { height: 100%; }
+      #output-text .cm-editor { height: 100%; font-size: var(--editor-font-size, 13px); }
       .output-body[data-empty="true"]::after {
         content: "no output"; position: absolute; inset: 0;
         display: grid; place-items: center;
@@ -2467,14 +2467,24 @@
           { value: "stacked", label: "Stacked", hint: "Sources ↑ Output ↓",
             icon: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2.5" y="1.5" width="5" height="5.5" rx="1"/><rect x="8.5" y="1.5" width="5" height="5.5" rx="1"/><rect x="2.5" y="9" width="11" height="5.5" rx="1"/></svg>' },
         ],
+        // Monospace families only — code reads best fixed-width. Each is a stack
+        // that degrades gracefully when the preferred face isn't installed.
+        font: [
+          { value: "plex",    label: "Plex Mono", stack: '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace' },
+          { value: "system",  label: "System",    stack: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace' },
+          { value: "courier", label: "Courier",   stack: '"Courier New", Courier, monospace' },
+        ],
+        fontSize: [12, 13, 14, 16],
       };
 
-      let tweaks = { theme: "system", layout: "split", lineNumbers: true };
+      let tweaks = { theme: "system", layout: "split", lineNumbers: true, font: "plex", fontSize: 13 };
       try { const r = localStorage.getItem(LS_TWEAKS); if (r) tweaks = { ...tweaks, ...JSON.parse(r) }; } catch {}
       // Migrate older saved state: the former "dim" theme is now "dark", moods are gone.
       if (tweaks.theme === "dim") tweaks.theme = "dark";
       if (!["light", "dark", "system"].includes(tweaks.theme)) tweaks.theme = "system";
       tweaks.lineNumbers = tweaks.lineNumbers !== false; // default on
+      if (!TWEAK_OPTS.font.some((o) => o.value === tweaks.font)) tweaks.font = "plex";
+      if (!TWEAK_OPTS.fontSize.includes(tweaks.fontSize)) tweaks.fontSize = 13;
       delete tweaks.mood;
 
       function applyTweaks() {
@@ -2484,6 +2494,11 @@
         for (const view of [templateView, dataView, outputEditor])
           view.dispatch({ effects: lineNumberComp.reconfigure(lineNumberExt) });
         qs(".workspace")?.classList.toggle("stacked", tweaks.layout === "stacked");
+        // Editor font family (the whole mono UI follows) and editor font size.
+        const fontOpt = TWEAK_OPTS.font.find((o) => o.value === tweaks.font) || TWEAK_OPTS.font[0];
+        const root = document.documentElement.style;
+        root.setProperty("--font-mono", fontOpt.stack);
+        root.setProperty("--editor-font-size", tweaks.fontSize + "px");
         window.dispatchEvent(new Event("resize"));
       }
       function saveTweaks() { try { localStorage.setItem(LS_TWEAKS, JSON.stringify(tweaks)); } catch {} }
@@ -2560,6 +2575,29 @@
                 class: tweaks.lineNumbers === o.on ? "on" : "",
                 onclick: () => setTweak("lineNumbers", o.on),
               }, o.label)
+            )
+          )
+        ]));
+
+        panel.append(twSection("Editor font", "monospace", [
+          mkEl("div", { class: "tw-segmented" },
+            TWEAK_OPTS.font.map((o) =>
+              mkEl("button", {
+                class: tweaks.font === o.value ? "on" : "",
+                style: `font-family:${o.stack}`,
+                onclick: () => setTweak("font", o.value),
+              }, o.label)
+            )
+          )
+        ]));
+
+        panel.append(twSection("Font size", null, [
+          mkEl("div", { class: "tw-segmented" },
+            TWEAK_OPTS.fontSize.map((px) =>
+              mkEl("button", {
+                class: tweaks.fontSize === px ? "on" : "",
+                onclick: () => setTweak("fontSize", px),
+              }, px + "px")
             )
           )
         ]));
