@@ -101,3 +101,21 @@ Accepted (2026-05-26). See note _Recoverable Parse Error Accumulation_.
 *Decision.* Both backends collect every recoverable error in one pass — `Stem.Parser.parse_all/2` and the native `compile_to_wire_all` — each attributed to the file it occurred in; structural (stream-desyncing) errors still end the pass and are reported last. The fail-fast `parse/2` is unchanged (it surfaces the first).
 
 *Consequences.* The playground lists all errors; `mix stem.native.compile_diff` gains a parity check that both backends report the same error set (count + file order).
+
+=== ADR-0010: List access via a bracket selector; map access keeps the dotted bracket
+
+Accepted (2026-05-26), not yet implemented (targets 0.4.0). Full spec: note _List Selector Syntax (Bracket Indexing & Slicing)_.
+
+*Context.* List access was spread across transformers (`first`, `last`, `take`, `drop`, `slice`) plus a unified path segment (`items.[2]`) resolved by value type at runtime. That is a pile of names for one idea, and the model-view "push it to the controller" argument fails because the controller can format text too (so it would obviate the engine) — and the JSONata data layer is opt-in, so it can't be the required answer.
+
+*Decision.* Lists use a bare bracket selector, maps the dotted bracket, and one rule governs the bracket *content*: a **number** is a literal index/slice, a **`"quoted"`** string is a literal key, and a **bare identifier/path** is resolved (dynamic indirection). A bare `map.key` is a literal identifier key.
+
+* `list[2]`, `list[-1]` — literal index (0-based; negative counts from the end).
+* `list[a..b]`, `list[a..]`, `list[..b]` — *inclusive* range slice (Elixir/Ruby `..`); open bounds run to start/end; out-of-range clamps; a non-list value yields empty.
+* `list[i]` — dynamic index: resolve `i` to an integer.
+* `map.key`, `map.["my key"]` — literal map key (identifier, or quoted for spaces/special chars).
+* `map.[k]` — dynamic key: resolve `k` and use its value as the key (the "indirection").
+
+Remove the `first`/`last`/`take`/`drop`/`slice` transformers (subsumed: `first`=`[0]`, `last`=`[-1]`, `rest`=`[1..]`, butlast=`[..-2]`, `take n`=`[..n-1]`, `drop n`=`[n..]`). Keep the `@first`/`@last` iteration vars and the non-slice transformers (`reverse`, `sort`, `filter`, `map`, `join`, …).
+
+*Consequences.* Breaking (→ 0.4.0): list index moves to bare brackets (`items.[2]` → `items[2]`), literal map keys with spaces must be quoted (`user.[full name]` → `user.["full name"]`), and the five transformers go. One learnable notation replaces them — and gains dynamic access (`list[i]`, `map.[k]`) for free — independent of any opt-in data layer. Touches the parser grammar, the AST (`stem-ast/v1`), the bytecode (`stem-bc/v1`, a new index/slice op), both VMs (byte-parity), conformance vectors, the playground, examples, and the migration guide.

@@ -4,6 +4,12 @@ Forward-looking work, captured so it isn't lost. Priorities are proposals
 (`P0` = next, `P1` = soon, `P2` = later); adjust freely. "Depends on" drives the
 graph at the bottom.
 
+## Language (engine)
+
+| Pri | Item | Depends on | Notes |
+|-----|------|-----------|-------|
+| P0 | **List selector syntax → 0.4.0** (ADR-0010) | — | Bracket indexing/slicing (`list[2]`, `list[1..m]`, `map.["my key"]`, `map.[k]`); remove `first`/`last`/`take`/`drop`/`slice`. **Breaking, design locked, not yet built.** Full spec: note _List Selector Syntax (Bracket Indexing and Slicing)_. 5 gated phases (Elixir → Rust parity → removal → conformance → docs/examples). |
+
 ## Playground (open points)
 
 | Pri | Item | Depends on | Notes |
