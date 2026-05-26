@@ -1141,6 +1141,7 @@ fn scan_top_level(s: &str) -> Vec<Tok> {
         match c {
             '"' | '\'' => consume_quoted(&chars, &mut k, &mut text),
             '(' => consume_parens(&chars, &mut k, &mut text),
+            '[' => consume_bracket(&chars, &mut k, &mut text),
             // Reserved boolean operators: maximal munch so `||` is never two
             // pipe stages and `&&` never leaks through as text.
             '|' if chars.get(k + 1) == Some(&'|') => {
@@ -1222,10 +1223,27 @@ fn consume_parens(chars: &[char], k: &mut usize, text: &mut String) {
                 *k += 1;
             }
             '"' | '\'' => consume_quoted(chars, k, text),
+            '[' => consume_bracket(chars, k, text),
             _ => {
                 text.push(d);
                 *k += 1;
             }
+        }
+    }
+}
+
+// A bracketed literal key (`[my name]`) is atomic, like a quoted chunk: its
+// content runs to the first `]` with no nesting or escapes, so spaces, commas,
+// `=`, and `:` inside it are part of the key, not token separators.
+fn consume_bracket(chars: &[char], k: &mut usize, text: &mut String) {
+    text.push('[');
+    *k += 1;
+    while *k < chars.len() {
+        let d = chars[*k];
+        text.push(d);
+        *k += 1;
+        if d == ']' {
+            break;
         }
     }
 }
@@ -2018,6 +2036,21 @@ mod tests {
         assert_wire(
             "{{#each people as |p _ I1|}}{{I1}}:{{p.[first-name]}} {{/each}}",
             r#"{"version":"stem-bc/v1","instructions":[{"body":[{"escape":"html","t":"emit","value":{"name":"I1","t":"local"}},{"t":"text","text":":"},{"escape":"html","t":"emit","value":{"base":{"name":"p","t":"local"},"segments":["first-name"],"t":"get"}},{"t":"text","text":" "}],"else":[],"params":["p","_","I1"],"subject":{"name":"people","t":"assign"},"t":"each"}]}"#,
+        );
+    }
+
+    #[test]
+    fn bracket_keys_with_spaces_are_atomic_tokens() {
+        // A space inside `[my name]` is part of the key, not an argument
+        // separator: the bracket chunk is atomic in the top-level tokenizer.
+        assert_wire(
+            r#"{{default [my name] "?"}}"#,
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"args":[{"name":"my name","t":"assign"},{"t":"lit","value":"?"}],"kwargs":{},"name":"default","t":"call"}}]}"#,
+        );
+        // Also inside a parenthesised sub-expression.
+        assert_wire(
+            r#"{{upcase (default [my name] "?")}}"#,
+            r#"{"version":"stem-bc/v1","instructions":[{"escape":"html","t":"emit","value":{"args":[{"args":[{"name":"my name","t":"assign"},{"t":"lit","value":"?"}],"kwargs":{},"name":"default","t":"call"}],"kwargs":{},"name":"upcase","t":"call"}}]}"#,
         );
     }
 

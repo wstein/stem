@@ -73,6 +73,7 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "{{#each rows as |_ _ i1|}}{{i1}} {{/each}}",
     "{{#each rows}}{{@this.[full name]}}{{/each}}",
     "{{#with user as |u|}}{{u.[full name]}}{{/with}}",
+    "{{default [my name] \"?\"}}",
     # Transformers and pipelines
     "{{name | upcase}}",
     "{{name | upcase | trim}}",

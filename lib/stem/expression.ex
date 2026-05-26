@@ -34,6 +34,20 @@ defmodule Stem.Expression do
     |> optional(string("'"))
     |> reduce({List, :to_string, []})
 
+  # A bracketed literal key (`[first-name]`, `[my name]`). Like the quoted
+  # chunks, it is atomic at the top level, so characters that would otherwise
+  # split a token — spaces, commas, `=`, `:` — are part of the key, not
+  # delimiters. Brackets do not nest and carry no escapes (content runs to the
+  # first `]`), matching `reference_segments/strip_segment`.
+  bracket_chunk =
+    string("[")
+    |> repeat(
+      lookahead_not(string("]"))
+      |> utf8_char([])
+    )
+    |> optional(string("]"))
+    |> reduce({List, :to_string, []})
+
   defparsecp(
     :paren_chunk,
     string("(")
@@ -42,6 +56,7 @@ defmodule Stem.Expression do
         parsec(:paren_chunk),
         double_quoted_chunk,
         single_quoted_chunk,
+        bracket_chunk,
         lookahead_not(choice([string("("), string(")"), string("\""), string("'")]))
         |> utf8_char([])
       ])
@@ -55,6 +70,7 @@ defmodule Stem.Expression do
       parsec(:paren_chunk),
       double_quoted_chunk,
       single_quoted_chunk,
+      bracket_chunk,
       lookahead_not(
         choice([
           string("|"),

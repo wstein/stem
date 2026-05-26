@@ -114,6 +114,12 @@ defmodule Stem.ExpressionAstTest do
              Expression.parse("default x 'fallback'")
   end
 
+  test "a bracketed key with spaces stays one token in argument position" do
+    # The space inside `[my name]` is part of the key, not an arg separator.
+    assert {:ok, {:transformer, "default", [{:identifier, "my name"}, {:literal, ~s("?")}]}} =
+             Expression.parse(~s(default [my name] "?"))
+  end
+
   test "parse handles escaped quoted helper arguments" do
     assert {:ok, {:transformer, "say", [{:literal, "\"a\\\"b\""}]}} =
              Expression.parse("say \"a\\\"b\"")

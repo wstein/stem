@@ -35,6 +35,7 @@
   {"data":{"items":["a","b","c"]},"escape":"html","expected":"[abc]","name":"first and last flags","template":"{{#each items}}{{#if @first}}[{{/if}}{{@this}}{{#if @last}}]{{/if}}{{/each}}","transformers":[]},
   {"data":{"outer":[{"tag":"x","inner":["1","2"]},{"tag":"y","inner":["3"]}]},"escape":"html","expected":"x-1;x-2;y-3;","name":"nested each with parent","template":"{{#each outer}}{{#each @this.inner}}{{@parent.tag}}-{{@this}};{{/each}}{{/each}}","transformers":[]},
   {"data":{"items":["a","b","c"]},"escape":"html","expected":"b","name":"numeric list index","template":"{{items.[1]}}","transformers":[]},
+  {"data":{"my name":"Tom"},"escape":"html","expected":"Tom","name":"spaced bracket key as argument","template":"{{default [my name] \"?\"}}","transformers":["minimum"]},
   {"data":{"name":"Nina"},"escape":"html","expected":"<main>Hi Nina</main>","name":"region and yield","template":"{{#region body}}Hi {{name}}{{/region}}<main>{{yield body}}</main>","transformers":[]},
   {"data":{"s":"hi"},"escape":"html","expected":"\"hi\"","name":"json string","template":"{{{s | json}}}","transformers":["minimum"]},
   {"data":{"nums":[1,2,3]},"escape":"html","expected":"[1,2,3]","name":"json list","template":"{{{nums | json}}}","transformers":["minimum"]},

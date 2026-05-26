@@ -236,6 +236,13 @@ defmodule Stem.Conformance do
       data: %{items: ["a", "b", "c"]},
       transformers: []
     },
+    # A bracketed key with a space stays one token even in argument position.
+    %{
+      name: "spaced bracket key as argument",
+      template: "{{default [my name] \"?\"}}",
+      data: %{:"my name" => "Tom"},
+      transformers: [:minimum]
+    },
     %{
       name: "region and yield",
       template: "{{#region body}}Hi {{name}}{{/region}}<main>{{yield body}}</main>",
