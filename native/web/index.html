@@ -314,7 +314,7 @@
         background: var(--bg-pane); overflow: hidden;
       }
       .output-body iframe { width: 100%; height: 100%; border: 0; background: var(--bg); display: block; }
-      /* The Plain Text + View Model outputs share one read-only CodeMirror editor
+      /* The Plain Text + Render Data outputs share one read-only CodeMirror editor
          (syntax-highlighted, language auto-switched). It overlays the iframe area. */
       .src-view { position: absolute; inset: 0; background: var(--bg-1); }
       #output-text .cm-editor { height: 100%; }
@@ -1165,7 +1165,7 @@
       });
 
       // ── Output editor (read-only CodeMirror) ──────────────────────────
-      // The Plain Text + View Model views share one read-only editor: syntax
+      // The Plain Text + Render Data views share one read-only editor: syntax
       // highlighting (language auto-switched per view/example) plus two decoration
       // layers — provenance (.seg marks tracing output->source) and the caret link
       // (.cm-out-linked, the run(s) the template caret produced).
@@ -1421,14 +1421,14 @@
 
       let lastOutput = "";
       let lastSegments = [];
-      let lastData = null; // the post-transform data the template rendered (View Model view)
+      let lastData = null; // the post-transform data the template rendered (Render Data view)
       let lastSegViews = []; // [{from,to,file,kind,start,end}] — segment char ranges in the output editor
       let lastProgram = null; // the compiled wire program, for the Bytecode view
       let dockProblems = []; // diagnostics for the Problems tab, refreshed each run()
       let hadProblems = false; // tracks the 0->>0 transition so the dock auto-opens once
 
       // Whether the given output view has content to show (drives the empty-state
-      // placeholder): the View Model needs data, Bytecode needs a compiled program,
+      // placeholder): the Render Data needs data, Bytecode needs a compiled program,
       // the rest need rendered output.
       function outputHasContent(view) {
         if (view === "data") return lastData != null;
@@ -1511,7 +1511,7 @@
       }
 
       // Resolve the active output language and apply it to the read-only editor's
-      // language compartment. View Model is always YAML; Plain Text uses the manual
+      // language compartment. Render Data is always YAML; Plain Text uses the manual
       // pick, or the example's output format when "Auto". The autoswitch cases use
       // the statically-imported grammars (instant); manual picks may lazy-load, so
       // the highlight appears as soon as the grammar resolves.
@@ -1677,7 +1677,7 @@
             setOutput(""); saveHash(); return;
           }
         }
-        lastData = data; // expose the view-model to the "View Model" output view
+        lastData = data; // expose the view-model to the "Render Data" output view
 
         try {
           const program = applyEscape(compiled.program, escapeMode);
@@ -1770,7 +1770,7 @@
         ["source", "Plain Text"],
         ["rendered", "HTML Preview"],
         ["markdown", "Markdown Preview"],
-        ["data", "View Model"],
+        ["data", "Render Data"],
         ["bytecode", "Bytecode"],
       ];
 
@@ -2231,7 +2231,7 @@
           { label: "View · Plain Text",       kind: "view", run: () => { setOutputView("source"); run(); } },
           { label: "View · HTML Preview",     kind: "view", run: () => { setOutputView("rendered"); run(); } },
           { label: "View · Markdown Preview", kind: "view", run: () => { setOutputView("markdown"); run(); } },
-          { label: "View · View Model",       kind: "view", run: () => { setOutputView("data"); run(); } },
+          { label: "View · Render Data",       kind: "view", run: () => { setOutputView("data"); run(); } },
           { label: "Reset layout", kind: "view",
             run: () => { splits = { w0: null, h0: null, ew: null, eh: null }; applySplits(); saveSplits(); setFocus(null); } },
           { label: "Copy share link", kind: "share", run: copyShareLink },
