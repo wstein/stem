@@ -60,6 +60,12 @@ Playground workflow highlights:
   on narrow screens.
 - Inline compile diagnostics in the template editor gutter, plus a status lane
   with line/column locations.
+- A toggleable, resizable **Diagnostics dock** (status-bar "Diagnostics" button)
+  with a **Problems** tab (compile / capability / render errors, badged by
+  severity) and a **Dependencies** tab — an SVG graph of `{{> name}}` partial
+  inclusions built from the engine's `parse_ast`, drawing cyclic inclusions as
+  red edges (the compile-time `partial recursion detected` error) and unknown
+  partials as dashed amber nodes.
 - A capability-group selector (Strings / Collections / Predicates checkboxes;
   Minimum is always on) in the output header. Unchecking a group makes the
   engine refuse a template that uses one of its transformers, surfacing the
