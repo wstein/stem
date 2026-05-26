@@ -80,8 +80,9 @@ export function render(program, data, groups, map) {
 }
 
 /**
- * The engine's package version, baked in at build time, so the playground
- * can show the exact compiled-wasm build it loaded.
+ * The project version, baked in at build time from the repo-root `/VERSION`
+ * file (the single source of truth, shared with the Elixir `mix.exs`), so
+ * the playground can show the exact compiled-wasm build it loaded.
  * @returns {string}
  */
 export function version() {

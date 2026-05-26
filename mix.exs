@@ -5,7 +5,9 @@
 defmodule Stem.MixProject do
   use Mix.Project
 
-  @version "0.2.0"
+  # Single source of truth for the project version, shared with the native
+  # engine (the wasm `version()` reads the same /VERSION file).
+  @version __DIR__ |> Path.join("VERSION") |> File.read!() |> String.trim()
 
   def project do
     [

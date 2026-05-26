@@ -440,11 +440,12 @@ mod wasm {
         Ok(value.serialize(&serde_wasm_bindgen::Serializer::json_compatible())?)
     }
 
-    /// The engine's package version, baked in at build time, so the playground
-    /// can show the exact compiled-wasm build it loaded.
+    /// The project version, baked in at build time from the repo-root `/VERSION`
+    /// file (the single source of truth, shared with the Elixir `mix.exs`), so
+    /// the playground can show the exact compiled-wasm build it loaded.
     #[wasm_bindgen]
     pub fn version() -> String {
-        env!("CARGO_PKG_VERSION").to_string()
+        include_str!("../../../VERSION").trim().to_string()
     }
 
     /// Compiles template source (plus an optional `{name: source}` partials map)
