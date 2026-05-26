@@ -2614,11 +2614,13 @@
       function setTweak(key, value) {
         tweaks[key] = value;
         applyTweaks(); saveTweaks();
-        // Rebuild panel to reflect new selection
+        // Rebuild panel to reflect new selection, keeping its current position
+        // (otherwise the rebuilt panel jumps back to the default spot).
         if (tweaksPanel) {
           tweaksPanel.remove();
           tweaksPanel = buildTweaksPanel();
           document.body.append(tweaksPanel);
+          applyPanelPos(tweaksPanel, panelState.appearance);
         }
       }
 
