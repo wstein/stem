@@ -915,6 +915,7 @@
       const WASM = "./wasm/stem_native_bg.wasm";
       const LS_SPLIT  = "stem-playground:splits.v3";
       const LS_TWEAKS = "stem-playground:tweaks";
+      const LS_OUTLANG = "stem-playground:outlang";
 
       const byId = (id) => document.getElementById(id);
       const qs   = (sel) => document.querySelector(sel);
@@ -1490,6 +1491,12 @@
       // pick, or the example's output format when "Auto". The autoswitch cases use
       // the statically-imported grammars (instant); manual picks may lazy-load, so
       // the highlight appears as soon as the grammar resolves.
+      // The highlight choice is a sticky UI preference (persisted across reloads),
+      // reset to "Auto" whenever an example is loaded.
+      function persistOutLang() {
+        try { localStorage.setItem(LS_OUTLANG, outLangChoice); } catch {}
+      }
+
       async function updateOutLang() {
         if (outputView === "data") {
           outputEditor.dispatch({ effects: outLangComp.reconfigure([yaml(), yamlHighlighting]) });
@@ -2103,6 +2110,7 @@
         tabs.forEach(t => { t.dirty = false; });
         yamlDirty = false; transformDirty = false;
         outLangChoice = "Auto";
+        persistOutLang();
         lastExView = ex.view;
         byId("out-lang-input").value = "";
         updateLangPlaceholder();
@@ -3079,8 +3087,8 @@
         // Commit on change/Enter: snap to a known language; empty reverts to example default.
         input.addEventListener("change", () => {
           const norm = normalizeLangChoice(input.value);
-          if (norm === "Auto") { outLangChoice = "Auto"; input.value = ""; updateOutLang(); }
-          else if (norm) { outLangChoice = norm; input.value = norm; updateOutLang(); }
+          if (norm === "Auto") { outLangChoice = "Auto"; input.value = ""; updateOutLang(); persistOutLang(); }
+          else if (norm) { outLangChoice = norm; input.value = norm; updateOutLang(); persistOutLang(); }
           else { input.value = outLangChoice === "Auto" ? "" : outLangChoice; }
         });
       }
@@ -3116,12 +3124,24 @@
       setOutputView(outputView);
       renderDataTabs(); // paint the data-pane tabs before the async example load
 
+      // The highlighter is a sticky preference. Capture it before the startup
+      // load (which loads an example and resets the choice to "Auto"), then
+      // re-apply it afterwards so a reload restores the user's last pick.
+      const savedOutLang = (() => { try { return localStorage.getItem(LS_OUTLANG); } catch { return null; } })();
+
       // Default load is keyed by id, not array position, so reordering the
       // examples.json catalog (e.g. simple -> advanced) never breaks it.
       if (!(await restoreHash())) {
         const def = examples.findIndex((e) => e.id === "greeting");
         await loadExample(def < 0 ? 0 : def);
       }
+      if (savedOutLang && savedOutLang !== "Auto") {
+        outLangChoice = savedOutLang;
+        byId("out-lang-input").value = savedOutLang;
+        updateLangPlaceholder();
+        updateOutLang();
+      }
+      persistOutLang();
       applySplits();
       updateStatusMeta();
       restorePanels(); // restore persisted floating panels (Appearance / Dependencies)
