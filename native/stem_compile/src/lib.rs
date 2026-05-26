@@ -41,8 +41,8 @@
 use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 
-// Combinator lexer (nimble_parsec_rs port of `Stem.Parser.do_lex`), phase one of
-// migrating the hand-written `tokenize` onto shared combinators with the BEAM.
+// The lexer: a nimble_parsec_rs port of `Stem.Parser`'s `do_lex` grammar plus a
+// `tokenize` assembler, sharing one conceptual model with the BEAM reference.
 mod np_lexer;
 
 const VERSION: &str = "stem-bc/v1";
@@ -105,7 +105,7 @@ pub fn compile_to_wire_string(source: &str) -> Result<String, CompileError> {
 /// partial dependency edges stay visible; every node carries its byte `src`
 /// span for bidirectional editor highlighting. Mirrors `Stem.parse_ast/1`.
 pub fn parse_ast_to_wire(source: &str) -> Result<Value, CompileError> {
-    let tokens = tokenize(source)?;
+    let tokens = np_lexer::tokenize(source)?;
     let empty = Partials::new();
     let mut asm = Asm {
         partials: &empty,
@@ -133,7 +133,7 @@ fn compile_inner(
     partials: &Partials,
     with_spans: bool,
 ) -> Result<Value, CompileError> {
-    let tokens = tokenize(source)?;
+    let tokens = np_lexer::tokenize(source)?;
     let mut asm = Asm {
         partials,
         stack: Vec::new(),
@@ -211,141 +211,6 @@ enum Token {
         args: String,
         span: Span,
     },
-}
-
-fn tokenize(src: &str) -> Result<Vec<Token>, CompileError> {
-    let mut tokens = Vec::new();
-    let mut text = String::new();
-    let mut text_start = 0; // byte offset where the pending text run began
-    let mut trim_next = false;
-    let mut i = 0;
-
-    while i < src.len() {
-        let Some(rel) = src[i..].find("{{") else {
-            if text.is_empty() {
-                text_start = i;
-            }
-            text.push_str(&src[i..]);
-            break;
-        };
-        if text.is_empty() {
-            text_start = i;
-        }
-        text.push_str(&src[i..i + rel]);
-        let start = i + rel;
-
-        // Backslash escaping: N trailing backslashes before {{.
-        // Consume exactly one: N=1 → escape (literal {{inner}}); N≥2 → emit N-1 and evaluate.
-        let n = text
-            .as_bytes()
-            .iter()
-            .rev()
-            .take_while(|&&b| b == b'\\')
-            .count();
-        if n > 0 {
-            text.truncate(text.len() - 1);
-            if n == 1 {
-                text.push_str("{{");
-                i = start + 2;
-                continue;
-            }
-            // N≥2: one backslash consumed, N-1 remain; fall through to evaluate.
-        }
-
-        // 4-brace raw block: {{{{#name}}}}...{{{{/name}}}} — content emitted verbatim.
-        if src[start..].starts_with("{{{{#") {
-            let name_start = start + 5; // skip "{{{{#"
-            let close_brace = src[name_start..].find("}}}}").ok_or_else(|| CompileError {
-                message: "unterminated raw block open tag".to_string(),
-                start,
-                end: src.len(),
-            })?;
-            let name = &src[name_start..name_start + close_brace];
-            if name.is_empty() {
-                return Err(CompileError {
-                    message: "raw block name is required in `{{{{#}}}}`".to_string(),
-                    start,
-                    end: name_start + close_brace + 4,
-                });
-            }
-            let content_start = name_start + close_brace + 4; // skip "}}}}"
-            let mut close_tag = String::from("{{{{/");
-            close_tag.push_str(name);
-            close_tag.push_str("}}}}");
-            let content_len = src[content_start..]
-                .find(close_tag.as_str())
-                .ok_or_else(|| CompileError {
-                    message: format!(
-                        "unclosed raw block `{{{{{{{{#{name}}}}}}}}}` — missing `{close_tag}`"
-                    ),
-                    start,
-                    end: src.len(),
-                })?;
-            let raw_text = &src[content_start..content_start + content_len];
-            text.push_str(raw_text);
-            i = content_start + content_len + close_tag.len();
-            continue;
-        }
-        if src[start..].starts_with("{{{{") {
-            return Err(CompileError {
-                message: "raw blocks use `{{{{#name}}}}` syntax".to_string(),
-                start,
-                end: src[start..]
-                    .find("}}}}")
-                    .map_or(src.len(), |r| start + r + 4),
-            });
-        }
-
-        // Comments (`{{! .. }}`, `{{!-- .. --}}`) are dropped without flushing
-        // the text buffer, so surrounding text merges and a pending trim marker
-        // carries across them, exactly like the BEAM tokenizer.
-        if let Some(end) = comment_end(src, start) {
-            i = end;
-            continue;
-        }
-
-        let triple = src[start..].starts_with("{{{");
-        let (open, close) = if triple { ("{{{", "}}}") } else { ("{{", "}}") };
-        let inner_start = start + open.len();
-        let rel2 = src[inner_start..].find(close).ok_or_else(|| CompileError {
-            message: format!("unterminated `{open}` tag"),
-            start,
-            end: src.len(),
-        })?;
-        let inner = &src[inner_start..inner_start + rel2];
-        let tag_end = inner_start + rel2 + close.len();
-        let (inner2, trim_left, trim_right) = extract_trim(inner);
-
-        flush_text(&mut tokens, &mut text, &mut trim_next, (text_start, start));
-        if trim_left {
-            trim_trailing_text(&mut tokens);
-        }
-        if let Some(token) = classify(&inner2, triple, (start, tag_end))? {
-            tokens.push(token);
-        }
-        trim_next = trim_right;
-        i = tag_end;
-    }
-
-    flush_text(
-        &mut tokens,
-        &mut text,
-        &mut trim_next,
-        (text_start, src.len()),
-    );
-    Ok(tokens)
-}
-
-// The byte offset just past a comment starting at `start`, or `None` if no
-// comment opens there.
-fn comment_end(src: &str, start: usize) -> Option<usize> {
-    if let Some(rest) = src[start..].strip_prefix("{{!--") {
-        rest.find("--}}").map(|rel| start + 5 + rel + 4)
-    } else if let Some(rest) = src[start..].strip_prefix("{{!") {
-        rest.find("}}").map(|rel| start + 3 + rel + 2)
-    } else {
-        None
-    }
 }
 
 // Strip surrounding `~` whitespace-control markers, returning the normalised
@@ -635,7 +500,7 @@ fn expand_partial(
     match asm.partials.get(name).cloned() {
         Some(source) => {
             let (context, hash) = parse_partial_args(args, span)?;
-            let tokens = tokenize(&source)?;
+            let tokens = np_lexer::tokenize(&source)?;
             asm.stack.push(name.to_string());
             let nodes = assemble(tokens, asm)?;
             asm.stack.pop();
