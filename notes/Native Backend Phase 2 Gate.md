@@ -4,7 +4,10 @@ aliases: []
 tags: ['architecture', 'native', 'performance', 'decision']
 ---
 
+
 The Rust/WASM native core stays gated for *production* on a BEAM perf basis, but a proof-of-concept now exists (`native/`) and validates byte-for-byte against the conformance corpus.
+
+> **Update (2026-05-26).** Direction shifted to a **full-blown native Rust engine at parity with Elixir**, not a lean/minimal interop layer. New capabilities land in Rust *and* are mirrored in the Elixir reference (parity is a hard requirement). The first such additions are the playground introspection exports — pre-expansion `parse_ast` and context-snapshot `inspect_at` — see [[Playground Inspector Suite]] and [[Partial Dependency Graph & AST Viewer]]. This grows, rather than trims, the WASM/JS surface.
 
 ## What
 
@@ -21,10 +24,12 @@ The Rust/WASM native core stays gated for *production* on a BEAM perf basis, but
 
 - Before starting Phase 2, run `bench/render.exs` and confirm a concrete, measured regression in the compiled path on representative templates, and name the non-BEAM consumer that needs it.
 - Keep any native work in a separate experimental repo, feature-gated, validated against [[Cross-Backend Conformance Spec]]; never ship per-template native artifacts into mainline.
+- Any new Rust capability ships with a matching Elixir implementation and cross-backend conformance vectors, so the two engines never diverge.
+
 
 ## Links
 
 - [[Native Backend Strategy]] - The plan this gate belongs to.
 - [[Portable Stem Bytecode]] - The VM the benchmark compares against.
 - [[Cross-Backend Conformance Spec]] - What any native core must satisfy.
-
+- [[Playground Inspector Suite]] - First consumer of the new parity-tracked introspection exports.
