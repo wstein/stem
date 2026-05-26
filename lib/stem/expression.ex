@@ -96,15 +96,20 @@ defmodule Stem.Expression do
     )
   )
 
-  @type context :: %{in_each: boolean(), locals: %{optional(binary()) => binary()}}
+  @type context :: %{
+          :in_each => boolean(),
+          :locals => %{optional(binary()) => binary()},
+          optional(:this_var) => binary(),
+          optional(:parent_var) => binary() | nil,
+          optional(:root_var) => binary()
+        }
   @type helper_arg_t :: expr_t() | {:kw, binary(), expr_t()}
   @type pipeline_stage_t :: {:stage, binary(), [helper_arg_t()]}
   @type expr_t ::
           {:literal, binary()}
           | {:identifier, binary()}
-          | {:special, :index | :index1 | :key | :this}
-          | {:parent, binary()}
-          | {:path, :implicit | :this, [binary()]}
+          | {:special, :index | :index1 | :key | :first | :last}
+          | {:path, :implicit | :this | :parent | :root, [binary()]}
           | {:transformer, binary(), [helper_arg_t()]}
           | {:pipeline, expr_t(), [pipeline_stage_t()]}
 
@@ -183,44 +188,36 @@ defmodule Stem.Expression do
   def to_source({:literal, "null"}, _context), do: "nil"
   def to_source({:literal, source}, _context), do: source
 
-  def to_source({:special, :index}, context),
-    do: if(context.in_each, do: "stem_index", else: "@index")
-
-  def to_source({:special, :index1}, context),
-    do: if(context.in_each, do: "stem_index + 1", else: "@index1")
-
-  def to_source({:special, :key}, context),
-    do: if(context.in_each, do: "stem_key", else: "@key")
-
-  def to_source({:special, :this}, context),
-    do: if(context.in_each, do: "current", else: "this")
+  def to_source({:special, :index}, context), do: iteration_var(context, "stem_index")
+  def to_source({:special, :index1}, context), do: iteration_var(context, "stem_index") <> " + 1"
+  def to_source({:special, :key}, context), do: iteration_var(context, "stem_key")
+  def to_source({:special, :first}, context), do: iteration_var(context, "stem_first")
+  def to_source({:special, :last}, context), do: iteration_var(context, "stem_last")
 
   def to_source({:identifier, name}, context) do
     case local_source(context, name) do
       {:ok, source} -> source
-      :error -> if(context.in_each, do: "current" <> dot_access(name), else: assign_marker(name))
+      :error -> implicit_source(context, name, [])
     end
   end
 
-  def to_source({:parent, name}, _context), do: "@#{name}"
-
-  def to_source({:path, :this, segments}, context) do
-    root = if context.in_each, do: "current", else: "this"
-    root <> Enum.map_join(segments, &dot_access/1)
+  def to_source({:path, :implicit, [root | rest]}, context) do
+    case local_source(context, root) do
+      {:ok, source} -> field_chain(source, rest)
+      :error -> implicit_source(context, root, rest)
+    end
   end
 
-  def to_source({:path, :implicit, [root | rest]}, context) do
-    rest_source = Enum.map_join(rest, &dot_access/1)
+  def to_source({:path, :this, segments}, context),
+    do: context_source(this_var(context), segments)
 
-    case local_source(context, root) do
-      {:ok, source} ->
-        source <> rest_source
+  def to_source({:path, :root, segments}, _context),
+    do: context_source(:root, segments)
 
-      :error ->
-        root_source =
-          if(context.in_each, do: "current" <> dot_access(root), else: assign_marker(root))
-
-        root_source <> rest_source
+  def to_source({:path, :parent, segments}, context) do
+    case parent_var(context) do
+      nil -> raise ArgumentError, "@parent is only available inside a block (#each / #with)"
+      resolved -> context_source(resolved, segments)
     end
   end
 
@@ -242,11 +239,11 @@ defmodule Stem.Expression do
   def format({:special, :index}), do: "@index"
   def format({:special, :index1}), do: "@index1"
   def format({:special, :key}), do: "@key"
-  def format({:special, :this}), do: "this"
-  def format({:parent, name}), do: "../#{name}"
+  def format({:special, :first}), do: "@first"
+  def format({:special, :last}), do: "@last"
 
-  def format({:path, :this, segments}),
-    do: Enum.join(["this" | Enum.map(segments, &format_segment/1)], ".")
+  def format({:path, kind, segments}) when kind in [:this, :parent, :root],
+    do: Enum.join(["@#{kind}" | Enum.map(segments, &format_segment/1)], ".")
 
   def format({:path, :implicit, segments}),
     do: Enum.map_join(segments, ".", &format_segment/1)
@@ -267,10 +264,13 @@ defmodule Stem.Expression do
   @spec references_identifier?(expr_t(), binary()) :: boolean()
   def references_identifier?({:literal, _}, _name), do: false
   def references_identifier?({:special, _}, _name), do: false
-  def references_identifier?({:parent, _}, _name), do: false
   def references_identifier?({:identifier, name}, name), do: true
   def references_identifier?({:identifier, _}, _name), do: false
-  def references_identifier?({:path, _, [root | _]}, name), do: root == name
+  # The contextual roots (@this/@parent/@root) never reference a block param.
+  def references_identifier?({:path, kind, _}, _name) when kind in [:this, :parent, :root],
+    do: false
+
+  def references_identifier?({:path, :implicit, [root | _]}, name), do: root == name
 
   def references_identifier?({:transformer, _name, args}, name) do
     Enum.any?(args, fn
@@ -443,20 +443,11 @@ defmodule Stem.Expression do
       trimmed == "null" ->
         {:ok, {:literal, "null"}}
 
-      trimmed == "@index" ->
-        {:ok, {:special, :index}}
+      special = iteration_special(trimmed) ->
+        {:ok, {:special, special}}
 
-      trimmed == "@index1" ->
-        {:ok, {:special, :index1}}
-
-      trimmed == "@key" ->
-        {:ok, {:special, :key}}
-
-      trimmed in ["this", "."] ->
-        {:ok, {:special, :this}}
-
-      String.starts_with?(trimmed, "../") and valid_parent_identifier?(trimmed) ->
-        {:ok, {:parent, strip_parent_segments(trimmed)}}
+      result = context_path(trimmed) ->
+        result
 
       true ->
         case reference_expression(trimmed) do
@@ -540,20 +531,11 @@ defmodule Stem.Expression do
       trimmed == "null" ->
         {:ok, {:literal, "null"}}
 
-      trimmed == "@index" ->
-        {:ok, {:special, :index}}
+      special = iteration_special(trimmed) ->
+        {:ok, {:special, special}}
 
-      trimmed == "@index1" ->
-        {:ok, {:special, :index1}}
-
-      trimmed == "@key" ->
-        {:ok, {:special, :key}}
-
-      trimmed in ["this", "."] ->
-        {:ok, {:special, :this}}
-
-      String.starts_with?(trimmed, "../") and valid_parent_identifier?(trimmed) ->
-        {:ok, {:parent, strip_parent_segments(trimmed)}}
+      result = context_path(trimmed) ->
+        result
 
       true ->
         case reference_expression(trimmed) do
@@ -592,31 +574,98 @@ defmodule Stem.Expression do
     end
   end
 
-  defp build_reference([raw_root | _] = segments) do
-    [root_key | rest_keys] = Enum.map(segments, &strip_segment/1)
-
-    cond do
-      segments == ["this"] ->
-        :no_reference
-
-      match?([_single], segments) ->
-        {:ok, {:identifier, root_key}}
-
-      raw_root == "this" ->
-        {:ok, {:path, :this, rest_keys}}
-
-      true ->
-        {:ok, {:path, :implicit, [root_key | rest_keys]}}
+  defp build_reference(segments) do
+    case Enum.map(segments, &strip_segment/1) do
+      [single] -> {:ok, {:identifier, single}}
+      keys -> {:ok, {:path, :implicit, keys}}
     end
   end
+
+  # The iteration-only data variables (`@index`/`@index1`/`@key`/`@first`/
+  # `@last`); `nil` for anything else. Their use outside an `#each` is rejected
+  # during lowering, not parsing.
+  defp iteration_special("@index"), do: :index
+  defp iteration_special("@index1"), do: :index1
+  defp iteration_special("@key"), do: :key
+  defp iteration_special("@first"), do: :first
+  defp iteration_special("@last"), do: :last
+  defp iteration_special(_), do: nil
+
+  # The contextual references `@this`/`@parent`/`@root`, optionally followed by a
+  # dotted path. Returns `{:ok, {:path, kind, segments}}`, `:error` for a
+  # malformed path after the context word, or `nil` when not a context reference.
+  defp context_path(trimmed) do
+    case context_split(trimmed) do
+      nil ->
+        nil
+
+      {kind, ""} ->
+        {:ok, {:path, kind, []}}
+
+      {kind, rest} ->
+        segments = @reference_segment |> Regex.scan(rest) |> List.flatten()
+
+        if segments != [] and Enum.join(segments, ".") == rest do
+          {:ok, {:path, kind, Enum.map(segments, &strip_segment/1)}}
+        else
+          :error
+        end
+    end
+  end
+
+  defp context_split("@this." <> rest), do: {:this, rest}
+  defp context_split("@this"), do: {:this, ""}
+  defp context_split("@parent." <> rest), do: {:parent, rest}
+  defp context_split("@parent"), do: {:parent, ""}
+  defp context_split("@root." <> rest), do: {:root, rest}
+  defp context_split("@root"), do: {:root, ""}
+  defp context_split(_), do: nil
 
   defp strip_segment("[" <> rest), do: binary_part(rest, 0, byte_size(rest) - 1)
   defp strip_segment(bare), do: bare
 
-  # Emits a member access (`.name`), quoting any key that is not a bare Elixir
-  # identifier so dashes/spaces/leading digits survive the source round-trip.
-  defp dot_access(name) do
-    if simple_identifier?(name), do: ".#{name}", else: "." <> inspect(name)
+  defp this_var(context), do: Map.get(context, :this_var, :root)
+  defp parent_var(context), do: Map.get(context, :parent_var, nil)
+
+  # Iteration data variables exist only inside an `#each`; reject them elsewhere.
+  defp iteration_var(%{in_each: true}, var), do: var
+
+  defp iteration_var(_context, _var) do
+    raise ArgumentError, "iteration variables (@index/@index1/@key/@first/@last) require an #each"
+  end
+
+  # A bare identifier or the root of an implicit path, resolved against the
+  # current context: a field of the current item inside `#each`, otherwise a
+  # top-level assign (preserving `#with`'s assign-based bare lookups).
+  defp implicit_source(%{in_each: true} = context, root, rest),
+    do: field_chain(this_var(context), [root | rest])
+
+  defp implicit_source(_context, root, rest),
+    do: field_chain(assign_marker(root), rest)
+
+  # Lower a contextual reference (@this/@parent/@root) plus its path. When the
+  # context resolves to the render root, the first segment is an assign read so
+  # `@this.name`/`@root.name` are identical to `{{name}}`; otherwise it is a
+  # field chain rooted at the context binding.
+  defp context_source(:root, []), do: "assigns"
+  defp context_source(:root, [root | rest]), do: field_chain(assign_marker(root), rest)
+  defp context_source(var, segments) when is_binary(var), do: field_chain(var, segments)
+
+  # Fold member access through the tolerant runtime accessor so missing keys and
+  # out-of-range list indices render empty instead of raising.
+  defp field_chain(base, segments) do
+    Enum.reduce(segments, base, fn segment, acc ->
+      "Stem.Runtime.get_field(#{acc}, #{segment_key(segment)})"
+    end)
+  end
+
+  # A numeric segment lowers to an integer list index; any other segment to an
+  # atom map key.
+  defp segment_key(segment) do
+    case Integer.parse(segment) do
+      {index, ""} -> Integer.to_string(index)
+      _ -> inspect(String.to_atom(segment))
+    end
   end
 
   # Emits an assign read. A bare key keeps the familiar `@name` marker; a literal
@@ -639,7 +688,7 @@ defmodule Stem.Expression do
 
     entries =
       if context.in_each do
-        ["this: current", "key: stem_key" | base]
+        ["this: #{this_var(context)}", "key: stem_key" | base]
       else
         base
       end
@@ -800,13 +849,4 @@ defmodule Stem.Expression do
   defp delimiter_token(?:), do: :colon
 
   defp token_value({_kind, value}), do: value
-
-  defp strip_parent_segments("../" <> rest), do: strip_parent_segments(rest)
-  defp strip_parent_segments(rest), do: rest
-
-  defp valid_parent_identifier?(expr) do
-    expr
-    |> strip_parent_segments()
-    |> simple_identifier?()
-  end
 end

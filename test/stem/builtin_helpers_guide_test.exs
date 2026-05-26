@@ -38,33 +38,33 @@ defmodule Stem.BuiltinHelpersGuideTest do
 
   describe "each helper examples" do
     test "iterate list values" do
-      template = "{{#each items}}<li>{{this}}</li>{{/each}}"
+      template = "{{#each items}}<li>{{@this}}</li>{{/each}}"
 
       assert Stem.TestTemplate.eval_string(template, assigns: [items: ["a", "b"]]) ==
                "<li>a</li><li>b</li>"
     end
 
     test "index access with @index" do
-      template = "{{#each items}}{{@index}}:{{this}};{{/each}}"
+      template = "{{#each items}}{{@index}}:{{@this}};{{/each}}"
       assert Stem.TestTemplate.eval_string(template, assigns: [items: ["a", "b"]]) == "0:a;1:b;"
     end
 
     test "object iteration with @key" do
-      template = "{{#each map}}{{@key}}: {{this}}{{/each}}"
+      template = "{{#each map}}{{@key}}: {{@this}}{{/each}}"
 
       assert Stem.TestTemplate.eval_string(template, assigns: [map: %{firstName: "Homer"}]) ==
                "firstName: Homer"
     end
 
     test "each with else" do
-      template = "{{#each items}}{{this}}{{else}}empty{{/each}}"
+      template = "{{#each items}}{{@this}}{{else}}empty{{/each}}"
       assert Stem.TestTemplate.eval_string(template, assigns: [items: []]) == "empty"
     end
   end
 
   describe "with helper examples" do
     test "basic with block" do
-      template = "{{#with story}}{{this.title}} by {{this.author}}{{/with}}"
+      template = "{{#with story}}{{@this.title}} by {{@this.author}}{{/with}}"
       assigns = [story: %{title: "The Story", author: "A. Writer"}]
 
       assert Stem.TestTemplate.eval_string(template, assigns: assigns) ==
@@ -72,7 +72,7 @@ defmodule Stem.BuiltinHelpersGuideTest do
     end
 
     test "with uses Handlebars truthiness (0, empty string are falsey)" do
-      template = "{{#with value}}{{this}}{{else}}empty{{/with}}"
+      template = "{{#with value}}{{@this}}{{else}}empty{{/with}}"
 
       assert Stem.TestTemplate.eval_string(template, assigns: [value: 0]) == "empty"
       assert Stem.TestTemplate.eval_string(template, assigns: [value: ""]) == "empty"

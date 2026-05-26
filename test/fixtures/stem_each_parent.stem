@@ -1,2 +1,2 @@
-{{#each people}}  {{../prefix}} {{firstname}}
+{{#each people}}  {{@parent.prefix}} {{firstname}}
 {{/each}}

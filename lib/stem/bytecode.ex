@@ -98,10 +98,14 @@ defmodule Stem.Bytecode do
           | {:assigns}
           | {:local, atom()}
           | {:this}
+          | {:parent}
+          | {:root}
           | {:index}
           | {:index1}
           | {:key}
-          | {:get, value_op(), [atom()]}
+          | {:first}
+          | {:last}
+          | {:get, value_op(), [atom() | integer()]}
           | {:call, binary(), [value_op()], [{atom(), value_op()}]}
 
   @type instruction ::
@@ -129,7 +133,7 @@ defmodule Stem.Bytecode do
   @spec compile(Stem.AST.t(), keyword()) :: Program.t()
   def compile(nodes, opts \\ []) when is_list(nodes) and is_list(opts) do
     escape_default = Keyword.get(opts, :escape, :html)
-    scope = %{in_each: false, has_this: false, locals: MapSet.new()}
+    scope = %{in_each: false, has_parent: false, locals: MapSet.new()}
     instructions = compile_nodes(nodes, scope, %{}, [], escape_default)
     names = transformer_names(instructions)
 
@@ -205,12 +209,16 @@ defmodule Stem.Bytecode do
   defp wire_value({:assigns}), do: %{"t" => "assigns"}
   defp wire_value({:local, name}), do: %{"t" => "local", "name" => Atom.to_string(name)}
   defp wire_value({:this}), do: %{"t" => "this"}
+  defp wire_value({:parent}), do: %{"t" => "parent"}
+  defp wire_value({:root}), do: %{"t" => "root"}
   defp wire_value({:index}), do: %{"t" => "index"}
   defp wire_value({:index1}), do: %{"t" => "index1"}
   defp wire_value({:key}), do: %{"t" => "key"}
+  defp wire_value({:first}), do: %{"t" => "first"}
+  defp wire_value({:last}), do: %{"t" => "last"}
 
   defp wire_value({:get, base, segments}) do
-    %{"t" => "get", "base" => wire_value(base), "segments" => Enum.map(segments, &to_string/1)}
+    %{"t" => "get", "base" => wire_value(base), "segments" => Enum.map(segments, &wire_segment/1)}
   end
 
   defp wire_value({:call, name, positional, keyword}) do
@@ -222,6 +230,11 @@ defmodule Stem.Bytecode do
         Map.new(keyword, fn {key, value} -> {Atom.to_string(key), wire_value(value)} end)
     }
   end
+
+  # A named segment crosses the boundary as a string (map key); a numeric segment
+  # as a number (list index), so the consumer keeps the list-vs-map distinction.
+  defp wire_segment(segment) when is_integer(segment), do: segment
+  defp wire_segment(segment), do: Atom.to_string(segment)
 
   # ── Node lowering ────────────────────────────────────────────────────────────
 
@@ -277,7 +290,7 @@ defmodule Stem.Bytecode do
     body_scope = %{
       scope
       | in_each: true,
-        has_this: true,
+        has_parent: true,
         locals: MapSet.union(scope.locals, MapSet.new(params))
     }
 
@@ -295,7 +308,11 @@ defmodule Stem.Bytecode do
          stack,
          escape_default
        ) do
-    body_scope = %{scope | has_this: true, locals: MapSet.union(scope.locals, MapSet.new(params))}
+    body_scope = %{
+      scope
+      | has_parent: true,
+        locals: MapSet.union(scope.locals, MapSet.new(params))
+    }
 
     [
       {:with, compile_value(expr, scope), Enum.map(params, &String.to_atom/1),
@@ -324,7 +341,7 @@ defmodule Stem.Bytecode do
       end
 
     hash = Enum.map(hash_kw, fn {key, value} -> {key, compile_value(value, scope)} end)
-    body_scope = %{in_each: false, has_this: false, locals: MapSet.new()}
+    body_scope = %{in_each: false, has_parent: false, locals: MapSet.new()}
 
     [{:scope, base, hash, compile_nodes(body, body_scope, regions, stack, escape_default)}]
   end
@@ -368,41 +385,36 @@ defmodule Stem.Bytecode do
     end
   end
 
-  # A parent path always resolves to a top-level assign, like `to_source/2`.
-  defp compile_value({:parent, name}, _scope), do: {:assign, String.to_atom(name)}
-
-  # `@index`/`@index1` resolve to the loop index inside an each (zero- and
-  # one-based), and to the like-named top-level assigns outside one, mirroring
-  # `Stem.Expression.to_source/2`.
+  # `@index`/`@index1`/`@key`/`@first`/`@last` are bound only by an `#each`.
   defp compile_value({:special, :index}, %{in_each: true}), do: {:index}
-  defp compile_value({:special, :index}, _scope), do: {:assign, :index0}
   defp compile_value({:special, :index1}, %{in_each: true}), do: {:index1}
-  defp compile_value({:special, :index1}, _scope), do: {:assign, :index1}
   defp compile_value({:special, :key}, %{in_each: true}), do: {:key}
-  defp compile_value({:special, :key}, _scope), do: {:assign, :key}
+  defp compile_value({:special, :first}, %{in_each: true}), do: {:first}
+  defp compile_value({:special, :last}, %{in_each: true}), do: {:last}
 
-  defp compile_value({:special, :this}, %{has_this: true}), do: {:this}
-
-  defp compile_value({:special, :this}, _scope) do
-    unsupported("'this' is only bound inside a block helper")
+  defp compile_value({:special, special}, _scope) do
+    unsupported("@#{special} is only available inside an #each")
   end
 
-  defp compile_value({:path, :this, segments}, %{has_this: true}) do
-    {:get, {:this}, Enum.map(segments, &String.to_atom/1)}
-  end
+  # Contextual references: `@this`/`@root` resolve everywhere (the root context is
+  # the render assigns); `@parent` only inside a block.
+  defp compile_value({:path, :this, segments}, _scope), do: get_chain({:this}, segments)
+  defp compile_value({:path, :root, segments}, _scope), do: get_chain({:root}, segments)
 
-  defp compile_value({:path, :this, _segments}, _scope) do
-    unsupported("'this' paths are only valid inside a block helper")
+  defp compile_value({:path, :parent, segments}, %{has_parent: true}),
+    do: get_chain({:parent}, segments)
+
+  defp compile_value({:path, :parent, _segments}, _scope) do
+    unsupported("@parent is only available inside a block (#each / #with)")
   end
 
   defp compile_value({:path, :implicit, [root | rest]}, scope) do
-    rest_atoms = Enum.map(rest, &String.to_atom/1)
-    root_atom = String.to_atom(root)
+    rest_keys = Enum.map(rest, &segment_key/1)
 
     cond do
-      MapSet.member?(scope.locals, root) -> {:get, {:local, root_atom}, rest_atoms}
-      scope.in_each -> {:get, {:this}, [root_atom | rest_atoms]}
-      true -> {:get, {:assign, root_atom}, rest_atoms}
+      MapSet.member?(scope.locals, root) -> {:get, {:local, String.to_atom(root)}, rest_keys}
+      scope.in_each -> {:get, {:this}, [segment_key(root) | rest_keys]}
+      true -> {:get, {:assign, String.to_atom(root)}, rest_keys}
     end
   end
 
@@ -416,6 +428,18 @@ defmodule Stem.Bytecode do
       {positional, keyword} = split_args(args, scope)
       {:call, name, [acc | positional], keyword}
     end)
+  end
+
+  # A bare contextual reference is the context op itself; a path wraps it in a
+  # `get`. Numeric segments index lists; named segments key maps.
+  defp get_chain(base, []), do: base
+  defp get_chain(base, segments), do: {:get, base, Enum.map(segments, &segment_key/1)}
+
+  defp segment_key(segment) do
+    case Integer.parse(segment) do
+      {index, ""} -> index
+      _ -> String.to_atom(segment)
+    end
   end
 
   defp unsupported(detail) do
@@ -578,9 +602,13 @@ defmodule Stem.Bytecode do
   defp disasm_value({:assigns}), do: "ASSIGNS"
   defp disasm_value({:local, name}), do: "LOCAL #{name}"
   defp disasm_value({:this}), do: "THIS"
+  defp disasm_value({:parent}), do: "PARENT"
+  defp disasm_value({:root}), do: "ROOT"
   defp disasm_value({:index}), do: "INDEX0"
   defp disasm_value({:index1}), do: "INDEX1"
   defp disasm_value({:key}), do: "KEY"
+  defp disasm_value({:first}), do: "FIRST"
+  defp disasm_value({:last}), do: "LAST"
 
   defp disasm_value({:get, base, segments}) do
     "GET #{disasm_value(base)} #{Enum.map_join(segments, ".", &to_string/1)}"

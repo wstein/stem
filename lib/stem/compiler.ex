@@ -30,6 +30,8 @@ defmodule Stem.Compiler do
         ),
       escape: Keyword.get(opts, :escape, :html),
       in_each: false,
+      this_var: :root,
+      parent_var: nil,
       locals: %{},
       region_stack: [],
       regions: %{}
@@ -92,19 +94,24 @@ defmodule Stem.Compiler do
     warn_on_unused_block_params(:each, params, body, meta, state)
 
     param_bindings = block_param_bindings(params)
+    item_name = context_var_name()
 
     body_state = %{
       state
       | in_each: true,
+        this_var: item_name,
+        parent_var: state.this_var,
         locals: Map.merge(state.locals, Map.new(param_bindings))
     }
 
     body_ast = compile_nodes(body, body_state)
     else_ast = compile_nodes(else_body, %{state | in_each: false})
 
-    current = genvar(:current)
+    current = block_var(item_name)
     stem_key = genvar(:stem_key)
     stem_index = genvar(:stem_index)
+    stem_first = genvar(:stem_first)
+    stem_last = genvar(:stem_last)
 
     quote do
       Stem.Builtins.each(
@@ -117,7 +124,10 @@ defmodule Stem.Compiler do
             context: :each
           )
         ),
-        fn {unquote(current), unquote(stem_key)}, unquote(stem_index) ->
+        fn {unquote(current), unquote(stem_key)},
+           unquote(stem_index),
+           unquote(stem_first),
+           unquote(stem_last) ->
           unquote_splicing(each_param_assignments(param_bindings, current, stem_key, stem_index))
           unquote(body_ast)
         end,
@@ -128,10 +138,17 @@ defmodule Stem.Compiler do
 
   defp compile_node({:with, expr_ast, params, body, else_body, meta}, state) do
     subject = compile_expression(expr_ast, meta, state)
-    this = genvar(:this)
+    subject_name = context_var_name()
+    this = block_var(subject_name)
     warn_on_unused_block_params(:with, params, body, meta, state)
     param_bindings = block_param_bindings(params)
-    body_state = %{state | locals: Map.merge(state.locals, Map.new(param_bindings))}
+
+    body_state = %{
+      state
+      | this_var: subject_name,
+        parent_var: state.this_var,
+        locals: Map.merge(state.locals, Map.new(param_bindings))
+    }
 
     quote do
       unquote(this) = unquote(subject)
@@ -161,12 +178,21 @@ defmodule Stem.Compiler do
     base =
       cond do
         context_ast != nil -> compile_expression(context_ast, meta, state)
-        state.in_each -> Macro.var(:current, nil)
+        is_binary(state.this_var) -> block_var(state.this_var)
         true -> Macro.var(:assigns, nil)
       end
 
     hash = compile_partial_hash(hash_kw, meta, state)
-    body_ast = compile_nodes(body, %{state | in_each: false, locals: %{}})
+
+    body_ast =
+      compile_nodes(body, %{
+        state
+        | in_each: false,
+          this_var: :root,
+          parent_var: nil,
+          locals: %{}
+      })
+
     assigns = Macro.var(:assigns, nil)
 
     quote do
@@ -189,14 +215,13 @@ defmodule Stem.Compiler do
   end
 
   defp compile_expression(expr_ast, meta, state) do
-    source = Expression.to_source(expr_ast, %{in_each: state.in_each, locals: state.locals})
-
-    if String.contains?(source, "../") do
-      raise CompileError,
-        file: state.file,
-        line: meta.line,
-        description: "unsupported parent path traversal (`../`) in Stem expression"
-    end
+    source =
+      Expression.to_source(expr_ast, %{
+        in_each: state.in_each,
+        locals: state.locals,
+        this_var: state.this_var,
+        parent_var: state.parent_var
+      })
 
     source
     |> Code.string_to_quoted!(file: state.file, line: meta.line, column: meta.column)
@@ -242,6 +267,11 @@ defmodule Stem.Compiler do
   # Variables introduced by the compiler. The `generated: true` flag keeps the
   # compiler from warning when a loop or `with` binding goes unused in a body.
   defp genvar(name), do: {name, [generated: true], nil}
+
+  # A collision-free name for a block's `@this` context binding. Each `#each`/
+  # `#with` gets its own so nested blocks chain (via `@parent`) instead of
+  # shadowing, and the string name round-trips through `Stem.Expression` output.
+  defp context_var_name, do: "stem_this_#{System.unique_integer([:positive])}"
 
   # Bind each block parameter to a fresh, collision-free variable rather than to
   # a variable named after the author's chosen name. The author's name can be

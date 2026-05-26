@@ -42,13 +42,21 @@ defmodule Stem.Bytecode.VM do
   """
   @spec render(Program.t(), bindings()) :: binary()
   def render(%Program{instructions: instructions}, bindings \\ []) do
+    assigns = Keyword.get(bindings, :assigns, [])
+
     context = %{
-      assigns: Keyword.get(bindings, :assigns, []),
+      assigns: assigns,
       transformers: Keyword.get(bindings, :transformers, %{}),
       warn: Keyword.get(bindings, :warn_on_missing_assigns, false),
-      this: nil,
+      # The root context: `@this`/`@root` resolve to the render assigns; there is
+      # no enclosing context and no active iteration.
+      this: assigns,
+      root: assigns,
+      parent: nil,
       index: nil,
       key: nil,
+      first: nil,
+      last: nil,
       in_each: false,
       locals: %{}
     }
@@ -82,8 +90,11 @@ defmodule Stem.Bytecode.VM do
   defp exec({:each, collection_op, params, body, else_branch}, context) do
     Stem.Builtins.each(
       Stem.Builtins.each_entries(eval(collection_op, context)),
-      fn {current, key}, index ->
-        render_instructions(body, each_context(context, params, current, key, index))
+      fn {current, key}, index, first, last ->
+        render_instructions(
+          body,
+          each_context(context, params, current, key, index, first, last)
+        )
       end,
       fn -> render_instructions(else_branch, %{context | in_each: false}) end
     )
@@ -109,7 +120,7 @@ defmodule Stem.Bytecode.VM do
   #   |item|              -> item
   #   |item key|          -> item, key (the map key, or the index for lists)
   #   |item index0 index1| -> item, zero-based index, one-based index
-  defp each_context(context, params, current, key, index) do
+  defp each_context(context, params, current, key, index, first, last) do
     locals =
       case params do
         [] ->
@@ -128,7 +139,17 @@ defmodule Stem.Bytecode.VM do
           |> Map.put(index1, index + 1)
       end
 
-    %{context | this: current, key: key, index: index, in_each: true, locals: locals}
+    %{
+      context
+      | this: current,
+        parent: context.this,
+        key: key,
+        index: index,
+        first: first,
+        last: last,
+        in_each: true,
+        locals: locals
+    }
   end
 
   defp with_context(context, params, subject) do
@@ -138,13 +159,25 @@ defmodule Stem.Bytecode.VM do
         [item] -> Map.put(context.locals, item, subject)
       end
 
-    %{context | this: subject, locals: locals}
+    %{context | this: subject, parent: context.this, locals: locals}
   end
 
   # A partial scope rebinds the assigns to the merged scope map and resets the
   # block-scoped state, mirroring the compiled backend's fresh non-each scope.
   defp scope_context(context, assigns) do
-    %{context | assigns: assigns, this: nil, index: nil, key: nil, in_each: false, locals: %{}}
+    %{
+      context
+      | assigns: assigns,
+        this: assigns,
+        root: assigns,
+        parent: nil,
+        index: nil,
+        key: nil,
+        first: nil,
+        last: nil,
+        in_each: false,
+        locals: %{}
+    }
   end
 
   defp eval({:lit, value}, _context), do: value
@@ -157,12 +190,18 @@ defmodule Stem.Bytecode.VM do
 
   defp eval({:local, name}, context), do: Map.fetch!(context.locals, name)
   defp eval({:this}, context), do: context.this
+  defp eval({:parent}, context), do: context.parent
+  defp eval({:root}, context), do: context.root
   defp eval({:index}, context), do: context.index
   defp eval({:index1}, context), do: context.index + 1
   defp eval({:key}, context), do: context.key
+  defp eval({:first}, context), do: context.first
+  defp eval({:last}, context), do: context.last
 
   defp eval({:get, base, segments}, context) do
-    Enum.reduce(segments, eval(base, context), &get_field(&2, &1))
+    Enum.reduce(segments, eval(base, context), fn segment, acc ->
+      Stem.Runtime.get_field(acc, segment)
+    end)
   end
 
   defp eval({:call, name, positional, keyword}, context) do
@@ -186,15 +225,6 @@ defmodule Stem.Bytecode.VM do
 
   defp invoke_bindings(context) do
     [assigns: context.assigns, transformers: context.transformers]
-  end
-
-  # Mirror Elixir's `.` map access used by the compiled backend: an atom-keyed
-  # fetch that raises on a missing key or a non-map value.
-  defp get_field(value, key) when is_map(value), do: Map.fetch!(value, key)
-
-  defp get_field(value, key) do
-    raise ArgumentError,
-          "cannot access field #{inspect(key)} on #{inspect(value)}: not a map"
   end
 
   defp apply_escape(string, :none), do: string

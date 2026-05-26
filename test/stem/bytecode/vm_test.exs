@@ -43,10 +43,9 @@ defmodule Stem.Bytecode.VMTest do
                "Nina"
     end
 
-    test "accessing a field on a non-map raises" do
-      assert_raise ArgumentError, ~r/not a map/, fn ->
-        render("{{user.name}}", assigns: %{user: 5})
-      end
+    test "accessing a field on a non-map or a missing key renders empty" do
+      assert render("{{user.name}}", assigns: %{user: 5}) == ""
+      assert render("[{{user.name}}]", assigns: %{user: %{}}) == "[]"
     end
 
     test "escapes HTML by default and leaves raw triple-stash unescaped" do
@@ -105,7 +104,7 @@ defmodule Stem.Bytecode.VMTest do
     end
 
     test "iterates with this, @index, @key, and block parameters" do
-      assert render("{{#each xs}}{{@index}}:{{this}} {{/each}}", assigns: %{xs: ["a", "b"]}) ==
+      assert render("{{#each xs}}{{@index}}:{{@this}} {{/each}}", assigns: %{xs: ["a", "b"]}) ==
                "0:a 1:b "
 
       assert render("{{#each xs as |item|}}<{{item}}>{{/each}}", assigns: %{xs: ["a", "b"]}) ==
@@ -114,7 +113,7 @@ defmodule Stem.Bytecode.VMTest do
       assert render("{{#each xs as |x i|}}{{i}}={{x}};{{/each}}", assigns: %{xs: ["a", "b"]}) ==
                "0=a;1=b;"
 
-      assert render("{{#each m}}{{@key}}={{this}} {{/each}}", assigns: %{m: %{a: 1}}) == "a=1 "
+      assert render("{{#each m}}{{@key}}={{@this}} {{/each}}", assigns: %{m: %{a: 1}}) == "a=1 "
     end
 
     test "binds @index1 and the three-param each form (item, index0, index1)" do
@@ -131,17 +130,19 @@ defmodule Stem.Bytecode.VMTest do
     end
 
     test "renders the else branch for an empty collection" do
-      assert render("{{#each xs}}{{this}}{{else}}empty{{/each}}", assigns: %{xs: []}) == "empty"
+      assert render("{{#each xs}}{{@this}}{{else}}empty{{/each}}", assigns: %{xs: []}) == "empty"
     end
 
     test "binds the subject of with and falls back on a falsy subject" do
-      assert render("{{#with u}}{{this.name}}{{/with}}", assigns: %{u: %{name: "Nina"}}) == "Nina"
+      assert render("{{#with u}}{{@this.name}}{{/with}}", assigns: %{u: %{name: "Nina"}}) ==
+               "Nina"
+
       assert render("{{#with u as |x|}}{{x.name}}{{/with}}", assigns: %{u: %{name: "A"}}) == "A"
       assert render("{{#with u}}x{{else}}none{{/with}}", assigns: %{u: nil}) == "none"
     end
 
     test "reaches the parent scope from inside a loop" do
-      assert render("{{#each xs}}{{../sep}}{{this}}{{/each}}",
+      assert render("{{#each xs}}{{@parent.sep}}{{@this}}{{/each}}",
                assigns: %{xs: ["a", "b"], sep: "-"}
              ) ==
                "-a-b"
@@ -193,7 +194,7 @@ defmodule Stem.Bytecode.VMTest do
 
     test "context argument works inside each" do
       assert render(
-               "{{#each users}}{{> card this}}{{/each}}",
+               "{{#each users}}{{> card @this}}{{/each}}",
                [assigns: [users: [%{name: "A"}, %{name: "B"}]]],
                partials: %{card: "[{{name}}]"}
              ) == "[A][B]"

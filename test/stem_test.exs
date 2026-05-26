@@ -149,44 +149,46 @@ defmodule StemTest do
     end
 
     test "each iterates with this, @index, and @key" do
-      assert eval("{{#each xs}}{{@index}}:{{this}};{{/each}}", assigns: [xs: ["a", "b"]]) ==
+      assert eval("{{#each xs}}{{@index}}:{{@this}};{{/each}}", assigns: [xs: ["a", "b"]]) ==
                "0:a;1:b;"
 
-      assert eval("{{#each m}}{{@key}}={{this}}{{/each}}", assigns: [m: %{a: 1}]) == "a=1"
+      assert eval("{{#each m}}{{@key}}={{@this}}{{/each}}", assigns: [m: %{a: 1}]) == "a=1"
     end
 
     test "this.field paths resolve the current item inside each" do
       assigns = [people: [%{name: "Ada", role: "lead"}, %{name: "Grace", role: "dev"}]]
 
-      assert eval("{{#each people}}{{this.name}}:{{this.role}};{{/each}}", assigns: assigns) ==
+      assert eval("{{#each people}}{{@this.name}}:{{@this.role}};{{/each}}", assigns: assigns) ==
                "Ada:lead;Grace:dev;"
     end
 
     test "each else renders for empty collections" do
-      assert eval("{{#each xs}}{{this}}{{else}}empty{{/each}}", assigns: [xs: []]) == "empty"
+      assert eval("{{#each xs}}{{@this}}{{else}}empty{{/each}}", assigns: [xs: []]) == "empty"
     end
 
     test "with binds this" do
       assigns = [story: %{title: "T", author: "A"}]
 
-      assert eval("{{#with story}}{{this.title}} by {{this.author}}{{/with}}", assigns: assigns) ==
+      assert eval("{{#with story}}{{@this.title}} by {{@this.author}}{{/with}}", assigns: assigns) ==
                "T by A"
     end
 
     test "dot renders the current context like this" do
-      assert eval("Hello {{#with name}}{{.}}{{/with}}!", assigns: [name: "Nina"]) == "Hello Nina!"
-      assert eval("{{#each xs}}{{.}};{{/each}}", assigns: [xs: ["a", "b"]]) == "a;b;"
+      assert eval("Hello {{#with name}}{{@this}}{{/with}}!", assigns: [name: "Nina"]) ==
+               "Hello Nina!"
+
+      assert eval("{{#each xs}}{{@this}};{{/each}}", assigns: [xs: ["a", "b"]]) == "a;b;"
     end
 
     test "nested blocks" do
-      template = "{{#each rows}}{{#if this}}[{{this}}]{{/if}}{{/each}}"
+      template = "{{#each rows}}{{#if @this}}[{{@this}}]{{/if}}{{/each}}"
       assert eval(template, assigns: [rows: [1, false, 2]]) == "[1][2]"
     end
 
     test "parent traversal reaches top-level assigns inside each" do
       assigns = [prefix: "Mr.", people: [%{firstname: "Nina"}]]
 
-      assert eval("{{#each people}}{{../prefix}} {{firstname}}{{/each}}", assigns: assigns) ==
+      assert eval("{{#each people}}{{@parent.prefix}} {{firstname}}{{/each}}", assigns: assigns) ==
                "Mr. Nina"
     end
 
@@ -391,7 +393,7 @@ defmodule StemTest do
 
     test "context argument works inside each" do
       assert eval(
-               "{{#each users}}{{> card this}}{{/each}}",
+               "{{#each users}}{{> card @this}}{{/each}}",
                [assigns: [users: [%{name: "A"}, %{name: "B"}]]],
                partials: %{card: "[{{name}}]"}
              ) == "[A][B]"

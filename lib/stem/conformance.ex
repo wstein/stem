@@ -51,7 +51,7 @@ defmodule Stem.Conformance do
       data: %{user: %{name: "Nina", email: "n@x.io"}},
       transformers: []
     },
-    %{name: "parent path", template: "{{../title}}", data: %{title: "Home"}, transformers: []},
+    %{name: "root path", template: "{{@root.title}}", data: %{title: "Home"}, transformers: []},
     %{
       name: "string pipeline",
       template: "{{name | trim | upcase}}",
@@ -147,7 +147,7 @@ defmodule Stem.Conformance do
     },
     %{
       name: "each with this and index",
-      template: "{{#each items}}{{@index}}:{{this}} {{/each}}",
+      template: "{{#each items}}{{@index}}:{{@this}} {{/each}}",
       data: %{items: ["x", "y"]},
       transformers: []
     },
@@ -169,25 +169,25 @@ defmodule Stem.Conformance do
     # any map, since both backends iterate the same map identically.)
     %{
       name: "each over a map with key",
-      template: "{{#each rows}}{{@key}}={{this}} {{/each}}",
+      template: "{{#each rows}}{{@key}}={{@this}} {{/each}}",
       data: %{rows: %{role: "admin"}},
       transformers: []
     },
     %{
       name: "each empty else",
-      template: "{{#each items}}{{this}}{{else}}none{{/each}}",
+      template: "{{#each items}}{{@this}}{{else}}none{{/each}}",
       data: %{items: []},
       transformers: []
     },
     %{
       name: "each with transformer",
-      template: "{{#each names}}{{this | upcase}} {{/each}}",
+      template: "{{#each names}}{{@this | upcase}} {{/each}}",
       data: %{names: ["a", "b"]},
       transformers: [:strings]
     },
     %{
       name: "with this-field",
-      template: "{{#with user}}{{this.name}}{{/with}}",
+      template: "{{#with user}}{{@this.name}}{{/with}}",
       data: %{user: %{name: "Nina"}},
       transformers: []
     },
@@ -199,8 +199,41 @@ defmodule Stem.Conformance do
     },
     %{
       name: "nested each and if",
-      template: "{{#each items}}{{#if this}}<{{this}}>{{/if}}{{/each}}",
+      template: "{{#each items}}{{#if @this}}<{{@this}}>{{/if}}{{/each}}",
       data: %{items: ["a", "", "b"]},
+      transformers: []
+    },
+    # Contextual data variables: @this everywhere, @root, @parent (immediate
+    # enclosing), @first/@last, and numeric list indexing.
+    %{
+      name: "this path at top level",
+      template: "{{@this.name}}",
+      data: %{name: "Nina"},
+      transformers: []
+    },
+    %{
+      name: "root inside each",
+      template: "{{#each items}}{{@root.title}}:{{@this}};{{/each}}",
+      data: %{title: "T", items: ["a", "b"]},
+      transformers: []
+    },
+    %{
+      name: "first and last flags",
+      template: "{{#each items}}{{#if @first}}[{{/if}}{{@this}}{{#if @last}}]{{/if}}{{/each}}",
+      data: %{items: ["a", "b", "c"]},
+      transformers: []
+    },
+    %{
+      name: "nested each with parent",
+      template:
+        "{{#each outer}}{{#each @this.inner}}{{@parent.tag}}-{{@this}};{{/each}}{{/each}}",
+      data: %{outer: [%{tag: "x", inner: ["1", "2"]}, %{tag: "y", inner: ["3"]}]},
+      transformers: []
+    },
+    %{
+      name: "numeric list index",
+      template: "{{items.[1]}}",
+      data: %{items: ["a", "b", "c"]},
       transformers: []
     },
     %{

@@ -264,21 +264,20 @@ defmodule Stem.FuzzTest do
 
   defp identifier_generator, do: member_of(@idents)
 
+  # `@root` resolves anywhere; `@parent` and the iteration variables are only
+  # valid inside a block, which this context-free generator cannot guarantee.
   defp parent_generator do
     member_of(@idents)
-    |> map(fn ident -> "../#{ident}" end)
+    |> map(fn ident -> "@root.#{ident}" end)
   end
 
   defp special_generator do
-    member_of(["this", "@index", "@key"])
+    member_of(["@this", "@root"])
   end
 
   defp path_generator do
     fixed_list([member_of(@idents), list_of(member_of(@idents), min_length: 1, max_length: 2)])
-    |> map(fn
-      ["this", parts] -> Enum.join(["this" | parts], ".")
-      [root, parts] -> Enum.join([root | parts], ".")
-    end)
+    |> map(fn [root, parts] -> Enum.join([root | parts], ".") end)
   end
 
   defp literal_generator do

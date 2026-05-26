@@ -56,6 +56,31 @@ defmodule Stem.Runtime do
   defp to_scope_map(_other), do: %{}
 
   @doc """
+  Resolves one path segment against a value, tolerantly.
+
+  A map is keyed by the segment (atom keys preferred, with a string-key
+  fallback for JSON-shaped data); a list is indexed by an integer segment.
+  Anything else — a missing key, an out-of-range index, or a scalar — yields
+  `nil` so templates render empty instead of raising.
+  """
+  @spec get_field(term(), atom() | binary() | integer()) :: term()
+  def get_field(value, key) when is_map(value) and is_atom(key) do
+    case Map.fetch(value, key) do
+      {:ok, found} -> found
+      :error -> Map.get(value, Atom.to_string(key))
+    end
+  end
+
+  def get_field(value, key) when is_map(value), do: Map.get(value, key)
+  def get_field(value, index) when is_list(value) and is_integer(index), do: Enum.at(value, index)
+
+  def get_field(value, key) when is_list(value) and is_atom(key) do
+    if Keyword.keyword?(value), do: Keyword.get(value, key)
+  end
+
+  def get_field(_value, _key), do: nil
+
+  @doc """
   Checks if a value is truthy according to Handlebars semantics.
 
   Falsey values: false, nil, 0, "", [], %{}

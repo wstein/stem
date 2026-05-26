@@ -53,7 +53,7 @@ defmodule Stem.StemMigrationTest do
   end
 
   test "each block helper with this context" do
-    template = "{{#each items}}[{{this}}]{{/each}}"
+    template = "{{#each items}}[{{@this}}]{{/each}}"
     assert Stem.TestTemplate.eval_string(template, assigns: [items: ["a", "b"]]) == "[a][b]"
   end
 
@@ -107,7 +107,7 @@ defmodule Stem.StemMigrationTest do
 
   test "helper can use current each-item context" do
     Stem.Transformers.register(:wrap, fn [value], %{this: this} -> "#{value}:#{this}" end)
-    template = "{{#each items}}({{this}}:{{wrap \"item\"}}){{/each}}"
+    template = "{{#each items}}({{@this}}:{{wrap \"item\"}}){{/each}}"
 
     assert Stem.TestTemplate.eval_string(template, assigns: [items: [1, 2]]) ==
              "(1:item:1)(2:item:2)"

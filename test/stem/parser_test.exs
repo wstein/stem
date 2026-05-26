@@ -32,9 +32,10 @@ defmodule Stem.ParserTest do
 
   test "each, unless, with blocks" do
     assert [
-             {:each, {:identifier, "items"}, [], [{:expr, {:special, :this}, :default, _}], [], _}
+             {:each, {:identifier, "items"}, [], [{:expr, {:path, :this, []}, :default, _}], [],
+              _}
            ] =
-             ast("{{#each items}}{{this}}{{/each}}")
+             ast("{{#each items}}{{@this}}{{/each}}")
 
     assert [{:unless, {:identifier, "flag"}, [{:text, "x"}], [], _}] =
              ast("{{#unless flag}}x{{/unless}}")
@@ -43,7 +44,7 @@ defmodule Stem.ParserTest do
              {:with, {:identifier, "story"}, [],
               [{:expr, {:path, :this, ["title"]}, :default, _}], [], _}
            ] =
-             ast("{{#with story}}{{this.title}}{{/with}}")
+             ast("{{#with story}}{{@this.title}}{{/with}}")
   end
 
   test "region blocks and yields" do

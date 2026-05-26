@@ -47,9 +47,9 @@ defmodule Stem.BytecodeTest do
       assert program.instructions == [{:emit, {:get, {:assign, :user}, [:profile, :name]}, :html}]
     end
 
-    test "treats a parent path as a top-level assign, matching the compiled backend" do
-      program = compile("{{../title}}")
-      assert program.instructions == [{:emit, {:assign, :title}, :html}]
+    test "lowers @root to a get over the render root" do
+      program = compile("{{@root.title}}")
+      assert program.instructions == [{:emit, {:get, {:root}, [:title]}, :html}]
     end
 
     test "raw triple-stash expressions are not escaped" do
@@ -165,7 +165,7 @@ defmodule Stem.BytecodeTest do
     end
 
     test "lowers with, binding this for this-references" do
-      program = compile("{{#with user}}{{this.name}}{{/with}}")
+      program = compile("{{#with user}}{{@this.name}}{{/with}}")
 
       assert program.instructions ==
                [{:with, {:assign, :user}, [], [{:emit, {:get, {:this}, [:name]}, :html}], []}]
@@ -182,10 +182,12 @@ defmodule Stem.BytecodeTest do
              ]
     end
 
-    test "@index/@index1 and @key outside each resolve to top-level assigns" do
-      assert compile("{{@index}}").instructions == [{:emit, {:assign, :index0}, :html}]
-      assert compile("{{@index1}}").instructions == [{:emit, {:assign, :index1}, :html}]
-      assert compile("{{@key}}").instructions == [{:emit, {:assign, :key}, :html}]
+    test "iteration variables outside each raise UnsupportedError" do
+      for source <- ["{{@index}}", "{{@index1}}", "{{@key}}", "{{@first}}", "{{@last}}"] do
+        assert_raise UnsupportedError, ~r/only available inside an #each/, fn ->
+          compile(source)
+        end
+      end
     end
   end
 
@@ -196,9 +198,14 @@ defmodule Stem.BytecodeTest do
       end
     end
 
-    test "a top-level this reference raises UnsupportedError" do
-      for source <- ["{{this}}", "{{this.name}}"] do
-        assert_raise UnsupportedError, ~r/this/, fn -> compile(source) end
+    test "@this resolves to the render root at the top level" do
+      assert compile("{{@this}}").instructions == [{:emit, {:this}, :html}]
+      assert compile("{{@this.name}}").instructions == [{:emit, {:get, {:this}, [:name]}, :html}]
+    end
+
+    test "@parent outside a block raises UnsupportedError" do
+      assert_raise UnsupportedError, ~r/@parent is only available inside a block/, fn ->
+        compile("{{@parent.x}}")
       end
     end
   end
@@ -220,7 +227,7 @@ defmodule Stem.BytecodeTest do
 
     test "uses this as the scope base inside each" do
       program =
-        compile("{{#each users}}{{> card this}}{{/each}}", partials: %{card: "{{name}}"})
+        compile("{{#each users}}{{> card @this}}{{/each}}", partials: %{card: "{{name}}"})
 
       assert [{:each, _subject, _params, [{:scope, {:this}, [], _body}], _else}] =
                program.instructions
@@ -290,8 +297,8 @@ defmodule Stem.BytecodeTest do
     test "serializes every block and block-scoped op, and JSON-encodes cleanly" do
       wire =
         """
-        A{{#each xs as |item|}}{{@key}}/{{@index}}/{{@index1}}/{{this}}/{{item}}\
-        {{#if item}}{{default name "x"}}{{else}}{{../p}}{{/if}}\
+        A{{#each xs as |item|}}{{@key}}/{{@index}}/{{@index1}}/{{@this}}/{{item}}\
+        {{#if item}}{{default name "x"}}{{else}}{{@parent.p}}{{/if}}\
         {{/each}}B{{#with u as |w|}}{{w.k}}{{/with}}
         """
         |> compile()
@@ -299,7 +306,7 @@ defmodule Stem.BytecodeTest do
 
       tags = collect_tags(wire["instructions"])
 
-      for tag <- ~w(each with if emit text assign local this index index1 key get call lit) do
+      for tag <- ~w(each with if emit text assign local this parent index index1 key get call lit) do
         assert tag in tags, "expected wire output to contain a #{tag} node"
       end
 
@@ -342,7 +349,7 @@ defmodule Stem.BytecodeTest do
 
     test "renders loops and with, including block-scoped values" do
       disasm =
-        "{{#each xs}}{{@index}}{{@index1}}{{@key}}{{this}}{{/each}}{{#with u}}ok{{/with}}"
+        "{{#each xs}}{{@index}}{{@index1}}{{@key}}{{@this}}{{/each}}{{#with u}}ok{{/with}}"
         |> compile()
         |> Bytecode.disasm()
 

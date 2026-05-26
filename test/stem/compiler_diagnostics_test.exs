@@ -126,7 +126,7 @@ defmodule Stem.CompilerDiagnosticsTest do
       capture_io(:stderr, fn ->
         quoted =
           compile_template(
-            "{{#unless false}}ok{{/unless}}{{#with story as |article|}}{{this.title}}{{/with}}"
+            "{{#unless false}}ok{{/unless}}{{#with story as |article|}}{{@this.title}}{{/with}}"
           )
 
         Code.eval_quoted(quoted, assigns: %{story: %{title: "Stem"}}, transformers: %{})
@@ -153,7 +153,7 @@ defmodule Stem.CompilerDiagnosticsTest do
       capture_io(:stderr, fn ->
         quoted =
           compile_template(
-            "{{#if zero}}if{{/if}}{{#with empty_map}}with{{/with}}{{#each empty_list}}{{this}}{{/each}}",
+            "{{#if zero}}if{{/if}}{{#with empty_map}}with{{/with}}{{#each empty_list}}{{@this}}{{/each}}",
             warn_on_falsy_coercion: true
           )
 

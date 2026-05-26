@@ -99,26 +99,31 @@ defmodule Stem.BuiltinsTest do
   describe "each function" do
     test "each with non-empty entries calls do_fun for each item" do
       entries = [{1, nil}, {2, nil}, {3, nil}]
-      result = Stem.Builtins.each(entries, fn {val, _}, idx -> "#{val}:#{idx}," end)
+
+      result =
+        Stem.Builtins.each(entries, fn {val, _}, idx, _first, _last -> "#{val}:#{idx}," end)
 
       assert result == "1:0,2:1,3:2,"
     end
 
     test "each with empty entries and else_fun calls else_fun" do
-      result = Stem.Builtins.each([], fn _, _ -> "should not be called" end, fn -> "empty" end)
+      result =
+        Stem.Builtins.each([], fn _, _, _, _ -> "should not be called" end, fn -> "empty" end)
 
       assert result == "empty"
     end
 
     test "each with empty entries and no else_fun returns empty string" do
-      result = Stem.Builtins.each([], fn _, _ -> "should not be called" end)
+      result = Stem.Builtins.each([], fn _, _, _, _ -> "should not be called" end)
 
       assert result == ""
     end
 
     test "each joins results into single string" do
       entries = [{1, "a"}, {2, "b"}]
-      result = Stem.Builtins.each(entries, fn {val, _key}, idx -> "#{val}[#{idx}]" end)
+
+      result =
+        Stem.Builtins.each(entries, fn {val, _key}, idx, _first, _last -> "#{val}[#{idx}]" end)
 
       assert result == "1[0]2[1]"
     end
@@ -126,7 +131,7 @@ defmodule Stem.BuiltinsTest do
     test "each passes correct index to each item" do
       entries = [{10, nil}, {20, nil}, {30, nil}]
 
-      result = Stem.Builtins.each(entries, fn _, idx -> idx end)
+      result = Stem.Builtins.each(entries, fn _, idx, _, _ -> idx end)
 
       # With 3 items at indices 0, 1, 2 joined, we get their string concatenation
       assert is_integer(result) or is_binary(result)
@@ -134,14 +139,18 @@ defmodule Stem.BuiltinsTest do
 
     test "each with single item" do
       entries = [{42, "answer"}]
-      result = Stem.Builtins.each(entries, fn {val, key}, idx -> "#{val}-#{key}-#{idx}" end)
+
+      result =
+        Stem.Builtins.each(entries, fn {val, key}, idx, _first, _last ->
+          "#{val}-#{key}-#{idx}"
+        end)
 
       assert result == "42-answer-0"
     end
 
     test "each accumulates strings from all items" do
       entries = [{"a", nil}, {"b", nil}, {"c", nil}]
-      result = Stem.Builtins.each(entries, fn {val, _}, _ -> val end)
+      result = Stem.Builtins.each(entries, fn {val, _}, _, _, _ -> val end)
 
       assert result == "abc"
     end
@@ -174,7 +183,9 @@ defmodule Stem.BuiltinsTest do
     test "each_entries and each work together for iteration" do
       values = [1, 2, 3]
       entries = Stem.Builtins.each_entries(values)
-      result = Stem.Builtins.each(entries, fn {val, _}, idx -> "#{idx}:#{val}|" end)
+
+      result =
+        Stem.Builtins.each(entries, fn {val, _}, idx, _first, _last -> "#{idx}:#{val}|" end)
 
       assert result == "0:1|1:2|2:3|"
     end
@@ -183,14 +194,14 @@ defmodule Stem.BuiltinsTest do
       entries = Stem.Builtins.each_entries(0)
 
       result =
-        Stem.Builtins.each(entries, fn _, _ -> "should not appear" end, fn -> "no items" end)
+        Stem.Builtins.each(entries, fn _, _, _, _ -> "should not appear" end, fn -> "no items" end)
 
       assert result == "no items"
     end
 
     test "each_entries with empty string stops iteration" do
       entries = Stem.Builtins.each_entries("")
-      result = Stem.Builtins.each(entries, fn _, _ -> "x" end, fn -> "skipped" end)
+      result = Stem.Builtins.each(entries, fn _, _, _, _ -> "x" end, fn -> "skipped" end)
 
       assert result == "skipped"
     end

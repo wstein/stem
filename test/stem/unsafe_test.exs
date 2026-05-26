@@ -47,7 +47,7 @@ defmodule Stem.UnsafeTest do
 
   test "Unsafe.eval_string with each block" do
     result =
-      Stem.Unsafe.eval_string("{{#each items}}{{this}}{{/each}}", assigns: [items: [1, 2, 3]])
+      Stem.Unsafe.eval_string("{{#each items}}{{@this}}{{/each}}", assigns: [items: [1, 2, 3]])
 
     assert result == "123"
   end

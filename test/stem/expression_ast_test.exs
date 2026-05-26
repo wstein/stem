@@ -12,10 +12,13 @@ defmodule Stem.ExpressionAstTest do
     assert Expression.format({:special, :index}) == "@index"
     assert Expression.format({:special, :index1}) == "@index1"
     assert Expression.format({:special, :key}) == "@key"
-    assert Expression.format({:special, :this}) == "this"
-    assert Expression.format({:parent, "title"}) == "../title"
+    assert Expression.format({:special, :first}) == "@first"
+    assert Expression.format({:special, :last}) == "@last"
     assert Expression.format({:path, :implicit, ["user", "name"]}) == "user.name"
-    assert Expression.format({:path, :this, ["title"]}) == "this.title"
+    assert Expression.format({:path, :this, []}) == "@this"
+    assert Expression.format({:path, :this, ["title"]}) == "@this.title"
+    assert Expression.format({:path, :parent, ["title"]}) == "@parent.title"
+    assert Expression.format({:path, :root, ["title"]}) == "@root.title"
 
     assert Expression.format(
              {:transformer, "link", [{:identifier, "label"}, {:kw, "href", {:identifier, "url"}}]}
@@ -56,8 +59,9 @@ defmodule Stem.ExpressionAstTest do
 
   test "references_identifier? handles helpers, paths, and literals" do
     refute Expression.references_identifier?({:literal, "true"}, "name")
-    refute Expression.references_identifier?({:special, :this}, "name")
-    refute Expression.references_identifier?({:parent, "name"}, "name")
+    refute Expression.references_identifier?({:path, :this, []}, "name")
+    refute Expression.references_identifier?({:path, :parent, ["name"]}, "name")
+    refute Expression.references_identifier?({:path, :root, ["name"]}, "name")
     assert Expression.references_identifier?({:identifier, "name"}, "name")
     assert Expression.references_identifier?({:path, :implicit, ["name", "title"]}, "name")
 
@@ -93,7 +97,9 @@ defmodule Stem.ExpressionAstTest do
 
     assert Expression.to_source({:identifier, "item"}, context) == "current"
     assert Expression.to_source({:identifier, "idx"}, context) == "stem_index"
-    assert Expression.to_source({:path, :implicit, ["item", "title"]}, context) == "current.title"
+
+    assert Expression.to_source({:path, :implicit, ["item", "title"]}, context) ==
+             "Stem.Runtime.get_field(current, :title)"
   end
 
   test "single-quoted literals normalize to the double-quoted string form" do

@@ -27,7 +27,7 @@ defmodule Stem.CompilerTest do
   end
 
   test "with renders the else branch for a falsy subject" do
-    template = "{{#with v}}{{this}}{{else}}none{{/with}}"
+    template = "{{#with v}}{{@this}}{{else}}none{{/with}}"
     assert render(template, v: nil) == "none"
     assert render(template, v: 7) == "7"
   end
