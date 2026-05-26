@@ -104,18 +104,20 @@
         background: var(--bg-toolbar); border-bottom: 1px solid var(--border);
         user-select: none;
       }
+      /* Icon bottom-aligned with the product name; version stacked above the
+         name, right-aligned. */
       .brand {
-        display: flex; align-items: center; gap: 9px;
-        font-weight: 600; font-size: 23px; letter-spacing: -.01em; padding-right: 10px;
+        display: flex; align-items: flex-end; gap: 9px;
+        letter-spacing: -.01em; padding-right: 10px;
       }
       .brand .mark {
-        width: 38px; height: 38px; flex: 0 0 38px; display: block;
+        width: 40px; height: 40px; flex: 0 0 40px; display: block;
       }
-      .brand .brand-name { font-weight: 400; color: var(--fg-secondary); }
+      .brand-stack { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+      .brand .brand-name { font-size: 27px; line-height: 1; font-weight: 400; color: var(--fg-secondary); }
       .brand .brand-name b { font-weight: 700; color: var(--fg); }
       .brand .brand-ver {
-        font: 400 9px/1 var(--font-mono); letter-spacing: .02em;
-        color: var(--fg-faint); align-self: center;
+        font: 400 9px/1 var(--font-mono); letter-spacing: .02em; color: var(--fg-faint);
       }
       .brand .brand-ver:empty { display: none; }
       .topbar .divider { width: 1px; height: 18px; background: var(--border); }
@@ -840,8 +842,10 @@
             <path class="stem-line" d="M24 29 C27 27 29 27 31 28" stroke="var(--stem-green)" stroke-width="2" stroke-linecap="round"/>
             <circle class="stem-dot" cx="24" cy="13" r="2" fill="var(--stem-green)"/>
           </svg>
-          <span class="brand-name"><b>Stem</b> Playground</span>
-          <span class="brand-ver" id="brand-ver" title="Compiled engine version (from the wasm build)"></span>
+          <span class="brand-stack">
+            <span class="brand-ver" id="brand-ver" title="Compiled engine version (from the wasm build)"></span>
+            <span class="brand-name"><b>Stem</b> Playground</span>
+          </span>
         </div>
         <div class="divider"></div>
         <div class="topbar-group">
