@@ -249,21 +249,25 @@
       .data-tab:hover { color: var(--fg-secondary); }
       .data-tab.active { color: var(--tok-key); background: var(--bg-pane); }
       .data-tab .yaml-ver { margin-left: 0; }
-      /* Output-pane view tabs: the same visual language as the data sub-pane
-         tabs, but inline in the pane header in place of a <select>. */
-      .view-tabs {
-        display: inline-flex; height: 24px;
-        border: 1px solid var(--border); border-radius: 5px; overflow: hidden;
-      }
+      /* Output-pane view tabs: flat underline tabs that fill the pane header and
+         sit flush with its bottom border (no pill borders — real tabs). */
+      .view-tabs { display: inline-flex; align-self: stretch; height: 100%; }
       .view-tab {
-        height: 100%; display: inline-flex; align-items: center;
-        padding: 0 10px; border: 0; border-right: 1px solid var(--border);
+        height: 100%; display: inline-flex; align-items: center; padding: 0 12px;
+        border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px;
         background: transparent; color: var(--fg-faint);
         font: 11px/1 var(--font-mono); cursor: pointer; white-space: nowrap;
       }
-      .view-tab:last-child { border-right: 0; }
       .view-tab:hover { color: var(--fg-secondary); }
-      .view-tab.active { color: var(--tok-key); background: var(--accent-softer); }
+      .view-tab.active { color: var(--tok-key); border-bottom-color: var(--accent); }
+      /* Contextual controls row: only the controls relevant to the active view
+         (Highlight for Plain Text, Escape for rendered views, Allow scripts for
+         previews). Hidden entirely when the view needs none. */
+      .view-controls {
+        flex: 0 0 auto; min-height: 30px; display: flex; align-items: center; gap: 8px;
+        padding: 4px 12px; border-bottom: 1px solid var(--border); background: var(--bg-pane);
+      }
+      .view-controls[hidden] { display: none; }
       /* Read-only inspector panels shown in place of the data editor. */
       .data-inspect { flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--bg-pane); }
       .data-inspect[hidden] { display: none; }
@@ -813,34 +817,12 @@
               <h2>Output</h2>
             </div>
             <div class="divider"></div>
-            <div class="pane-controls">
-              <!-- Output view tabs. "source" = the output as text with
-                   click-to-source provenance; "rendered"/"markdown" = the iframe;
-                   "data" = the post-transform view-model as YAML; "bytecode" =
-                   the wire disassembly. The view keys are kept stable (used by
-                   examples + URL state). Painted by renderViewTabs(). -->
-              <span id="view-tabs" class="view-tabs" role="tablist" aria-label="Output view"></span>
-              <span class="field-label" id="out-lang-label" style="font-size:11px" hidden>Highlight</span>
-              <input id="out-lang-input" class="select" style="width:130px" list="out-lang-list" aria-label="Plain Text highlight language" title="Type to search ~140 languages" placeholder="Plain text" autocomplete="off" hidden />
-              <datalist id="out-lang-list"></datalist>
-              <span class="field-label" style="font-size:11px">Escape</span>
-              <select id="escape-select" class="select" aria-label="Escape mode">
-                <option value="">(as compiled)</option>
-                <option value="html">html</option>
-                <option value="xml">xml</option>
-                <option value="json">json</option>
-                <option value="none">none</option>
-              </select>
-              <!-- HTML/Markdown preview: run <script> in the preview. The frame
-                   is re-sandboxed to allow-scripts WITHOUT allow-same-origin, so
-                   scripts execute in an isolated (null) origin and cannot reach
-                   this page. Off by default; not persisted in share links. -->
-              <label id="scripts-toggle" class="field-label"
-                     style="font-size:11px; display:none; align-items:center; gap:4px; cursor:pointer"
-                     title="Run &lt;script&gt; in the preview (sandboxed: isolated origin, no access to this page)">
-                <input type="checkbox" id="allow-scripts" /> Allow scripts
-              </label>
-            </div>
+            <!-- Output view tabs. "source" = the output as text with
+                 click-to-source provenance; "rendered"/"markdown" = the iframe;
+                 "data" = the post-transform view-model as YAML; "bytecode" =
+                 the wire disassembly. The view keys are kept stable (used by
+                 examples + URL state). Painted by renderViewTabs(). -->
+            <div id="view-tabs" class="view-tabs" role="tablist" aria-label="Output view"></div>
             <div class="pane-actions">
               <button class="focus-toggle" data-pane="output" title="Focus this pane (Esc to exit)">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
@@ -849,6 +831,30 @@
               </button>
             </div>
           </header>
+
+          <!-- Contextual controls for the active view; toggled by setOutputView. -->
+          <div id="view-controls" class="view-controls" hidden>
+            <span class="field-label" id="out-lang-label" style="font-size:11px" hidden>Highlight</span>
+            <input id="out-lang-input" class="select" style="width:130px" list="out-lang-list" aria-label="Plain Text highlight language" title="Type to search ~140 languages" placeholder="Plain text" autocomplete="off" hidden />
+            <datalist id="out-lang-list"></datalist>
+            <span class="field-label" id="escape-label" style="font-size:11px">Escape</span>
+            <select id="escape-select" class="select" aria-label="Escape mode">
+              <option value="">(as compiled)</option>
+              <option value="html">html</option>
+              <option value="xml">xml</option>
+              <option value="json">json</option>
+              <option value="none">none</option>
+            </select>
+            <!-- HTML/Markdown preview: run <script> in the preview. The frame
+                 is re-sandboxed to allow-scripts WITHOUT allow-same-origin, so
+                 scripts execute in an isolated (null) origin and cannot reach
+                 this page. Off by default; not persisted in share links. -->
+            <label id="scripts-toggle" class="field-label"
+                   style="font-size:11px; display:none; align-items:center; gap:4px; cursor:pointer"
+                   title="Run &lt;script&gt; in the preview (sandboxed: isolated origin, no access to this page)">
+              <input type="checkbox" id="allow-scripts" /> Allow scripts
+            </label>
+          </div>
 
           <div class="output-body" data-empty="true">
             <iframe id="output-preview" sandbox="allow-same-origin" title="Rendered output"></iframe>
@@ -1788,13 +1794,18 @@
         byId("output-preview").hidden = isText;
         hideSegTip(); clearLink();
         renderViewTabs();
-        // The highlight picker only applies to Plain Text (View Model is YAML).
+        // Contextual controls row: show only what applies to the active view.
+        // Highlight → Plain Text; Escape → the rendered views (not the YAML/wire
+        // dumps); Allow scripts → the iframe previews. Hide the row when empty.
         const showLang = view === "source";
+        const showEscape = view === "source" || view === "rendered" || view === "markdown";
+        const isPreview = view === "rendered" || view === "markdown";
         byId("out-lang-input").hidden = !showLang;
         byId("out-lang-label").hidden = !showLang;
-        // The "Allow scripts" toggle applies to the iframe previews (HTML / Markdown).
-        const isPreview = view === "rendered" || view === "markdown";
+        byId("escape-select").hidden = !showEscape;
+        byId("escape-label").hidden = !showEscape;
         byId("scripts-toggle").style.display = isPreview ? "inline-flex" : "none";
+        byId("view-controls").hidden = !(showLang || showEscape || isPreview);
         if (isText) { paintTextView(); outputEditor.requestMeasure(); } else renderPreview();
         qs(".output-body").dataset.empty = outputHasContent(view) ? "false" : "true";
         caretLinkKey = null; syncOutputToCaret();
@@ -2893,28 +2904,47 @@
         };
         for (const r of roots) setDepth(r, 0);
 
-        // Post-order x: leaves get sequential slots, parents center over children.
+        // Post-order column: leaves get sequential slots, parents center over
+        // their children, so a subtree stays grouped under its root.
         let leaf = 0;
-        const xpos = new Map();
-        const assignX = (id) => {
+        const col = new Map();
+        const assignCol = (id) => {
           const kids = children.get(id);
-          if (!kids.length) { xpos.set(id, leaf++); return xpos.get(id); }
-          const sum = kids.reduce((s, c) => s + assignX(c), 0);
-          const x = sum / kids.length;
-          xpos.set(id, x);
-          return x;
+          if (!kids.length) { col.set(id, leaf++); return col.get(id); }
+          const c = kids.reduce((s, k) => s + assignCol(k), 0) / kids.length;
+          col.set(id, c);
+          return c;
         };
-        for (const r of roots) assignX(r);
+        for (const r of roots) assignCol(r);
 
-        const maxX = Math.max(0, ...xpos.values());
-        const maxD = Math.max(0, ...depth.values());
-        const m = 48, pos = new Map();
+        // Group ids by depth (left-to-right) so a dense level can be staggered:
+        // adjacent siblings alternate up/down, letting columns pack at half the
+        // box width without the boxes overlapping (the user's interleave fix).
+        const byDepth = new Map();
         for (const n of deps.nodes) {
-          const x = maxX === 0 ? width / 2 : m + (width - 2 * m) * ((xpos.get(n.id) || 0) / maxX);
-          const y = maxD === 0 ? height / 2 : m + (height - 2 * m) * ((depth.get(n.id) || 0) / maxD);
-          pos.set(n.id, { x, y });
+          const d = depth.get(n.id) || 0;
+          (byDepth.get(d) || byDepth.set(d, []).get(d)).push(n.id);
         }
-        return pos;
+        for (const ids of byDepth.values()) ids.sort((a, b) => col.get(a) - col.get(b));
+
+        // Fixed pitches → natural content size; the SVG viewBox scales to fit.
+        const boxW = 104, boxH = 32, colPitch = 66, stagger = boxH / 2 + 10, m = 30;
+        const rowPitch = boxH + 2 * stagger + 30;
+        const pos = new Map();
+        for (const [d, ids] of byDepth) {
+          const dense = ids.length > 1; // colPitch < boxW, so any neighbour pair would touch
+          ids.forEach((id, i) => {
+            const x = m + boxW / 2 + col.get(id) * colPitch;
+            let y = m + boxH / 2 + stagger + d * rowPitch;
+            if (dense) y += i % 2 === 0 ? -stagger : stagger;
+            pos.set(id, { x, y });
+          });
+        }
+        const maxCol = Math.max(0, ...col.values());
+        const maxD = Math.max(0, ...depth.values());
+        const w = 2 * m + boxW + maxCol * colPitch;
+        const h = 2 * m + boxH + 2 * stagger + maxD * rowPitch;
+        return { pos, w, h };
       }
 
       // A neato-style (Fruchterman-Reingold) force-directed layout: nodes repel,
@@ -2976,10 +3006,16 @@
       }
 
       function renderDeps(body, deps) {
-        const W = 520, H = Math.max(340, deps.nodes.length * 64), boxW = 104, boxH = 32;
-        const pos = panelState.deps.layout === "tree"
-          ? layeredLayout(deps, W, H)
-          : forceLayout(deps, W, H);
+        const boxW = 104, boxH = 32;
+        let W, H, pos;
+        if (panelState.deps.layout === "tree") {
+          // The tidy tree sizes its own canvas to the content (natural pitches);
+          // the viewBox then scales to fit, so there is no stretched empty space.
+          ({ pos, w: W, h: H } = layeredLayout(deps));
+        } else {
+          W = 520; H = Math.max(340, deps.nodes.length * 64);
+          pos = forceLayout(deps, W, H);
+        }
 
         const cyclePairs = new Set();
         for (const c of deps.cycles) {
