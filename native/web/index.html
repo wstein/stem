@@ -65,7 +65,9 @@
         --topbar-h: 44px;
         --statusbar-h: 26px;
         --pane-header-h: 38px;
-        --tabs-h: 30px;
+        /* One tab height across every tab strip (template, output view, and the
+           data sub-pane) for a consistent look. */
+        --tabs-h: 24px;
         --radius: 6px;
 
         --shadow-pop: 0 12px 32px -8px rgba(24,24,27,.18), 0 0 0 1px rgba(24,24,27,.06);
@@ -172,8 +174,6 @@
         white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0;
       }
       .pane-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
-      .pane-controls { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
-      .pane-header .divider { width: 1px; height: 16px; background: var(--border); flex: 0 0 auto; }
 
       /* ── Tabs ────────────────────────────────────────────────────── */
       .tabs-wrap {
@@ -237,7 +237,7 @@
         background: var(--accent-softer); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
       }
       .data-tabs {
-        flex: 0 0 auto; height: 24px; display: flex;
+        flex: 0 0 auto; height: var(--tabs-h); display: flex;
         background: var(--accent-softer); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
       }
       .data-tab {
@@ -249,8 +249,8 @@
       .data-tab:hover { color: var(--fg-secondary); }
       .data-tab.active { color: var(--tok-key); background: var(--bg-pane); }
       .data-tab .yaml-ver { margin-left: 0; }
-      /* Output-pane view tabs: flat underline tabs that fill the pane header and
-         sit flush with its bottom border (no pill borders — real tabs). */
+      /* Output-pane view tabs: flat underline tabs in a tab strip (.tabs-wrap),
+         sitting flush with its bottom border (no pill borders — real tabs). */
       .view-tabs { display: inline-flex; align-self: stretch; height: 100%; }
       .view-tab {
         height: 100%; display: inline-flex; align-items: center; padding: 0 12px;
@@ -757,23 +757,6 @@
               <h2>Sources</h2>
               <span class="sub" id="sources-sub"></span>
             </div>
-            <div class="divider"></div>
-            <!-- Capability groups the engine loads for rendering. Minimum is
-                 always on; the rest are opt-in. A template that uses a
-                 transformer from an unchecked group is refused, surfacing the
-                 engine's group-naming message in the status bar — the
-                 secure-by-default model, made interactive. -->
-            <div class="pane-controls" style="display:flex;align-items:center;gap:8px;font-size:11px">
-              <span class="field-label" style="font-size:11px" title="Transformer capability groups — controls which built-in transformers the template may use">Groups</span>
-              <span id="caps-select" role="group" aria-label="Capability groups" style="display:inline-flex;gap:8px;align-items:center;font-size:11px">
-                <label data-group="default" style="opacity:.55;cursor:default"><input type="checkbox" checked disabled> <span
-                    class="grp-dot" style="color:#6b7280">●</span> default</label>
-                <label data-group="format"><input type="checkbox" class="cap" value="format"> <span class="grp-dot"
-                    style="color:#22c55e">●</span> format</label>
-                <label data-group="transform"><input type="checkbox" class="cap" value="transform"> <span class="grp-dot" style="color:#f59e0b">●</span> transform</label>
-                <label data-group="eval"><input type="checkbox" class="cap" value="eval"> <span class="grp-dot" style="color:#a855f7">●</span> eval</label>
-              </span>
-            </div>
             <div class="pane-actions">
               <button class="focus-toggle" data-pane="sources" title="Focus this pane (Esc to exit)">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
@@ -785,6 +768,23 @@
 
           <div class="tabs-wrap">
             <div class="tabs" id="tmpl-tabs"></div>
+          </div>
+
+          <!-- Contextual controls for Sources: the capability groups the engine
+               loads for rendering. Minimum is always on; the rest are opt-in. A
+               template that uses a transformer from an unchecked group is
+               refused, surfacing the engine's group-naming message — the
+               secure-by-default model, made interactive. -->
+          <div class="view-controls">
+            <span class="field-label" style="font-size:11px" title="Transformer capability groups — controls which built-in transformers the template may use">Groups</span>
+            <span id="caps-select" role="group" aria-label="Capability groups" style="display:inline-flex;gap:8px;align-items:center;font-size:11px">
+              <label data-group="default" style="opacity:.55;cursor:default"><input type="checkbox" checked disabled> <span
+                  class="grp-dot" style="color:#6b7280">●</span> default</label>
+              <label data-group="format"><input type="checkbox" class="cap" value="format"> <span class="grp-dot"
+                  style="color:#22c55e">●</span> format</label>
+              <label data-group="transform"><input type="checkbox" class="cap" value="transform"> <span class="grp-dot" style="color:#f59e0b">●</span> transform</label>
+              <label data-group="eval"><input type="checkbox" class="cap" value="eval"> <span class="grp-dot" style="color:#a855f7">●</span> eval</label>
+            </span>
           </div>
 
           <!-- Template + data shown together: side-by-side (split) or
@@ -811,13 +811,6 @@
             <div class="pane-title">
               <h2>Output</h2>
             </div>
-            <div class="divider"></div>
-            <!-- Output view tabs. "source" = the output as text with
-                 click-to-source provenance; "rendered"/"markdown" = the iframe;
-                 "data" = the post-transform view-model as YAML; "bytecode" =
-                 the wire disassembly. The view keys are kept stable (used by
-                 examples + URL state). Painted by renderViewTabs(). -->
-            <div id="view-tabs" class="view-tabs" role="tablist" aria-label="Output view"></div>
             <div class="pane-actions">
               <button class="focus-toggle" data-pane="output" title="Focus this pane (Esc to exit)">
                 <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
@@ -826,6 +819,16 @@
               </button>
             </div>
           </header>
+
+          <!-- Output view tabs (same layout as the Sources tab strip). "source"
+               = the output as text with click-to-source provenance;
+               "rendered"/"markdown" = the iframe; "data" = the post-transform
+               view-model as YAML; "bytecode" = the wire disassembly. The view
+               keys are kept stable (used by examples + URL state). Painted by
+               renderViewTabs(). -->
+          <div class="tabs-wrap">
+            <div id="view-tabs" class="view-tabs" role="tablist" aria-label="Output view"></div>
+          </div>
 
           <!-- Contextual controls for the active view; toggled by setOutputView. -->
           <div id="view-controls" class="view-controls" hidden>
