@@ -105,16 +105,16 @@
         user-select: none;
       }
       .brand {
-        display: flex; align-items: center; gap: 8px;
-        font-weight: 600; font-size: 13px; letter-spacing: -.01em; padding-right: 8px;
+        display: flex; align-items: center; gap: 9px;
+        font-weight: 600; font-size: 23px; letter-spacing: -.01em; padding-right: 10px;
       }
       .brand .mark {
-        width: 22px; height: 22px; flex: 0 0 22px; display: block;
+        width: 38px; height: 38px; flex: 0 0 38px; display: block;
       }
       .brand .brand-name { font-weight: 400; color: var(--fg-secondary); }
       .brand .brand-name b { font-weight: 700; color: var(--fg); }
       .brand .brand-ver {
-        font: 400 11px/1 var(--font-mono); letter-spacing: .02em;
+        font: 400 9px/1 var(--font-mono); letter-spacing: .02em;
         color: var(--fg-faint); align-self: center;
       }
       .brand .brand-ver:empty { display: none; }
@@ -198,10 +198,11 @@
       .input-wrap:has(> input[hidden]) { display: none; }
       .input-clear {
         position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
-        width: 15px; height: 15px; display: grid; place-items: center; padding: 0;
+        width: 16px; height: 16px; display: grid; place-items: center; padding: 0;
         border: 0; border-radius: 50%; background: var(--bg-3); color: var(--fg-muted);
-        font: 12px/1 var(--font-ui); cursor: pointer;
+        cursor: pointer;
       }
+      .input-clear svg { width: 9px; height: 9px; display: block; }
       .input-clear:hover { background: var(--border-strong); color: var(--fg); }
       .input-clear[hidden] { display: none; }
       /* The search and palette inputs fill their container; the highlight input
@@ -2990,10 +2991,15 @@
 
       function buildSearchPanel() {
         const panel = makeEl("div", { class: "search-panel", role: "dialog", "aria-label": "Search" });
+        // Always seed a default position; applyPanelPos() overrides it only when a
+        // dragged position was saved. (Saving size without a position used to
+        // leave the panel with no offsets — fixed at 0,0 and effectively hidden.)
+        panel.style.right = "18px";
+        panel.style.top = "56px";
         if (typeof panelState.search.width === "number") {
           panel.style.width = panelState.search.width + "px";
           panel.style.height = panelState.search.height + "px";
-        } else { panel.style.right = "18px"; panel.style.top = "56px"; }
+        }
         const close = makeEl("button", { class: "tw-close", title: "Close" }, "×");
         close.addEventListener("click", hideSearch);
         const header = makeEl("div", { class: "tw-header" }, [
@@ -3055,6 +3061,8 @@
         byId("search-btn").classList.remove("active");
         panelState.search.open = false; savePanels();
       }
+      // The toolbar button toggles; ⌘⇧F opens/focuses but never closes.
+      function toggleSearch() { searchPanel ? hideSearch() : showSearch(); }
       // Re-run the open search when sources change (line numbers may have moved).
       function refreshSearchPanel() {
         if (searchPanel) renderSearchResults(searchPanel, searchPanel.querySelector(".search-input").value);
@@ -3075,7 +3083,7 @@
       byId("cmd-btn").addEventListener("click", openPalette);
       byId("tweaks-btn").addEventListener("click", showTweaks);
       byId("deps-btn").addEventListener("click", showDeps);
-      byId("search-btn").addEventListener("click", showSearch);
+      byId("search-btn").addEventListener("click", toggleSearch);
 
       // Close the example dropdown on an outside click or Escape.
       document.addEventListener("pointerdown", (e) => {
@@ -3152,7 +3160,9 @@
         wrap.append(input);
         const btn = document.createElement("button");
         btn.type = "button"; btn.className = "input-clear"; btn.tabIndex = -1;
-        btn.title = "Clear"; btn.textContent = "×";
+        btn.title = "Clear";
+        // An SVG cross centres crisply (a "×" glyph sits slightly off-centre).
+        btn.innerHTML = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4.5 4.5l7 7M11.5 4.5l-7 7"/></svg>';
         wrap.append(btn);
         const sync = () => { btn.hidden = !input.value; };
         input.addEventListener("input", sync);
