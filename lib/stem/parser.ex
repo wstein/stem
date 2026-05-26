@@ -204,6 +204,35 @@ defmodule Stem.Parser do
   end
 
   @doc """
+  Like `parse/2`, but accumulates **every** recoverable parse error instead of
+  stopping at the first.
+
+  Invalid expressions, reserved operators, unknown/recursive partials, and bad
+  block or partial arguments are each recorded (substituting a placeholder node)
+  so a single pass reports them all in source order; a structural error that
+  desynchronises the token stream still ends collection and is reported last.
+  Returns `{:ok, ast}` or `{:error, [%{file, message, meta}]}`, where `file` is
+  `"main"` or the partial the error occurred in. Mirrors the native compiler's
+  `compile_to_wire_all`.
+  """
+  @spec parse_all(binary(), keyword()) ::
+          {:ok, Stem.AST.t()} | {:error, [%{file: binary(), message: binary(), meta: meta()}]}
+  def parse_all(source, opts \\ []) when is_binary(source) do
+    partials = opts |> Keyword.get(:partials, %{}) |> normalize_partials()
+
+    case tokenize_with_spans(source, opts) do
+      {:ok, tokens} ->
+        case parse_stream_all(tokens, partials, []) do
+          {:ok, nodes} -> {:ok, strip_ast_spans(nodes)}
+          {:error, _errors} = error -> error
+        end
+
+      {:error, message, meta} ->
+        {:error, [%{file: "main", message: message, meta: strip_meta_spans(meta)}]}
+    end
+  end
+
+  @doc """
   Parses one template's source to its pre-expansion AST.
 
   Unlike `parse/2`, `{{> name}}` tags are kept as `:partial` nodes rather than
@@ -638,12 +667,6 @@ defmodule Stem.Parser do
   # ---------------------------------------------------------------------------
 
   # Tokenises and parses a nested source (used for partial expansion).
-  defp parse_source(source, partials, stack) do
-    with {:ok, tokens} <- tokenize_with_spans(source, []) do
-      parse_stream(tokens, partials, stack)
-    end
-  end
-
   defp strip_ast_spans(nodes), do: Enum.map(nodes, &strip_node_spans/1)
 
   defp strip_node_spans({:text, text}), do: {:text, text}
@@ -705,125 +728,195 @@ defmodule Stem.Parser do
 
   defp strip_token_spans({:eof, meta}), do: {:eof, strip_meta_spans(meta)}
 
+  # Fail-fast driver (parse/2, parse_ast/2): collection always accumulates, but
+  # this surfaces only the first error in source order — identical to stopping
+  # at it. Meta keeps its spans (parse_with_spans relies on them; parse/2 strips).
   defp parse_stream(tokens, partials, stack) do
-    case collect(tokens, partials, stack, []) do
-      {:ok, nodes, {:eof, _meta}, []} ->
-        {:ok, nodes}
+    case collect(tokens, partials, stack, [], []) do
+      {:cont, nodes, {:eof, _meta}, [], errors} ->
+        case Enum.reverse(errors) do
+          [] -> {:ok, nodes}
+          [first | _] -> {:error, first.message, first.meta}
+        end
 
-      {:ok, _nodes, {:else, meta}, _rest} ->
-        {:error, "unexpected '{{else}}' outside of a block", meta}
+      {:cont, _nodes, {:else, meta}, _rest, errors} ->
+        first_error(errors, "unexpected '{{else}}' outside of a block", meta, stack)
 
-      {:ok, _nodes, {:close, kind, meta}, _rest} ->
-        {:error, "unexpected closing tag '{{/#{@kind_tags[kind]}}}'", meta}
+      {:cont, _nodes, {:close, kind, meta}, _rest, errors} ->
+        first_error(errors, "unexpected closing tag '{{/#{@kind_tags[kind]}}}'", meta, stack)
 
-      {:error, _message, _meta} = error ->
-        error
+      {:halt, message, meta, errors} ->
+        first_error(errors, message, meta, stack)
     end
   end
 
-  # Collects nodes until a stop token (`{{else}}`, a block close, or eof).
-  # Returns `{:ok, nodes, stop, rest}` or `{:error, message, meta}`.
-  defp collect([{:text, text, _meta} | rest], partials, stack, acc) do
-    collect(rest, partials, stack, [{:text, text} | acc])
+  # The earliest error in source order: a recoverable one if any preceded the
+  # structural stop, else the structural error itself.
+  defp first_error(errors, message, meta, stack) do
+    [first | _] = Enum.reverse(add_error(errors, message, meta, stack))
+    {:error, first.message, first.meta}
   end
 
-  defp collect([{:expr, raw, escape_mode, meta} | rest], partials, stack, acc) do
+  # Accumulating driver (parse_all/2): the same collection, but every recoverable
+  # error is reported (a trailing structural error appended last), in source order.
+  defp parse_stream_all(tokens, partials, stack) do
+    case collect(tokens, partials, stack, [], []) do
+      {:cont, nodes, {:eof, _meta}, [], errors} ->
+        case all_errors(errors) do
+          [] -> {:ok, nodes}
+          list -> {:error, list}
+        end
+
+      {:cont, _nodes, {:else, meta}, _rest, errors} ->
+        {:error, all_errors(add_error(errors, "unexpected '{{else}}' outside of a block", meta, stack))}
+
+      {:cont, _nodes, {:close, kind, meta}, _rest, errors} ->
+        {:error,
+         all_errors(
+           add_error(errors, "unexpected closing tag '{{/#{@kind_tags[kind]}}}'", meta, stack)
+         )}
+
+      {:halt, message, meta, errors} ->
+        {:error, all_errors(add_error(errors, message, meta, stack))}
+    end
+  end
+
+  # Errors accumulate newest-first; reverse to source order and strip meta spans.
+  defp all_errors(errors) do
+    errors |> Enum.reverse() |> Enum.map(&%{&1 | meta: strip_meta_spans(&1.meta)})
+  end
+
+  # Record a recoverable error, stamped with the file it occurred in (the partial
+  # on top of the recursion stack, or "main" at the top level).
+  defp add_error(errors, message, meta, stack) do
+    [%{file: current_file(stack), message: message, meta: meta} | errors]
+  end
+
+  defp current_file([]), do: "main"
+  defp current_file([name | _]), do: name
+
+  # Collects nodes until a stop token (`{{else}}`, a block close, or eof),
+  # threading the recoverable-error accumulator. Returns
+  # `{:cont, nodes, stop, rest, errors}` for a normal stop, or
+  # `{:halt, message, meta, errors}` when a structural error ends collection.
+  # Recoverable errors are recorded into `errors` (a placeholder node keeps the
+  # tree well-formed) and collection continues.
+  defp collect([{:text, text, _meta} | rest], partials, stack, acc, errors) do
+    collect(rest, partials, stack, [{:text, text} | acc], errors)
+  end
+
+  defp collect([{:expr, raw, escape_mode, meta} | rest], partials, stack, acc, errors) do
     case Expression.parse(raw) do
-      {:ok, expr} -> collect(rest, partials, stack, [{:expr, expr, escape_mode, meta} | acc])
-      {:error, message} -> {:error, message, meta}
+      {:ok, expr} ->
+        collect(rest, partials, stack, [{:expr, expr, escape_mode, meta} | acc], errors)
+
+      {:error, message} ->
+        node = {:expr, {:literal, "null"}, escape_mode, meta}
+        collect(rest, partials, stack, [node | acc], add_error(errors, message, meta, stack))
     end
   end
 
-  defp collect([{:yield, raw_name, meta} | rest], partials, stack, acc) do
-    with :ok <- validate_region_name(raw_name) do
-      collect(rest, partials, stack, [{:yield, raw_name, meta} | acc])
-    else
-      {:error, message} -> {:error, message, meta}
+  defp collect([{:yield, raw_name, meta} | rest], partials, stack, acc, errors) do
+    node = {:yield, raw_name, meta}
+
+    case validate_region_name(raw_name) do
+      :ok -> collect(rest, partials, stack, [node | acc], errors)
+      {:error, message} -> collect(rest, partials, stack, [node | acc], add_error(errors, message, meta, stack))
     end
   end
 
   # In `:no_expand` mode (the `parse_ast/2` path) a partial stays an unexpanded
   # `:partial` node carrying its parsed context/hash, so a file's own structure
   # and its dependency edges remain visible. Otherwise it expands inline.
-  defp collect([{:partial, name, args, meta} | rest], :no_expand, stack, acc) do
+  defp collect([{:partial, name, args, meta} | rest], :no_expand, stack, acc, errors) do
     case Expression.parse_partial_args(args) do
       {:ok, context, hash} ->
         node = {:partial, String.trim(name), context, hash, meta}
-        collect(rest, :no_expand, stack, [node | acc])
+        collect(rest, :no_expand, stack, [node | acc], errors)
 
       {:error, message} ->
-        {:error, message, meta}
+        collect(rest, :no_expand, stack, acc, add_error(errors, message, meta, stack))
     end
   end
 
-  defp collect([{:partial, name, args, meta} | rest], partials, stack, acc) do
-    case expand_partial(name, args, meta, partials, stack) do
-      {:ok, nodes} -> collect(rest, partials, stack, Enum.reverse(nodes, acc))
-      {:error, _message, _meta} = error -> error
+  defp collect([{:partial, name, args, meta} | rest], partials, stack, acc, errors) do
+    # Unknown/recursive partials and faults inside an expanded partial are
+    # recoverable for the caller: record them and keep assembling the rest.
+    {nodes, errors} = expand_partial(name, args, meta, partials, stack, errors)
+    collect(rest, partials, stack, Enum.reverse(nodes, acc), errors)
+  end
+
+  defp collect([{:block_open, kind, args, meta} | rest], partials, stack, acc, errors) do
+    case parse_block(kind, args, meta, rest, partials, stack, errors) do
+      {:ok, node, rest, errors} -> collect(rest, partials, stack, [node | acc], errors)
+      {:halt, _message, _meta, _errors} = halted -> halted
     end
   end
 
-  defp collect([{:block_open, kind, args, meta} | rest], partials, stack, acc) do
-    case parse_block(kind, args, meta, rest, partials, stack) do
-      {:ok, node, rest} -> collect(rest, partials, stack, [node | acc])
-      {:error, _message, _meta} = error -> error
-    end
+  defp collect([{:block_else, meta} | rest], _partials, _stack, acc, errors) do
+    {:cont, Enum.reverse(acc), {:else, meta}, rest, errors}
   end
 
-  defp collect([{:block_else, meta} | rest], _partials, _stack, acc) do
-    {:ok, Enum.reverse(acc), {:else, meta}, rest}
+  defp collect([{:block_close, kind, meta} | rest], _partials, _stack, acc, errors) do
+    {:cont, Enum.reverse(acc), {:close, kind, meta}, rest, errors}
   end
 
-  defp collect([{:block_close, kind, meta} | rest], _partials, _stack, acc) do
-    {:ok, Enum.reverse(acc), {:close, kind, meta}, rest}
+  defp collect([{:eof, meta}], _partials, _stack, acc, errors) do
+    {:cont, Enum.reverse(acc), {:eof, meta}, [], errors}
   end
 
-  defp collect([{:eof, meta}], _partials, _stack, acc) do
-    {:ok, Enum.reverse(acc), {:eof, meta}, []}
-  end
-
-  defp parse_block(kind, args, meta, tokens, partials, stack) do
-    with {:ok, expr, params} <- parse_block_expression(kind, args) do
-      case collect(tokens, partials, stack, []) do
-        {:ok, _body, {:else, else_meta}, _rest} when kind == :region ->
-          {:error, "unexpected '{{else}}' inside '{{#region}}'", else_meta}
-
-        {:ok, body, {:else, _else_meta}, rest} ->
-          parse_else(kind, expr, params, body, meta, rest, partials, stack)
-
-        {:ok, body, {:close, ^kind, _close_meta}, rest} ->
-          {:ok, block_node(kind, expr, params, body, [], meta), rest}
-
-        {:ok, _body, {:close, other, close_meta}, _rest} ->
-          {:error, mismatched_close(kind, other), close_meta}
-
-        {:ok, _body, {:eof, _eof_meta}, _rest} ->
-          {:error, unclosed_block(kind), meta}
-
-        {:error, _message, _meta} = error ->
-          error
+  defp parse_block(kind, args, meta, tokens, partials, stack, errors) do
+    # A bad block head (invalid subject or block params) is recoverable: record
+    # it and keep collecting the body so its tags are still checked and the
+    # matching `{{/..}}` close stays in sync.
+    {expr, params, errors} =
+      case parse_block_expression(kind, args) do
+        {:ok, expr, params} -> {expr, params, errors}
+        {:error, message} -> {placeholder_head(kind), [], add_error(errors, message, meta, stack)}
       end
-    else
-      {:error, message} -> {:error, message, meta}
+
+    case collect(tokens, partials, stack, [], errors) do
+      {:cont, _body, {:else, else_meta}, _rest, errors} when kind == :region ->
+        {:halt, "unexpected '{{else}}' inside '{{#region}}'", else_meta, errors}
+
+      {:cont, body, {:else, _else_meta}, rest, errors} ->
+        parse_else(kind, expr, params, body, meta, rest, partials, stack, errors)
+
+      {:cont, body, {:close, ^kind, _close_meta}, rest, errors} ->
+        {:ok, block_node(kind, expr, params, body, [], meta), rest, errors}
+
+      {:cont, _body, {:close, other, close_meta}, _rest, errors} ->
+        {:halt, mismatched_close(kind, other), close_meta, errors}
+
+      {:cont, _body, {:eof, _eof_meta}, _rest, errors} ->
+        {:halt, unclosed_block(kind), meta, errors}
+
+      {:halt, _message, _meta, _errors} = halted ->
+        halted
     end
   end
 
-  defp parse_else(kind, expr, params, body, meta, tokens, partials, stack) do
-    case collect(tokens, partials, stack, []) do
-      {:ok, else_body, {:close, ^kind, _close_meta}, rest} ->
-        {:ok, block_node(kind, expr, params, body, else_body, meta), rest}
+  # Placeholder block head when the real one failed to parse (the block is
+  # discarded along with the program once an error is recorded).
+  defp placeholder_head(:region), do: ""
+  defp placeholder_head(_kind), do: {:literal, "null"}
 
-      {:ok, _else_body, {:else, else_meta}, _rest} ->
-        {:error, "unexpected second '{{else}}' inside '{{##{@kind_tags[kind]}}}'", else_meta}
+  defp parse_else(kind, expr, params, body, meta, tokens, partials, stack, errors) do
+    case collect(tokens, partials, stack, [], errors) do
+      {:cont, else_body, {:close, ^kind, _close_meta}, rest, errors} ->
+        {:ok, block_node(kind, expr, params, body, else_body, meta), rest, errors}
 
-      {:ok, _else_body, {:close, other, close_meta}, _rest} ->
-        {:error, mismatched_close(kind, other), close_meta}
+      {:cont, _else_body, {:else, else_meta}, _rest, errors} ->
+        {:halt, "unexpected second '{{else}}' inside '{{##{@kind_tags[kind]}}}'", else_meta, errors}
 
-      {:ok, _else_body, {:eof, _eof_meta}, _rest} ->
-        {:error, unclosed_block(kind), meta}
+      {:cont, _else_body, {:close, other, close_meta}, _rest, errors} ->
+        {:halt, mismatched_close(kind, other), close_meta, errors}
 
-      {:error, _message, _meta} = error ->
-        error
+      {:cont, _else_body, {:eof, _eof_meta}, _rest, errors} ->
+        {:halt, unclosed_block(kind), meta, errors}
+
+      {:halt, _message, _meta, _errors} = halted ->
+        halted
     end
   end
 
@@ -913,33 +1006,55 @@ defmodule Stem.Parser do
     "expected a closing '{{/#{@kind_tags[kind]}}}' for block expression in Stem"
   end
 
-  defp expand_partial("", _args, meta, _partials, _stack) do
-    {:error, "partial name is required in '{{> ...}}'", meta}
+  # Expand `{{> name args}}` inline, threading the error accumulator. Every
+  # failure mode — empty/unknown/recursive name, bad args, or a fault inside the
+  # partial's body — is recoverable for the caller: it is recorded and no nodes
+  # are spliced, so the surrounding collection continues. Returns
+  # `{nodes, errors}` (nodes empty on failure).
+  defp expand_partial("", _args, meta, _partials, stack, errors) do
+    {[], add_error(errors, "partial name is required in '{{> ...}}'", meta, stack)}
   end
 
-  defp expand_partial(name, args, meta, partials, stack) do
+  defp expand_partial(name, args, meta, partials, stack, errors) do
     cond do
       name in stack ->
-        {:error, "partial recursion detected for '#{name}'", meta}
+        {[], add_error(errors, "partial recursion detected for '#{name}'", meta, stack)}
 
       true ->
         case Map.fetch(partials, name) do
           {:ok, content} ->
-            with {:ok, context, hash} <- parse_partial_args(args, meta),
-                 {:ok, nodes} <- parse_source(content, partials, [name | stack]) do
-              {:ok, wrap_partial_scope(context, hash, nodes, meta)}
-            end
+            expand_partial_body(name, args, content, meta, partials, stack, errors)
 
           :error ->
-            {:error, "unknown partial '#{name}'", meta}
+            {[], add_error(errors, "unknown partial '#{name}'", meta, stack)}
         end
     end
   end
 
-  defp parse_partial_args(args, meta) do
-    case Expression.parse_partial_args(args) do
-      {:ok, context, hash} -> {:ok, context, hash}
-      {:error, message} -> {:error, message, meta}
+  defp expand_partial_body(name, args, content, meta, partials, stack, errors) do
+    inner_stack = [name | stack]
+
+    with {:ok, context, hash} <- Expression.parse_partial_args(args),
+         {:ok, tokens} <- tokenize_with_spans(content, []) do
+      case collect(tokens, partials, inner_stack, [], errors) do
+        {:cont, nodes, {:eof, _meta}, [], errors} ->
+          {wrap_partial_scope(context, hash, nodes, meta), errors}
+
+        {:cont, _nodes, {:else, e_meta}, _rest, errors} ->
+          {[], add_error(errors, "unexpected '{{else}}' outside of a block", e_meta, inner_stack)}
+
+        {:cont, _nodes, {:close, kind, c_meta}, _rest, errors} ->
+          {[],
+           add_error(errors, "unexpected closing tag '{{/#{@kind_tags[kind]}}}'", c_meta, inner_stack)}
+
+        {:halt, message, h_meta, errors} ->
+          {[], add_error(errors, message, h_meta, inner_stack)}
+      end
+    else
+      # Bad partial arguments (parsed against the caller's tag) or an
+      # unterminated tag in the partial source (attributed to the partial).
+      {:error, message} -> {[], add_error(errors, message, meta, stack)}
+      {:error, message, t_meta} -> {[], add_error(errors, message, t_meta, inner_stack)}
     end
   end
 

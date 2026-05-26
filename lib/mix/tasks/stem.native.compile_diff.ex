@@ -134,6 +134,18 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     "{{name | a || b}}"
   ]
 
+  # Multi-error templates for accumulation parity. Both compilers must report
+  # *every* recoverable error, in source order, each attributed to the file
+  # ("main" or a partial) it occurred in. The exact wording is backend-specific
+  # (the BEAM and Rust phrase some errors differently), so the gate compares the
+  # ordered list of files each error lands in — the conceptual invariant.
+  @multi_error_cases [
+    {"{{ a + b }} {{ c || d }}", %{}},
+    {"{{> missing}} {{ a + b }}", %{}},
+    {"{{> inner}}", %{"inner" => "{{ a + b }} {{ x && y }}"}},
+    {"{{ a + b }} {{> inner}}", %{"inner" => "{{ c || d }}"}}
+  ]
+
   @impl true
   def run(argv) do
     Mix.Task.run("compile")
@@ -153,7 +165,33 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
         classify(template, beam_wire, rust_wire)
       end)
 
-    report(engine, results, reserved_results(engine))
+    report(engine, results, reserved_results(engine), error_results(engine))
+  end
+
+  # Accumulation parity: every recoverable error, in source order, attributed to
+  # the same file on both backends. `Stem.Parser.parse_all/2` gives the BEAM
+  # list; the native engine returns `%{"errors" => [...]}`. Compared by the
+  # ordered file list (messages are phrased differently per backend).
+  defp error_results(engine) do
+    rust = Engine.compile_batch(engine, Enum.map(@multi_error_cases, &compile_request/1))
+
+    [@multi_error_cases, rust]
+    |> Enum.zip()
+    |> Enum.map(fn {{template, partials}, rust_wire} ->
+      beam_files =
+        case Stem.Parser.parse_all(template, partials: partials) do
+          {:error, errors} -> Enum.map(errors, & &1.file)
+          {:ok, _} -> []
+        end
+
+      rust_files =
+        case rust_wire do
+          %{"errors" => errors} -> Enum.map(errors, &Map.get(&1, "file"))
+          _ -> []
+        end
+
+      {template, beam_files, rust_files}
+    end)
   end
 
   # `||`/`&&` must be refused by both compilers at compile time. The BEAM parser
@@ -168,7 +206,7 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     |> Enum.map(fn {template, rust_wire} ->
       # `parse_with_spans/1` returns `{:ok, ast}` or `{:error, message, meta}`.
       beam_refused = elem(Stem.Parser.parse_with_spans(template), 0) == :error
-      rust_refused = match?(%{"error" => _}, rust_wire)
+      rust_refused = match?(%{"errors" => _}, rust_wire)
       {template, beam_refused, rust_refused}
     end)
   end
@@ -185,7 +223,7 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
     ast |> Stem.Bytecode.compile() |> Stem.Bytecode.to_wire()
   end
 
-  defp classify(template, _beam_wire, %{"error" => _} = _rust_wire), do: {:pending, template}
+  defp classify(template, _beam_wire, %{"errors" => _} = _rust_wire), do: {:pending, template}
 
   defp classify(template, beam_wire, rust_wire) do
     if beam_wire == rust_wire,
@@ -193,7 +231,7 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
       else: {:mismatch, template, beam_wire, rust_wire}
   end
 
-  defp report(engine, results, reserved) do
+  defp report(engine, results, reserved, errors) do
     Mix.shell().info("Native engine: #{engine}")
     counts = Enum.frequencies_by(results, &elem(&1, 0))
     matched = Map.get(counts, :match, 0)
@@ -229,7 +267,23 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
         "#{length(reserved)} refused on both backends."
     )
 
-    divergences = length(mismatches) + length(reserved_failures)
+    error_failures =
+      Enum.reject(errors, fn {_template, beam_files, rust_files} -> beam_files == rust_files end)
+
+    Enum.each(error_failures, fn {template, beam_files, rust_files} ->
+      Mix.shell().error(
+        "  ✗ error accumulation #{inspect(template)}\n" <>
+          "    beam files: #{inspect(beam_files)}\n" <>
+          "    rust files: #{inspect(rust_files)}"
+      )
+    end)
+
+    Mix.shell().info(
+      "Error-accumulation parity: #{length(errors) - length(error_failures)}/" <>
+        "#{length(errors)} templates report the same errors (count + file) on both backends."
+    )
+
+    divergences = length(mismatches) + length(reserved_failures) + length(error_failures)
 
     unless divergences == 0 do
       Mix.raise("Native compile parity failed: #{divergences} divergence(s).")

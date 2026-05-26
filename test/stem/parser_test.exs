@@ -237,4 +237,40 @@ defmodule Stem.ParserTest do
   test "accepts partials given as a keyword list" do
     assert ast("{{> g}}", partials: [g: "hi"]) == [{:text, "hi"}]
   end
+
+  describe "parse_all/2 (accumulate every recoverable error)" do
+    test "a valid template parses to the same AST as parse/2" do
+      assert Parser.parse_all("Hi {{name}}!") == Parser.parse("Hi {{name}}!")
+    end
+
+    test "collects every recoverable error in source order" do
+      # An invalid expression, an unknown partial, and a reserved operator;
+      # parse/2 stops at the first, parse_all/2 reports all three.
+      source = "{{ a + b }} {{> missing}} {{ c || d }}"
+      assert {:error, errors} = Parser.parse_all(source)
+
+      # Three errors, in source order (the exact wording is backend-specific).
+      assert length(errors) == 3
+      assert Enum.at(errors, 1).message == "unknown partial 'missing'"
+      assert Enum.at(errors, 2).message == "the '||' operator is not supported"
+      assert Enum.all?(errors, &(&1.file == "main"))
+      # The first accumulated error matches parse/2's single error.
+      {:error, first_message, _meta} = Parser.parse(source)
+      assert hd(errors).message == first_message
+    end
+
+    test "attributes a fault inside a partial to that partial, not main" do
+      partials = %{"inner" => "ok {{ a + b }}"}
+      assert {:error, [error]} = Parser.parse_all("{{> inner}}", partials: partials)
+      assert error.file == "inner"
+    end
+
+    test "a structural error ends collection and is reported last" do
+      # The bad expression (recoverable) is recorded; the unclosed block
+      # (structural) halts collection and comes last.
+      assert {:error, errors} = Parser.parse_all("{{ a + b }} {{#if c}}x")
+      assert length(errors) == 2
+      assert List.last(errors).message == "expected a closing '{{/if}}' for block expression in Stem"
+    end
+  end
 end

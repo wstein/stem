@@ -548,21 +548,26 @@ mod wasm {
     }
 }
 
-// Compile one template to its wire program, or an `{"error": {message, span}}`
-// object the playground can underline. With `with_spans`, the program carries
-// `src` provenance for the render-time source map (a superset wire); without it
-// the output is byte-identical to the BEAM reference.
+// Compile one template to its wire program, or an `{"errors": [{message, file,
+// start, end}, ...]}` object listing every recoverable parse error in source
+// order (the same shape the wasm `compile` export throws). With `with_spans`,
+// the program carries `src` provenance for the render-time source map (a
+// superset wire); without it the output is byte-identical to the BEAM reference.
 fn compile_result(source: &str, partials: &compile::Partials, with_spans: bool) -> Value {
-    let compiled = if with_spans {
-        compile::compile_to_wire_with_spans(source, partials)
-    } else {
-        compile::compile_to_wire(source, partials)
-    };
-    match compiled {
+    match compile::compile_to_wire_all(source, partials, with_spans) {
         Ok(program) => program,
-        Err(err) => json!({
-            "error": { "message": err.message, "start": err.start, "end": err.end }
-        }),
+        Err(errors) => {
+            let errors: Vec<_> = errors
+                .into_iter()
+                .map(|err| {
+                    json!({
+                        "message": err.message, "file": err.file,
+                        "start": err.start, "end": err.end,
+                    })
+                })
+                .collect();
+            json!({ "errors": errors })
+        }
     }
 }
 
