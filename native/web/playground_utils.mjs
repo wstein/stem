@@ -67,6 +67,113 @@ export function charToLineColumn(source, charIndex) {
   return { line: lines.length, column: lines[lines.length - 1].length + 1 };
 }
 
+// Disassemble a `stem-bc/v1` wire program (the object `compile` returns) to the
+// human-readable text `Stem.Bytecode.disasm/1` emits on the BEAM, so the
+// playground's Bytecode view matches the reference disassembler. Any `src`
+// provenance on a mapped program is ignored.
+export function disassemble(program) {
+  const version = (program && program.version) || "stem-bc/v1";
+  const instructions = (program && program.instructions) || [];
+  const lines = ["; " + version];
+  for (const instr of instructions) lines.push(...disasmInstruction(instr, 0));
+  return lines.join("\n") + "\n";
+}
+
+function indent(depth) {
+  return "  ".repeat(depth);
+}
+
+function disasmBranch(label, instructions, depth) {
+  if (!instructions || instructions.length === 0) return [];
+  const lines = [indent(depth + 1) + label];
+  for (const instr of instructions) lines.push(...disasmInstruction(instr, depth + 2));
+  return lines;
+}
+
+function disasmInstruction(instr, depth) {
+  const ind = indent(depth);
+  switch (instr.t) {
+    case "text":
+      return [ind + "EMIT_TEXT " + inspectLiteral(instr.text)];
+    case "emit":
+      return [ind + "EMIT " + disasmValue(instr.value) + " ESCAPE=" + instr.escape];
+    case "if":
+      return [
+        ind + "IF " + disasmValue(instr.cond),
+        ...disasmBranch("THEN", instr.then, depth),
+        ...disasmBranch("ELSE", instr.else, depth),
+      ];
+    case "each":
+    case "with": {
+      const params =
+        instr.params && instr.params.length ? " AS |" + instr.params.join(" ") + "|" : "";
+      const head = ind + instr.t.toUpperCase() + " " + disasmValue(instr.subject) + params;
+      return [
+        head,
+        ...disasmBranch("DO", instr.body, depth),
+        ...disasmBranch("ELSE", instr.else, depth),
+      ];
+    }
+    case "scope": {
+      const entries = Object.entries(instr.hash || {});
+      const hash = entries.length
+        ? " {" + entries.map(([k, v]) => k + "=" + disasmValue(v)).join(", ") + "}"
+        : "";
+      return [ind + "SCOPE " + disasmValue(instr.base) + hash, ...disasmBranch("DO", instr.body, depth)];
+    }
+    default:
+      return [ind + String(instr.t).toUpperCase()];
+  }
+}
+
+function disasmValue(op) {
+  switch (op.t) {
+    case "lit":
+      return "LIT " + inspectLiteral(op.value);
+    case "assign":
+      return "ASSIGN " + op.name;
+    case "assigns":
+      return "ASSIGNS";
+    case "local":
+      return "LOCAL " + op.name;
+    case "this":
+      return "THIS";
+    case "parent":
+      return "PARENT";
+    case "root":
+      return "ROOT";
+    case "index":
+      return "INDEX0";
+    case "index1":
+      return "INDEX1";
+    case "key":
+      return "KEY";
+    case "first":
+      return "FIRST";
+    case "last":
+      return "LAST";
+    case "get":
+      return "GET " + disasmValue(op.base) + " " + op.segments.join(".");
+    case "call": {
+      const positional = op.args.map(disasmValue).join(", ");
+      const keyword = Object.entries(op.kwargs || {})
+        .map(([k, v]) => ", " + k + "=" + disasmValue(v))
+        .join("");
+      return "CALL " + op.name + "(" + positional + keyword + ")";
+    }
+    default:
+      return String(op.t).toUpperCase();
+  }
+}
+
+// Mirror Elixir's `inspect/1` for the scalar literals the wire carries: strings
+// are double-quoted, `null` prints as `nil`, and numbers/booleans print bare.
+function inspectLiteral(value) {
+  if (value === null) return "nil";
+  if (typeof value === "string") return JSON.stringify(value);
+  return String(value);
+}
+
 export function encodeState(state) {
   const json = JSON.stringify(state);
 

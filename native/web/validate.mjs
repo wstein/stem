@@ -12,6 +12,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createRenderer } from "./stem.mjs";
+import { disassemble } from "./playground_utils.mjs";
 import { load as loadYaml } from "./vendor/js-yaml.mjs";
 import jsonata from "./vendor/jsonata.mjs";
 
@@ -151,3 +152,47 @@ if (mapFailures > 0) {
   process.exit(1);
 }
 console.log(`source map: ${manifest.length}/${manifest.length} examples tile their output with valid provenance`);
+
+// Disassembly pass: the playground's Bytecode view renders `disassemble(program)`,
+// which must reproduce the text `Stem.Bytecode.disasm/1` emits on the BEAM. The
+// expected strings below are that reference output (the BEAM is the spec oracle),
+// so this guards the JS disassembler against the reference, no Elixir at runtime.
+const disasmCases = [
+  {
+    source: "Hi {{user.name}}!",
+    expected: '; stem-bc/v1\nEMIT_TEXT "Hi "\nEMIT GET ASSIGN user name ESCAPE=html\nEMIT_TEXT "!"\n',
+  },
+  {
+    source: "{{#each items}}{{@index1}}. {{@this.name}}{{/each}}",
+    expected:
+      "; stem-bc/v1\nEACH ASSIGN items\n  DO\n    EMIT INDEX1 ESCAPE=html\n" +
+      '    EMIT_TEXT ". "\n    EMIT GET THIS name ESCAPE=html\n',
+  },
+  {
+    source: "{{name | upcase | trim}}",
+    expected: "; stem-bc/v1\nEMIT CALL trim(CALL upcase(ASSIGN name)) ESCAPE=html\n",
+  },
+];
+
+let disasmFailures = 0;
+for (const { source, expected } of disasmCases) {
+  const compiled = compile(source);
+  if (compiled.error) {
+    disasmFailures++;
+    console.error(`  FAIL disasm (compile): ${source} — ${compiled.error.message}`);
+    continue;
+  }
+  const got = disassemble(compiled.program);
+  if (got === expected) {
+    console.log(`  ok  disasm: ${JSON.stringify(source)}`);
+  } else {
+    disasmFailures++;
+    console.error(`  FAIL disasm ${JSON.stringify(source)}: got ${JSON.stringify(got)}`);
+  }
+}
+
+if (disasmFailures > 0) {
+  console.error(`disassembly: ${disasmFailures} check(s) diverged`);
+  process.exit(1);
+}
+console.log(`disassembly: ${disasmCases.length}/${disasmCases.length} match Stem.Bytecode.disasm/1`);

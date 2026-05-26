@@ -643,6 +643,7 @@
                 <option value="rendered">HTML Preview</option>
                 <option value="markdown">Markdown Preview</option>
                 <option value="data">View Model</option>
+                <option value="bytecode">Bytecode</option>
               </select>
               <span class="field-label" id="out-lang-label" style="font-size:11px" hidden>Highlight</span>
               <input id="out-lang-input" class="select" style="width:130px" list="out-lang-list" aria-label="Plain Text highlight language" title="Type to search ~140 languages" placeholder="Plain text" autocomplete="off" hidden />
@@ -702,6 +703,7 @@
         charToLineColumn,
         debounce,
         decodeState,
+        disassemble,
         encodeState,
         partialNameAt
       } from "./playground_utils.mjs";
@@ -1195,14 +1197,23 @@
       let lastSegments = [];
       let lastData = null; // the post-transform data the template rendered (View Model view)
       let lastSegViews = []; // [{from,to,file,kind,start,end}] — segment char ranges in the output editor
+      let lastProgram = null; // the compiled wire program, for the Bytecode view
+
+      // Whether the given output view has content to show (drives the empty-state
+      // placeholder): the View Model needs data, Bytecode needs a compiled program,
+      // the rest need rendered output.
+      function outputHasContent(view) {
+        if (view === "data") return lastData != null;
+        if (view === "bytecode") return lastProgram != null;
+        return !!lastOutput;
+      }
 
       function setOutput(str, segments = []) {
         lastOutput = str;
         lastSegments = segments;
         paintTextView();
         renderPreview();
-        const hasText = outputView === "data" ? lastData != null : !!str;
-        qs(".output-body").dataset.empty = hasText ? "false" : "true";
+        qs(".output-body").dataset.empty = outputHasContent(outputView) ? "false" : "true";
       }
 
       // Paint the read-only output editor for the active text view. The "View
@@ -1210,7 +1221,10 @@
       // "Plain Text" view shows the output, highlighted in the example's output
       // language, with the source-map provenance as decorations.
       function paintTextView() {
-        if (outputView === "data") {
+        if (outputView === "bytecode") {
+          lastSegViews = [];
+          setOutputDoc(lastProgram ? disassemble(lastProgram) : "", Decoration.none);
+        } else if (outputView === "data") {
           let text = "";
           if (lastData != null) {
             try { text = dumpYaml(lastData, { indent: 2, lineWidth: -1, noRefs: true }); }
@@ -1273,6 +1287,11 @@
       async function updateOutLang() {
         if (outputView === "data") {
           outputEditor.dispatch({ effects: outLangComp.reconfigure([yaml(), yamlHighlighting]) });
+          return;
+        }
+        if (outputView === "bytecode") {
+          // Disassembly is plain text — no language grammar.
+          outputEditor.dispatch({ effects: outLangComp.reconfigure([]) });
           return;
         }
         if (outputView !== "source") return;
@@ -1370,6 +1389,7 @@
         const compiled = renderer.compile(mainSource, partialsMap(), { map: true });
 
         if (compiled.error) {
+          lastProgram = null;
           if (activeTabIdx === 0) {
             const [from, to] = byteRangeToCharRange(mainSource, compiled.error.start, compiled.error.end);
             updateDiagnostics([{ from, to, severity: "error", message: compiled.error.message }]);
@@ -1382,6 +1402,7 @@
           setOutput(""); saveHash(); return;
         }
 
+        lastProgram = compiled.program;
         clearDiagnostics();
 
         let data;
@@ -1478,13 +1499,14 @@
       // ── Output view ───────────────────────────────────────────────────
       // Valid output views; anything else (e.g. an old share link) falls back to
       // the iframe Preview.
-      const validView = (v) => (["source", "rendered", "markdown", "data"].includes(v) ? v : "rendered");
+      const validView = (v) =>
+        (["source", "rendered", "markdown", "data", "bytecode"].includes(v) ? v : "rendered");
 
       function setOutputView(view) {
         outputView = view;
-        // "source" (provenance) and "data" (view-model YAML) use the text pane;
-        // "rendered" and "markdown" use the iframe.
-        const isText = view === "source" || view === "data";
+        // "source" (provenance), "data" (view-model YAML), and "bytecode" (wire
+        // disassembly) use the text pane; "rendered" and "markdown" use the iframe.
+        const isText = view === "source" || view === "data" || view === "bytecode";
         byId("output-text").hidden = !isText;
         byId("output-preview").hidden = isText;
         hideSegTip(); clearLink();
@@ -1497,8 +1519,7 @@
         const isPreview = view === "rendered" || view === "markdown";
         byId("scripts-toggle").style.display = isPreview ? "inline-flex" : "none";
         if (isText) { paintTextView(); outputEditor.requestMeasure(); } else renderPreview();
-        qs(".output-body").dataset.empty =
-          (view === "data" ? lastData != null : !!lastOutput) ? "false" : "true";
+        qs(".output-body").dataset.empty = outputHasContent(view) ? "false" : "true";
         caretLinkKey = null; syncOutputToCaret();
       }
 
