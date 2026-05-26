@@ -36,6 +36,59 @@ no helper name (`{{name |  | trim}}`) is rejected with an explicit
 
 Run `mix stem.format` to reformat your `.stem` files after the edit.
 
+== Contextual references use the `@` prefix
+
+Every contextual reference now uses the `@` prefix, and the Mustache/Handlebars
+`this`, `{{.}}`, and `../` forms are removed:
+
+[cols="1,1",options="header"]
+|===
+| Before | After
+
+| `{{this}}`, `{{.}}` | `{{@this}}`
+| `{{this.name}}` | `{{@this.name}}`
+| `{{../title}}` (enclosing) | `{{@parent.title}}`
+| `{{../title}}` (render root) | `{{@root.title}}`
+|===
+
+* `@this` is the current context and now resolves *everywhere* — at the top
+  level it is the render assigns, so `{{@this.name}}` is the same as `{{name}}`.
+* `@parent` is the *immediate* enclosing context. Nested blocks chain through
+  it (`@parent.@parent` is not supported; reach further with `@root`), and it
+  is a compile error outside a block.
+* `@root` is the render assigns, reachable from any depth.
+* `@first` and `@last` join `@index`/`@index1`/`@key` as `#each` iteration
+  variables. All five are a compile error outside an `#each`.
+
+A bare `this` is now an ordinary assign name, not the context — rename any such
+assigns or use `@this`.
+
+*Before:*
+[source,handlebars]
+----
+{{#each items}}{{@index}}: {{this.name}} ({{../category}}){{/each}}
+----
+
+*After:*
+[source,handlebars]
+----
+{{#each items}}{{@index}}: {{@this.name}} ({{@root.category}}){{/each}}
+----
+
+== List indexing: `items.[2]`
+
+A numeric bracket segment indexes a list (zero-based; negative counts from the
+end, like Elixir's `Enum.at/2`). A missing key or out-of-range index renders
+empty rather than raising.
+
+[source,handlebars]
+----
+{{items.[0]}}      <1>
+{{lookup items 0}} <2>
+----
+<1> The first element; `{{items.[99]}}` on a short list renders nothing.
+<2> The `lookup` transformer is the equivalent dynamic-index form.
+
 == `||` and `&&` are reserved
 
 The boolean operators `||` and `&&` are reserved for a future release and are

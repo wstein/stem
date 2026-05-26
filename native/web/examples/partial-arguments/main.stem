@@ -1,1 +1,1 @@
-<ul>{{#each people}}{{> row this badge="member"}}{{/each}}</ul>
+<ul>{{#each people}}{{> row @this badge="member"}}{{/each}}</ul>

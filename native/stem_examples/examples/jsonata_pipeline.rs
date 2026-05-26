@@ -40,7 +40,7 @@ const TEMPLATE: &str = "\
 Top sellers: {{ products | map \"name\" | take 2 | join \", \" }}
 
 {{#each products}}\
-- {{ name | capitalize }}: {{ revenue }} {{ ../currency }}{{#if name | contains \"w\"}} (stock item){{/if}}
+- {{ name | capitalize }}: {{ revenue }} {{ @root.currency }}{{#if name | contains \"w\"}} (stock item){{/if}}
 {{/each}}\
 Total: {{ total }} {{ currency }}
 {{ title | shout }}

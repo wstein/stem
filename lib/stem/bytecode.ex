@@ -63,11 +63,12 @@ defmodule Stem.Bytecode do
   ## Scope
 
   The bytecode target covers the structured Stem language: literal text, `{{ }}`
-  and `{{{ }}}` expressions, assign/dotted-path/parent-path resolution, block
+  and `{{{ }}}` expressions, assign and dotted-path resolution (with numeric
+  `[n]` list indices), the contextual references `@this`/`@parent`/`@root`, block
   helpers (`{{#if}}`, `{{#unless}}`, `{{#each}}`, `{{#with}}`) with block
-  parameters and `{{else}}`, block-scoped references (`this`, `@index`, `@key`),
-  regions, and `{{yield}}` — the whole structured language. A top-level `this`
-  reference (which the compiled backend rejects as unbound) raises
+  parameters and `{{else}}`, the iteration variables `@index`/`@index1`/`@key`/
+  `@first`/`@last`, regions, and `{{yield}}` — the whole structured language. An
+  iteration variable or `@parent` used out of scope raises
   `Stem.Bytecode.UnsupportedError`.
 
   ## Transformers and capabilities
@@ -128,7 +129,7 @@ defmodule Stem.Bytecode do
   time so the program is self-contained.
 
   Raises `Stem.Bytecode.UnsupportedError` for constructs outside the bytecode
-  scope (arbitrary Elixir expressions, top-level `this`).
+  scope (e.g. an iteration variable or `@parent` used outside its block).
   """
   @spec compile(Stem.AST.t(), keyword()) :: Program.t()
   def compile(nodes, opts \\ []) when is_list(nodes) and is_list(opts) do

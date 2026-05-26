@@ -4,6 +4,6 @@
 
 ## Features
 
-{{#each features}}- {{this}}
+{{#each features}}- {{@this}}
 {{/each}}
 Built with **{{title}}**. {{note}}

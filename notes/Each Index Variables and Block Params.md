@@ -11,7 +11,8 @@ Inside `{{#each}}`:
 
 - `{{@index}}` — zero-based index (`0, 1, 2, …`), for array-style positioning.
 - `{{@index1}}` — one-based index (`1, 2, 3, …`), for human-facing display ("Item 1").
-- `{{@key}}` — the key when iterating a map; `{{this}}` — the current item.
+- `{{@key}}` — the key when iterating a map; `{{@this}}` — the current item.
+- `{{@first}}` / `{{@last}}` — true on the first / last iteration step.
 
 Block parameters accept up to three names:
 

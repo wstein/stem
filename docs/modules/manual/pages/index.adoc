@@ -229,7 +229,7 @@ Stem.Unsafe.eval_string(template, assigns: [users: users],
 [source,handlebars]
 ----
 {{#each users | filter "active"}}
-  <li>{{this.name}}</li>
+  <li>{{@this.name}}</li>
 {{/each}}
 ----
 
@@ -243,7 +243,7 @@ Inline arithmetic (`{{ price * quantity }}`) is rejected in safe mode. Precomput
 
 === Recipe 4 — Mustache overloaded sections → explicit `{{#if}}` / `{{#each}}`
 
-Mustache's `{{#section}}` is overloaded: it iterates a list, renders once for a truthy non-list value, and skips for falsy/empty values. Stem makes the intent explicit by choosing the right block, turns the inverted section `{{^…}}` into `{{#unless}}`, and replaces the implicit item `{{.}}` with `{{this}}`.
+Mustache's `{{#section}}` is overloaded: it iterates a list, renders once for a truthy non-list value, and skips for falsy/empty values. Stem makes the intent explicit by choosing the right block, turns the inverted section `{{^…}}` into `{{#unless}}`, and replaces the implicit item `{{.}}` with `{{@this}}`.
 
 *Before (Mustache):*
 [source,mustache]
@@ -263,7 +263,7 @@ Mustache's `{{#section}}` is overloaded: it iterates a list, renders once for a 
 [source,handlebars]
 ----
 {{#each items}}
-  <li>{{this}}</li>
+  <li>{{@this}}</li>
 {{/each}}
 {{#with user}}
   Hi {{name}}

@@ -13,6 +13,14 @@ Breaking changes since `0.2.0`. There is no compatibility shim for any of these.
 
 === Changed
 
+* *Contextual references use the `@` prefix* — `@this` (current context, valid
+  everywhere — at the root it is the render assigns, so `{{@this.name}}` works
+  outside blocks), `@parent` (immediate enclosing context), and `@root` (the
+  render assigns) replace the Mustache/Handlebars `this`, `{{.}}`, and `../`
+  forms, which are removed. `@first`/`@last` join `@index`/`@index1`/`@key`,
+  and all five are a compile error outside an `#each`. `items.[2]` indexes a
+  list, and a missing key or out-of-range index now renders empty rather than
+  raising.
 * *Pipe syntax* — the pipeline separator is now a single `|` with
   space-separated prefix arguments; the `transformer(arg, …)` paren-call form is
   removed in favour of `()` grouping (`{{name | truncate 20}}`,

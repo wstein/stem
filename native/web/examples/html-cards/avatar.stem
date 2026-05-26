@@ -1,1 +1,1 @@
-<div class="avatar">{{this.emoji}}</div>
+<div class="avatar">{{@this.emoji}}</div>

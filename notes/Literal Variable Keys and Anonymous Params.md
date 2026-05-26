@@ -11,7 +11,7 @@ Stem can read data keys that are not valid identifiers — `first-name`, `a.b`, 
 - **Bracketed literal keys**: `{{[first-name]}}`, `{{user.[first-name]}}`, `{{[a.b]}}`. A `[...]` segment escapes any character a bare identifier cannot carry (dashes, spaces, dots, leading digits, reserved words like `this`). Segments compose with dots and with bare segments.
 - **Uppercase / mixed-case bare names**: `{{Item1}}`, `as |Item|`, `as |I1|`. Bare names accept any leading letter; dashes/spaces still require brackets.
 - **Anonymous param `_`**: in `as |...|` it skips a positional slot and may repeat (`as |_ _ i1|` reads only the one-based index). It is exempt from the uniqueness check and from the unused-parameter warning. Named params must still be unique.
-- **`_` is only special as a param.** As an expression, `_` is an ordinary key, so a data key named `_` stays readable: `{{_}}`, `{{[_]}}`, and `{{this.[_]}}` all resolve `{"_": 99}` to `99`.
+- **`_` is only special as a param.** As an expression, `_` is an ordinary key, so a data key named `_` stays readable: `{{_}}`, `{{[_]}}`, and `{{@this.[_]}}` all resolve `{"_": 99}` to `99`.
 
 ## Why
 

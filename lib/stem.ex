@@ -137,10 +137,15 @@ defmodule Stem do
   may use any case (`{{Item1}}`). A key that is not a valid identifier is wrapped
   in brackets — `{{[first-name]}}`, `{{[a.b]}}` — which only affects parsing, so
   a data key named `_` is still read normally with `{{_}}`.
-  Inside `{{#each}}`, `{{this}}` (or its shorthand `{{.}}`) is the current item,
-  `{{@index}}` the zero-based index, `{{@index1}}` the one-based index (mirroring
-  StringTemplate's `i0`/`i`), and `{{@key}}` the key when iterating a map.
-  `{{../name}}` reaches the parent (top-level assign) scope.
+  Contextual references use the `@` prefix: `{{@this}}` is the current context
+  (the render assigns at the top level, the item inside `{{#each}}`, the subject
+  inside `{{#with}}`), `{{@parent}}` the immediate enclosing context, and
+  `{{@root}}` the render assigns from any depth. Each accepts a path, e.g.
+  `{{@this.name}}` or `{{@root.title}}`, and `{{items.[2]}}` indexes a list.
+  Inside `{{#each}}`, `{{@index}}` is the zero-based index, `{{@index1}}` the
+  one-based index (mirroring StringTemplate's `i0`/`i`), `{{@key}}` the key when
+  iterating a map, and `{{@first}}`/`{{@last}}` flag the first/last step; these
+  five are valid only inside an `{{#each}}`.
 
   The literals `true`, `false`, and `null` are recognized; `nil` is accepted as
   an alias for `null` (canonicalized to `null` by the formatter) for

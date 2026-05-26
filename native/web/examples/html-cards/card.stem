@@ -1,9 +1,9 @@
 {{!-- One selectable team member: the whole card is a <label>, so a click
       toggles the hidden checkbox and highlights the card. Checkboxes (not
       radios) let several cards be selected at once. --}}
-<label class="card {{#if this.lead}}lead{{/if}}">
+<label class="card {{#if @this.lead}}lead{{/if}}">
   <input class="pick" type="checkbox" />
-  <span class="tip">{{this.note}}</span>
+  <span class="tip">{{@this.note}}</span>
   <div class="head">
     {{> avatar}}
     {{> identity}}

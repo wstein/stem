@@ -8,7 +8,7 @@ Stem manages context scoping and iteration through local bindings that unify wit
 
 ## What
 
-`{{#each list}}` binds the current item to `this` (and bare identifiers), the zero-based index to `@index`, the one-based index to `@index1`, and the key (for maps) to `@key`. `{{#with object}}` pushes the object as the current scope. `../name` allows reaching out of the current iteration/context to the parent (top-level) assigns. `{{#each list as |item idx|}}` (or `as |item i0 i1|` for both indices) and `{{#with object as |value|}}` expose those same scopes through explicit block parameters.
+`{{#each list}}` binds the current item to `@this` (and to bare identifiers), the zero-based index to `@index`, the one-based index to `@index1`, the key (for maps) to `@key`, and the first/last step to `@first`/`@last`. `{{#with object}}` pushes the object as `@this`. `@parent` reaches the immediate enclosing context and `@root` the render assigns from any depth (`@this` itself is the render assigns at the top level, so `{{@this.name}}` works outside any block). `{{#each list as |item idx|}}` (or `as |item i0 i1|` for both indices) and `{{#with object as |value|}}` expose those same scopes through explicit block parameters. The five iteration variables (`@index`/`@index1`/`@key`/`@first`/`@last`) are valid only inside an `#each`.
 
 ## Why
 
