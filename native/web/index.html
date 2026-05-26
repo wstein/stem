@@ -1923,11 +1923,13 @@
         const onTransform = activeView === "data" && dataTab === "transform";
         const fileName = activeView !== "data" ? activeTab().name
           : onTransform ? "transform" : "data.yaml";
-        const lang = activeView !== "data" ? "Handlebars"
+        // The template editor's language is Stem (Handlebars-inspired, but not
+        // Handlebars). Escape mode is shown in the Output toolbar, not here.
+        const lang = activeView !== "data" ? "Stem"
           : onTransform ? "JSONata" : "YAML";
         byId("status-meta").innerHTML =
           `<b>${escapeHtml(fileName)} · Ln ${line.number}, Col ${col}</b>` +
-          `  ·  ${lang}  ·  UTF-8  ·  Escape: <b>${escapeMode || "as compiled"}</b>`;
+          `  ·  ${lang}  ·  UTF-8`;
       }
 
       // ── Output view ───────────────────────────────────────────────────
