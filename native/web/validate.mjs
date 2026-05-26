@@ -12,7 +12,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { createRenderer } from "./stem.mjs";
-import { buildDependencyGraph, disassemble } from "./playground_utils.mjs";
+import { astOutline, buildDependencyGraph, disassemble } from "./playground_utils.mjs";
 import { load as loadYaml } from "./vendor/js-yaml.mjs";
 import jsonata from "./vendor/jsonata.mjs";
 
@@ -238,3 +238,20 @@ if (depFailures > 0) {
   process.exit(1);
 }
 console.log(`dependency graph: 2/2 derive edges, missing nodes, and cycles from parse_ast`);
+
+// AST outline pass: the AST inspector tab flattens `parse_ast` into an indented
+// outline with byte spans for click-to-source. Check the shape end-to-end.
+const outlineAst = parseAst("{{#each items}}{{@this.name}}{{/each}}");
+if (outlineAst.error) {
+  console.error(`  FAIL ast outline parse: ${outlineAst.error.message}`);
+  process.exit(1);
+}
+const outline = astOutline(outlineAst.ast.nodes);
+const shape = outline.map((r) => `${r.depth}:${r.text}`).join(" | ");
+if (shape === "0:each items | 1:emit @this.name" && outline.every((r) => typeof r.start === "number")) {
+  console.log(`  ok  ast outline: indented rows + byte spans`);
+} else {
+  console.error(`  FAIL ast outline: ${shape}`);
+  process.exit(1);
+}
+console.log(`ast outline: 1/1 flattens parse_ast with spans`);

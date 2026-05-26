@@ -226,6 +226,69 @@ export function buildDependencyGraph(asts) {
   return { nodes, edges, cycles: findCycles(nodes, edges) };
 }
 
+// Flatten a `stem-ast/v1` node list (from `parse_ast`) into an indented outline
+// for the AST inspector tab: `[{ depth, text, start?, end? }]`, where start/end
+// are the node's byte span (when present) so a row click can highlight the
+// originating source. Expressions render in their written form.
+export function astOutline(nodes) {
+  const out = [];
+  const exprLabel = (e) => {
+    if (!e || typeof e !== "object") return String(e);
+    switch (e.t) {
+      case "identifier": return e.name;
+      case "path": return e.segments.join(".");
+      case "context": return "@" + e.kind + (e.path && e.path.length ? "." + e.path.join(".") : "");
+      case "index": return "@index";
+      case "index1": return "@index1";
+      case "key": return "@key";
+      case "first": return "@first";
+      case "last": return "@last";
+      case "lit": return JSON.stringify(e.value);
+      case "call": return `${e.name}(${(e.args || []).map((a) => exprLabel(a.value)).join(", ")})`;
+      case "pipeline": return exprLabel(e.lhs) + (e.stages || []).map((s) => ` | ${s.name}`).join("");
+      default: return e.t || "?";
+    }
+  };
+  const span = (n) =>
+    n.src && typeof n.src.start === "number" ? { start: n.src.start, end: n.src.end } : {};
+  const row = (depth, text, n) => out.push({ depth, text, ...span(n) });
+  const branch = (depth, label, list) => {
+    if (list && list.length) {
+      out.push({ depth, text: label });
+      walk(list, depth + 1);
+    }
+  };
+  const truncate = (text) => (text.length > 30 ? text.slice(0, 30) + "…" : text);
+
+  function walk(list, depth) {
+    for (const n of list || []) {
+      switch (n.t) {
+        case "text": row(depth, `text ${JSON.stringify(truncate(n.text))}`, n); break;
+        case "emit": row(depth, `emit ${exprLabel(n.expr)}${n.escape === "none" ? " (raw)" : ""}`, n); break;
+        case "if":
+        case "unless":
+          row(depth, `${n.t} ${exprLabel(n.cond)}`, n);
+          walk(n.then, depth + 1);
+          branch(depth, "else", n.else);
+          break;
+        case "each":
+        case "with":
+          row(depth, `${n.t} ${exprLabel(n.subject)}${(n.params || []).length ? ` as |${n.params.join(" ")}|` : ""}`, n);
+          walk(n.body, depth + 1);
+          branch(depth, "else", n.else);
+          break;
+        case "region": row(depth, `region ${n.name}`, n); walk(n.body, depth + 1); break;
+        case "yield": row(depth, `yield ${n.name}`, n); break;
+        case "partial": row(depth, `partial > ${n.name}`, n); break;
+        case "partial_scope": row(depth, "partial-scope", n); walk(n.body, depth + 1); break;
+        default: row(depth, n.t || "?", n);
+      }
+    }
+  }
+  walk(nodes, 0);
+  return out;
+}
+
 // Depth-first back-edge search over the (non-missing) inclusion edges.
 function findCycles(nodes, edges) {
   const adjacency = new Map();

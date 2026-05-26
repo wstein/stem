@@ -437,6 +437,11 @@
       .dep-edge.cycle { stroke: var(--danger); stroke-width: 1.8; }
       .dep-edge.missing { stroke: var(--warn); stroke-dasharray: 3 2; }
 
+      .ast-pane { padding: 6px 0; font: 12px/1.6 var(--font-mono); }
+      .ast-row { padding: 1px 14px 1px 0; white-space: pre; color: var(--fg-secondary); }
+      .ast-row.linked { cursor: pointer; color: var(--fg); }
+      .ast-row.linked:hover { background: var(--accent-softer); }
+
       .dock-toggle {
         appearance: none; border: 1px solid var(--border); background: var(--bg);
         color: var(--fg-muted); cursor: pointer; font: 11px var(--font-ui);
@@ -802,6 +807,7 @@
             <button class="dock-tab" data-dock="deps">
               Dependencies <span class="badge" id="dock-badge-deps">0</span>
             </button>
+            <button class="dock-tab" data-dock="ast">AST</button>
           </div>
           <div class="dock-actions">
             <button id="dock-collapse" title="Collapse / expand" aria-label="Collapse dock">
@@ -830,6 +836,7 @@
     <script type="module">
       import { createRenderer } from "./stem.mjs";
       import {
+        astOutline,
         buildDependencyGraph,
         byteRangeToCharRange,
         charToByte,
@@ -2411,7 +2418,46 @@
         const body = byId("dock-body");
         body.textContent = "";
         if (dockTab === "deps") renderDeps(body, deps);
+        else if (dockTab === "ast") renderAst(body);
         else renderProblems(body);
+      }
+
+      // The active template tab's pre-expansion AST (real `parse_ast`), as an
+      // indented outline. Clicking a row highlights its source span in the editor.
+      function renderAst(body) {
+        const source = activeTab().source;
+        const parsed = renderer.parseAst(source);
+        if (parsed.error) {
+          body.append(makeEl("div", { class: "problem-empty" }, parsed.error.message));
+          return;
+        }
+        const rows = astOutline(parsed.ast.nodes);
+        if (!rows.length) {
+          body.append(makeEl("div", { class: "problem-empty" }, "empty template — no nodes"));
+          return;
+        }
+        const pane = makeEl("div", { class: "ast-pane" });
+        for (const r of rows) {
+          const row = makeEl("div", {
+            class: "ast-row",
+            style: `padding-left:${10 + r.depth * 16}px`,
+          }, r.text);
+          if (typeof r.start === "number") {
+            row.classList.add("linked");
+            row.addEventListener("mouseenter", () => {
+              const [from, to] = byteRangeToCharRange(source, r.start, r.end);
+              templateView.dispatch({ effects: setLinkHighlight.of({ from, to }) });
+            });
+            row.addEventListener("mouseleave", clearLink);
+            row.addEventListener("click", () => {
+              const [from] = byteRangeToCharRange(source, r.start, r.end);
+              templateView.focus();
+              templateView.dispatch({ selection: { anchor: from }, scrollIntoView: true });
+            });
+          }
+          pane.append(row);
+        }
+        body.append(pane);
       }
 
       function renderProblems(body) {
