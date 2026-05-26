@@ -65,9 +65,12 @@ Playground workflow highlights:
   severity) and a **Dependencies** tab — an SVG graph of `{{> name}}` partial
   inclusions built from the engine's `parse_ast`, drawing cyclic inclusions as
   red edges (the compile-time `partial recursion detected` error) and unknown
-  partials as dashed amber nodes. An **AST** tab renders the active template's
-  pre-expansion `parse_ast` as an indented outline; hovering or clicking a row
-  highlights and jumps to its source span in the editor.
+  partials as dashed amber nodes. A **Context Inspector** tab snapshots the
+  render context (`@this`/`@parent`/`@root`/iteration vars/locals) at a clicked
+  output expression via the engine's `inspect_at` — one card per loop iteration.
+  An **AST** tab renders the active template's pre-expansion `parse_ast` as an
+  indented outline; hovering or clicking a row highlights and jumps to its source
+  span in the editor.
 - A capability-group selector (Strings / Collections / Predicates checkboxes;
   Minimum is always on) in the output header. Unchecking a group makes the
   engine refuse a template that uses one of its transformers, surfacing the

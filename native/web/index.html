@@ -437,6 +437,28 @@
       .dep-edge.cycle { stroke: var(--danger); stroke-width: 1.8; }
       .dep-edge.missing { stroke: var(--warn); stroke-dasharray: 3 2; }
 
+      .ctx-pane { padding: 12px 14px; display: grid; gap: 10px; }
+      .ctx-hint {
+        padding: 8px 12px; border-radius: 6px; font-size: 12px;
+        background: var(--accent-softer); border: 1px dashed var(--accent-soft);
+        color: var(--accent-2);
+      }
+      .ctx-snap { border: 1px solid var(--border); border-radius: 6px; background: var(--bg-1); overflow: hidden; }
+      .ctx-snap-head {
+        display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+        background: var(--bg-2); border-bottom: 1px solid var(--border);
+        font-family: var(--font-mono); font-size: 11px;
+      }
+      .ctx-snap-head .ix { background: var(--accent); color: #fff; padding: 1px 6px; border-radius: 3px; font-weight: 700; }
+      .ctx-snap-head .src { color: var(--accent-2); background: var(--accent-softer); padding: 1px 5px; border-radius: 3px; }
+      .ctx-snap-table {
+        display: grid; grid-template-columns: 90px 1fr; gap: 4px 12px;
+        padding: 8px 12px; font: 11.5px/1.45 var(--font-mono);
+      }
+      .ctx-snap-table .key { color: var(--accent-2); font-weight: 600; }
+      .ctx-snap-table .val { color: var(--fg); white-space: pre-wrap; word-break: break-word; }
+      .ctx-snap-table .val .ty { color: var(--fg-faint); font-style: italic; margin-left: 6px; }
+
       .ast-pane { padding: 6px 0; font: 12px/1.6 var(--font-mono); }
       .ast-row { padding: 1px 14px 1px 0; white-space: pre; color: var(--fg-secondary); }
       .ast-row.linked { cursor: pointer; color: var(--fg); }
@@ -804,6 +826,7 @@
             <button class="dock-tab active" data-dock="problems">
               Problems <span class="badge" id="dock-badge-problems">0</span>
             </button>
+            <button class="dock-tab" data-dock="context">Context Inspector</button>
             <button class="dock-tab" data-dock="deps">
               Dependencies <span class="badge" id="dock-badge-deps">0</span>
             </button>
@@ -1859,7 +1882,7 @@
         outputEditor.scrollDOM.addEventListener("scroll", () => { cancelHover(); hideSegTip(); clearLink(); });
         content.addEventListener("click", (e) => {
           const sv = svOf(e.target);
-          if (sv) openSourceLocation(sv.file, sv.start, sv.end);
+          if (sv) { openSourceLocation(sv.file, sv.start, sv.end); setContextTarget(sv); }
         });
       })();
 
@@ -2371,6 +2394,7 @@
       // partial dependency graph (built from the engine's `parse_ast`). Hidden
       // until toggled; refreshed by setOutput() on every run.
       let dockTab = "problems";
+      let ctxTarget = null; // { file, start, end, label } — the last-clicked output span
 
       function dockVisible() { return !byId("dock").hidden; }
 
@@ -2419,7 +2443,90 @@
         body.textContent = "";
         if (dockTab === "deps") renderDeps(body, deps);
         else if (dockTab === "ast") renderAst(body);
+        else if (dockTab === "context") renderContext(body);
         else renderProblems(body);
+      }
+
+      // Context Inspector: snapshots of the render context at the last-clicked
+      // output span, from the engine's `inspect_at` — one card per execution
+      // (loop bodies yield one per iteration).
+      function renderContext(body) {
+        const pane = makeEl("div", { class: "ctx-pane" });
+        if (!ctxTarget || !lastProgram) {
+          pane.append(makeEl("div", { class: "ctx-hint" },
+            "Click an expression in the Plain Text output to inspect its scope here. " +
+            "Loop bodies produce one snapshot per iteration."));
+          body.append(pane);
+          return;
+        }
+        let snaps;
+        try {
+          snaps = renderer.inspectAt(
+            lastProgram, lastData,
+            { file: ctxTarget.file, start: ctxTarget.start, end: ctxTarget.end },
+            { transformers: groups }
+          );
+        } catch (err) {
+          pane.append(makeEl("div", { class: "ctx-hint" }, "inspect error: " + err.message));
+          body.append(pane);
+          return;
+        }
+        pane.append(makeEl("div", { class: "ctx-hint" },
+          `${snaps.length} snapshot${snaps.length === 1 ? "" : "s"} at \`${ctxTarget.label}\`` +
+          " · re-execute-on-demand, no live trace"));
+        snaps.forEach((s, i) => pane.append(renderSnap(s, i)));
+        if (!snaps.length) {
+          pane.append(makeEl("div", { style: "padding:8px 2px;color:var(--fg-muted);font-size:12px" },
+            "This span was never reached during render."));
+        }
+        body.append(pane);
+      }
+
+      function renderSnap(snap, i) {
+        const head = makeEl("div", { class: "ctx-snap-head" }, [
+          makeEl("span", { class: "ix" }, "#" + (i + 1)),
+          makeEl("span", { class: "src" }, ctxTarget.label),
+        ]);
+        const rows = [
+          ["@this", snap.this], ["@parent", snap.parent], ["@root", snap.root],
+          ["@index", snap.index], ["@index1", snap.index1], ["@key", snap.key],
+          ["@first", snap.first], ["@last", snap.last],
+        ].filter(([, v]) => v !== null && v !== undefined);
+        for (const [k, v] of Object.entries(snap.locals || {})) rows.push([k, v]);
+        const table = makeEl("div", { class: "ctx-snap-table" });
+        for (const [k, v] of rows) {
+          table.append(makeEl("span", { class: "key" }, k));
+          table.append(makeEl("span", { class: "val" }, [
+            ctxSnippet(v),
+            makeEl("span", { class: "ty" }, ctxType(v)),
+          ]));
+        }
+        return makeEl("div", { class: "ctx-snap" }, [head, table]);
+      }
+      function ctxSnippet(v) {
+        if (v === null || v === undefined) return "—";
+        if (typeof v === "object") {
+          try { return JSON.stringify(v).slice(0, 120); } catch { return "[object]"; }
+        }
+        if (typeof v === "string") return JSON.stringify(v.length > 80 ? v.slice(0, 80) + "…" : v);
+        return String(v);
+      }
+      function ctxType(v) {
+        if (v === null) return "null";
+        if (Array.isArray(v)) return `array(${v.length})`;
+        return typeof v;
+      }
+
+      // Point the Context Inspector at a clicked output segment (emit/expr runs
+      // only; literal text has no inspectable scope). Opens the Context tab when
+      // the dock is visible; otherwise stored for when it next opens.
+      function setContextTarget(sv) {
+        if (!sv || sv.start === null) return;
+        const src = fileSource(sv.file);
+        const [from, to] = byteRangeToCharRange(src, sv.start, sv.end);
+        const label = src.slice(from, to).trim() || `${sv.file}:${sv.start}`;
+        ctxTarget = { file: sv.file, start: sv.start, end: sv.end, label };
+        if (dockVisible()) selectDockTab("context");
       }
 
       // The active template tab's pre-expansion AST (real `parse_ast`), as an
