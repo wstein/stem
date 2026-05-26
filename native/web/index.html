@@ -655,6 +655,15 @@
                 <option value="json">json</option>
                 <option value="none">none</option>
               </select>
+              <!-- HTML/Markdown preview: run <script> in the preview. The frame
+                   is re-sandboxed to allow-scripts WITHOUT allow-same-origin, so
+                   scripts execute in an isolated (null) origin and cannot reach
+                   this page. Off by default; not persisted in share links. -->
+              <label id="scripts-toggle" class="field-label"
+                     style="font-size:11px; display:none; align-items:center; gap:4px; cursor:pointer"
+                     title="Run &lt;script&gt; in the preview (sandboxed: isolated origin, no access to this page)">
+                <input type="checkbox" id="allow-scripts" /> Allow scripts
+              </label>
             </div>
             <div class="pane-actions">
               <button class="focus-toggle" data-pane="output" title="Focus this pane (Esc to exit)">
@@ -740,6 +749,7 @@
       let exampleModified  = false;  // true when a loaded example has been edited
       let activeView   = "tmpl";      // "tmpl" | "data"
       let outputView   = "rendered";  // "rendered" | "source"
+      let allowScripts = false;       // HTML/Markdown preview: run <script> in an isolated sandbox
       let escapeMode   = "";
       // Opt-in capability groups loaded for rendering (Minimum is always on).
       // Groups are risk-based: format (low — value transforms),
@@ -1165,11 +1175,17 @@
         return { ...program, instructions: rewrite(program.instructions) };
       }
 
-      function previewDoc(body) {
-        const csp = "default-src 'none'; img-src * data:; style-src 'unsafe-inline'; font-src *;";
+      // When scripting is off, a strict CSP (no scripts) is the inner boundary on
+      // top of the same-origin sandbox. When the author opts into scripts, the
+      // CSP is dropped — the isolated `allow-scripts` (null-origin) sandbox is the
+      // boundary instead — so the rendered <script> actually runs.
+      function previewDoc(body, allowScripts = false) {
+        const cspMeta = allowScripts
+          ? ""
+          : '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; img-src * data:; style-src \'unsafe-inline\'; font-src *;">';
         return (
           '<!doctype html><html><head><meta charset="utf-8">' +
-          `<meta http-equiv="Content-Security-Policy" content="${csp}">` +
+          cspMeta +
           "<style>html,body{margin:0}body{font:13px/1.5 system-ui,sans-serif;padding:14px;color:#18181b;background:#fff}</style>" +
           `</head><body>${body}</body></html>`
         );
@@ -1323,11 +1339,14 @@
 
       // Fill the iframe for the current iframe view: raw output HTML for
       // "Preview", or the output interpreted as Markdown for "Markdown". Both
-      // render in the same sandboxed iframe (no scripts; CSP default-src 'none'),
-      // so the Markdown view shares Preview's trust boundary.
+      // honour the "Allow scripts" toggle, swapping to an isolated `allow-scripts`
+      // sandbox (no `allow-same-origin`, so it cannot reach this page).
       function renderPreview() {
+        const scripts = (outputView === "rendered" || outputView === "markdown") && allowScripts;
+        const frame = byId("output-preview");
+        frame.setAttribute("sandbox", scripts ? "allow-scripts" : "allow-same-origin");
         const body = outputView === "markdown" ? marked.parse(lastOutput) : lastOutput;
-        byId("output-preview").srcdoc = previewDoc(body);
+        frame.srcdoc = previewDoc(body, scripts);
       }
 
       // The file behind a segment ("main" is tab 0; partials are the rest).
@@ -1474,6 +1493,9 @@
         const showLang = view === "source";
         byId("out-lang-input").hidden = !showLang;
         byId("out-lang-label").hidden = !showLang;
+        // The "Allow scripts" toggle applies to the iframe previews (HTML / Markdown).
+        const isPreview = view === "rendered" || view === "markdown";
+        byId("scripts-toggle").style.display = isPreview ? "inline-flex" : "none";
         if (isText) { paintTextView(); outputEditor.requestMeasure(); } else renderPreview();
         qs(".output-body").dataset.empty =
           (view === "data" ? lastData != null : !!lastOutput) ? "false" : "true";
@@ -2178,6 +2200,11 @@
       });
 
       byId("view-select").addEventListener("change", (e) => { setOutputView(e.target.value); run(); });
+
+      byId("allow-scripts").addEventListener("change", (e) => {
+        allowScripts = e.target.checked;
+        renderPreview();
+      });
 
       // Fill the searchable highlight picker: Plain text, then every language in
       // the CodeMirror registry (alphabetical) as <datalist> options. Empty input
