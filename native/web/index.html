@@ -309,7 +309,9 @@
       .esplitter:hover, .esplitter.dragging { background: var(--accent); }
 
       .editor-pane .cm-editor { height: 100%; font-size: var(--editor-font-size, 13px); }
-      .editor-pane .cm-scroller { overflow: auto; }
+      /* The picked editor font applies to the file content only (CodeMirror sets
+         the family on .cm-scroller); the tab/UI chrome keeps --font-mono. */
+      .editor-pane .cm-scroller { overflow: auto; font-family: var(--editor-font, var(--font-mono)); }
       .editor-pane .cm-gutters {
         background: var(--bg-gutter); border-right: 1px solid var(--border);
         color: var(--fg-faint); min-width: 38px;
@@ -340,6 +342,7 @@
          (syntax-highlighted, language auto-switched). It overlays the iframe area. */
       .src-view { position: absolute; inset: 0; background: var(--bg-1); }
       #output-text .cm-editor { height: 100%; font-size: var(--editor-font-size, 13px); }
+      #output-text .cm-scroller { font-family: var(--editor-font, var(--font-mono)); }
       .output-body[data-empty="true"]::after {
         content: "no output"; position: absolute; inset: 0;
         display: grid; place-items: center;
@@ -2494,10 +2497,10 @@
         for (const view of [templateView, dataView, outputEditor])
           view.dispatch({ effects: lineNumberComp.reconfigure(lineNumberExt) });
         qs(".workspace")?.classList.toggle("stacked", tweaks.layout === "stacked");
-        // Editor font family (the whole mono UI follows) and editor font size.
+        // Editor file-content font + size only (the UI chrome keeps --font-mono).
         const fontOpt = TWEAK_OPTS.font.find((o) => o.value === tweaks.font) || TWEAK_OPTS.font[0];
         const root = document.documentElement.style;
-        root.setProperty("--font-mono", fontOpt.stack);
+        root.setProperty("--editor-font", fontOpt.stack);
         root.setProperty("--editor-font-size", tweaks.fontSize + "px");
         window.dispatchEvent(new Event("resize"));
       }
