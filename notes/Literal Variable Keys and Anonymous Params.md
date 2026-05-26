@@ -9,6 +9,8 @@ Stem can read data keys that are not valid identifiers — `first-name`, `a.b`, 
 ## What
 
 - **Bracketed literal keys**: `{{[first-name]}}`, `{{user.[first-name]}}`, `{{[a.b]}}`. A `[...]` segment escapes any character a bare identifier cannot carry (dashes, spaces, dots, leading digits, reserved words like `this`). Segments compose with dots and with bare segments.
+- **Numeric list index**: a `[...]` segment that is a number indexes a list, zero-based, negative counting from the end — `{{items.[2]}}`, `{{items.[-1]}}`. Out-of-range or a wrong-typed target renders empty. (`lookup` is the equivalent dynamic-index transformer.) The distinction is made at lowering: an integer segment becomes a list index, anything else a map key.
+- **Brackets are atomic tokens.** The top-level tokenizer treats `[...]` like a quoted chunk, so spaces (and `,`/`=`/`:`) inside a key never split it — a spaced key therefore works in argument position too: `{{default [my name] "?"}}`.
 - **Uppercase / mixed-case bare names**: `{{Item1}}`, `as |Item|`, `as |I1|`. Bare names accept any leading letter; dashes/spaces still require brackets.
 - **Anonymous param `_`**: in `as |...|` it skips a positional slot and may repeat (`as |_ _ i1|` reads only the one-based index). It is exempt from the uniqueness check and from the unused-parameter warning. Named params must still be unique.
 - **`_` is only special as a param.** As an expression, `_` is an ordinary key, so a data key named `_` stays readable: `{{_}}`, `{{[_]}}`, and `{{@this.[_]}}` all resolve `{"_": 99}` to `99`.
@@ -20,7 +22,7 @@ The data model is key-by-name (assigns are atom-keyed; JSON keys are atomized), 
 ## How
 
 - A reference is parsed as a dotted chain of segments, each a bare identifier or a `[..]` literal; the brackets are stripped to recover the key (`Stem.Expression`'s `reference_expression`, mirrored in the native `compile.rs`).
-- Compiled backend: a literal assign key lowers to `@(:"first-name")` (an `@` on a quoted atom) which `Stem.Compiler.rewrite_assign/2` turns into `fetch_assign!`; a literal path member lowers to `current."first-name"` (atom-keyed dot access). Block params bind to gensyms (see [[Template Variable Hygiene]]).
+- Compiled backend: a literal assign key lowers to `@(:"first-name")` (an `@` on a quoted atom) which `Stem.Compiler.rewrite_assign/2` turns into `fetch_assign!`; a path member lowers to `Stem.Runtime.get_field(base, :"first-name")` (or an integer for a list index) — one tolerant accessor shared with the bytecode VM. Block params bind to gensyms (see [[Template Variable Hygiene]]).
 - Bytecode/native backends are already key-by-string in the wire form, so a literal key is just `{"t":"assign","name":"first-name"}` / a `get` segment, and `_` stays a positional param in the wire `params` list. Parity is enforced by `mix stem.native.compile_diff`.
 
 ## Links

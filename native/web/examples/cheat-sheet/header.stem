@@ -35,9 +35,15 @@
     <code>{{{{#raw}}}}{{ transformer value }}{{{{/raw}}}}</code>
     <code>{{{{#raw}}}}{{ transformer value arg1 arg2 }}{{{{/raw}}}}</code>
   </div>
+  <div class="syntax-row">
+    <div class="lbl">Keys<b>literal · index</b></div>
+    <code>{{{{#raw}}}}{{ user.[full name] }}{{{{/raw}}}}</code>
+    <code>{{{{#raw}}}}{{ items.[2] }}{{{{/raw}}}}</code>
+  </div>
   <p class="syntax-note">
-    Both styles compose and are equivalent —
+    <code>( … )</code> groups a sub-call — the prefix form of the pipe:
     <code>{{{{#raw}}}}{{ name | trim | capitalize }}{{{{/raw}}}}</code> =
-    <code>{{{{#raw}}}}{{ capitalize (trim name) }}{{{{/raw}}}}</code>
+    <code>{{{{#raw}}}}{{ capitalize (trim name) }}{{{{/raw}}}}</code>.
+    <code>[ … ]</code> reads a key that isn't a bare word (spaces, dashes, dots) or a list index.
   </p>
 </div>
