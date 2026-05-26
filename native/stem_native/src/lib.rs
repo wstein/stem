@@ -440,6 +440,13 @@ mod wasm {
         Ok(value.serialize(&serde_wasm_bindgen::Serializer::json_compatible())?)
     }
 
+    /// The engine's package version, baked in at build time, so the playground
+    /// can show the exact compiled-wasm build it loaded.
+    #[wasm_bindgen]
+    pub fn version() -> String {
+        env!("CARGO_PKG_VERSION").to_string()
+    }
+
     /// Compiles template source (plus an optional `{name: source}` partials map)
     /// to a wire program, returned as a JS value. With `map`, the program carries
     /// `src` provenance for the source-map view. Throws `{ errors: [{message,

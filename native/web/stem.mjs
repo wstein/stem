@@ -15,6 +15,7 @@ import init, {
   render as wasmRender,
   parse_ast as wasmParseAst,
   inspect_at as wasmInspectAt,
+  version as wasmVersion,
 } from "./wasm/stem_native.js";
 
 // The capability groups the playground loads. The playground author is trusted,
@@ -79,5 +80,8 @@ export async function createRenderer(wasmInput) {
     return wasmInspectAt(program, data, transformers, target);
   }
 
-  return { render, compile, parseAst, inspectAt };
+  // The compiled engine's version string, baked into the wasm at build time.
+  const version = wasmVersion();
+
+  return { render, compile, parseAst, inspectAt, version };
 }

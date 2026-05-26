@@ -78,6 +78,24 @@ export function render(program, data, groups, map) {
     }
     return takeFromExternrefTable0(ret[0]);
 }
+
+/**
+ * The engine's package version, baked in at build time, so the playground
+ * can show the exact compiled-wasm build it loaded.
+ * @returns {string}
+ */
+export function version() {
+    let deferred1_0;
+    let deferred1_1;
+    try {
+        const ret = wasm.version();
+        deferred1_0 = ret[0];
+        deferred1_1 = ret[1];
+        return getStringFromWasm0(ret[0], ret[1]);
+    } finally {
+        wasm.__wbindgen_free(deferred1_0, deferred1_1, 1);
+    }
+}
 function __wbg_get_imports() {
     const import0 = {
         __proto__: null,

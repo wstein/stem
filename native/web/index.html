@@ -116,6 +116,12 @@
       }
       .brand .brand-name { font-weight: 400; color: var(--fg-secondary); }
       .brand .brand-name b { font-weight: 700; color: var(--fg); }
+      .brand .brand-ver {
+        font: 500 10px/1 var(--font-mono); letter-spacing: .02em;
+        color: var(--accent-2); background: var(--accent-soft);
+        padding: 2px 5px; border-radius: 4px;
+      }
+      .brand .brand-ver:empty { display: none; }
       .topbar .divider { width: 1px; height: 18px; background: var(--border); }
       .topbar-group { display: flex; align-items: center; gap: 6px; }
       .field-label { color: var(--fg-muted); font-size: 12px; padding-right: 2px; }
@@ -726,6 +732,7 @@
             <circle class="stem-dot" cx="24" cy="13" r="2" fill="var(--stem-green)"/>
           </svg>
           <span class="brand-name"><b>Stem</b> Playground</span>
+          <span class="brand-ver" id="brand-ver" title="Compiled engine version (from the wasm build)"></span>
         </div>
         <div class="divider"></div>
         <div class="topbar-group">
@@ -949,6 +956,8 @@
       const qs   = (sel) => document.querySelector(sel);
 
       const renderer = await createRenderer(await (await fetch(WASM)).arrayBuffer());
+      // Show the version baked into the compiled wasm engine.
+      byId("brand-ver").textContent = "v" + renderer.version;
       const examples = await (await fetch("./examples.json")).json();
 
       // ── State ─────────────────────────────────────────────────────────
