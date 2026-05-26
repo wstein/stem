@@ -438,18 +438,15 @@
         flex: 0 0 30px; display: flex; align-items: stretch;
         border-bottom: 1px solid var(--border); background: var(--bg-1);
       }
-      /* Problems is the dock's only view, so its header is a plain title (no tab). */
-      .dock-title {
-        display: flex; align-items: center; gap: 6px; padding: 0 12px;
-        font: 11px var(--font-ui); color: var(--fg-secondary);
-      }
-      .dock-title .badge {
+      /* Problem-count badge — lives on the status-bar Diagnostics button (the
+         dock itself needs no title, it's the only view). */
+      .badge {
         font: 10px var(--font-mono); padding: 0 5px; border-radius: 8px;
         background: var(--bg-3); color: var(--fg-muted);
       }
-      .dock-title .badge.danger  { background: var(--danger-faint); color: var(--danger); }
-      .dock-title .badge.warn    { background: var(--warn-faint); color: var(--warn); }
-      .dock-title .badge.success { background: var(--success-faint); color: var(--success); }
+      .badge.danger  { background: var(--danger-faint); color: var(--danger); }
+      .badge.warn    { background: var(--warn-faint); color: var(--warn); }
+      .badge.success { background: var(--success-faint); color: var(--success); }
       .dock-actions { margin-left: auto; display: flex; align-items: center; padding: 0 8px; }
       .dock-actions button {
         appearance: none; border: 0; background: transparent; cursor: pointer;
@@ -976,9 +973,6 @@
       <aside id="dock" class="dock" aria-label="Diagnostics" hidden>
         <div id="dock-grip" class="dock-grip" title="Drag to resize"></div>
         <header class="dock-header">
-          <div class="dock-title">
-            Problems <span class="badge" id="dock-badge-problems">0</span>
-          </div>
           <div class="dock-actions">
             <button id="dock-collapse" title="Close" aria-label="Close diagnostics">
               <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg>
@@ -1000,7 +994,7 @@
         <span id="sources-sub" class="status-sub"></span>
         <button id="dock-toggle" class="dock-toggle" title="Show/hide diagnostics dock" aria-pressed="false">
           <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="2.5" width="11" height="11" rx="1"/><path d="M2.5 10.5h11"/></svg>
-          Diagnostics
+          Diagnostics <span class="badge" id="dock-badge-problems">0</span>
         </button>
         <span class="spacer"></span>
         <span id="status-meta" class="meta"></span>
