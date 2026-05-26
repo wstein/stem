@@ -98,7 +98,6 @@ pub fn options() -> RenderOptions {
         .with_host(Host {
             transform: custom_transformers,
             transformer_names: CUSTOM_NAMES,
-            ..Host::default()
         })
 }
 
