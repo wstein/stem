@@ -673,9 +673,13 @@ fn builtin_groups(name: &str) -> Option<u8> {
         | "len" | "last" => GROUP_MINIMUM,
         // format — atomic value transforms, bounded by string length
         "trim" | "upcase" | "downcase" | "capitalize" | "truncate" | "replace" => GROUP_FORMAT,
+        // shaping ops the BEAM registers in BOTH Strings and Collections, so
+        // either group provides them (string- or list-shaping); kept in lockstep
+        // with `Stem.Transformers.Strings`/`Collections`.
+        "drop" | "reverse" | "slice" | "take" => GROUP_FORMAT | GROUP_TRANSFORM,
         // transform — structural/iterative, may loop, potential DoS
-        "split" | "drop" | "reverse" | "slice" | "take" | "map" | "filter" | "sort" | "sort_by"
-        | "group_by" | "compact" | "uniq" | "flatten" => GROUP_TRANSFORM,
+        "split" | "map" | "filter" | "sort" | "sort_by" | "group_by" | "compact" | "uniq"
+        | "flatten" => GROUP_TRANSFORM,
         // eval — dynamic expression evaluation, separate from risk taxonomy
         "eval" => GROUP_EVAL,
         _ => return None,
