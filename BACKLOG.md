@@ -41,7 +41,16 @@ graph at the bottom.
 
 ![Stem backlog dependency graph](backlog-deps.svg)
 
-Solid arrows = required dependency; dashed = optional / alternative path. The
-LSP is the pivot: it builds on a core (Rust today; Elixir/JS as alternatives)
-and feeds both editor integrations. The playground items run on the Rust/WASM
-core and are otherwise independent.
+Nodes are **backlog tasks** (not existing components); an arrow "A → B" reads
+"A needs B". Solid = required, dashed = optional / alternative.
+
+- The **VS Code extension** needs the **TextMate grammar** (syntax) and the
+  **LSP** (intelligence).
+- The **JetBrains plugin** needs the **LSP**; optionally runs it in-process on
+  the **JVM port**.
+- The **LSP** builds on the **existing Rust / Elixir engine** (already shipped —
+  not a backlog task), so it has no required task dependency. It can optionally
+  consume the **Tree-sitter grammar** (semantic tokens) or run on a **JS / JVM
+  port** as an alternative core.
+- The **playground** tasks run on the existing Rust/WASM core and are otherwise
+  independent.
