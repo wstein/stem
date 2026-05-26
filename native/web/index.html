@@ -2618,6 +2618,13 @@
       let dockTab = "problems";
       let ctxTarget = null; // { file, start, end, label } — the last-clicked output span
 
+      // A source slice can be a long, multi-line literal (e.g. a whole <style>
+      // block); collapse it to one trimmed line for compact inspector labels.
+      const oneLineLabel = (text, max = 60) => {
+        const flat = text.replace(/\s+/g, " ").trim();
+        return flat.length > max ? flat.slice(0, max) + "…" : flat;
+      };
+
       function dockVisible() { return !byId("dock").hidden; }
 
       function makeEl(tag, attrs = {}, children = []) {
@@ -2698,7 +2705,7 @@
           return;
         }
         pane.append(makeEl("div", { class: "ctx-hint" },
-          `${snaps.length} snapshot${snaps.length === 1 ? "" : "s"} at \`${ctxTarget.label}\`` +
+          `${snaps.length} snapshot${snaps.length === 1 ? "" : "s"} at \`${oneLineLabel(ctxTarget.label)}\`` +
           " · re-execute-on-demand, no live trace"));
         snaps.forEach((s, i) => pane.append(renderSnap(s, i)));
         if (!snaps.length) {
@@ -2711,7 +2718,7 @@
       function renderSnap(snap, i) {
         const head = makeEl("div", { class: "ctx-snap-head" }, [
           makeEl("span", { class: "ix" }, "#" + (i + 1)),
-          makeEl("span", { class: "src" }, ctxTarget.label),
+          makeEl("span", { class: "src" }, oneLineLabel(ctxTarget.label)),
         ]);
         const rows = [
           ["@this", snap.this], ["@parent", snap.parent], ["@root", snap.root],
