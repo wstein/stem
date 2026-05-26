@@ -637,11 +637,6 @@
       .dep-panel .tw-header { flex: 0 0 auto; }
       .dep-panel .dep-body { flex: 1 1 auto; min-height: 0; }
       .dep-panel .dep-pane { height: 100%; }
-      .dep-layout-btn {
-        border: 1px solid var(--border); background: var(--bg); color: var(--fg-muted);
-        font: 11px var(--font-ui); padding: 1px 8px; border-radius: 4px; cursor: pointer;
-      }
-      .dep-layout-btn:hover { background: var(--bg-2); color: var(--fg); }
 
       /* ── Tweaks panel ────────────────────────────────────────────── */
       .tw-panel {
@@ -2513,21 +2508,9 @@
         }
         const close = makeEl("button", { class: "tw-close", title: "Close" }, "×");
         close.addEventListener("click", hideDeps);
-        const layoutBtn = makeEl("button", {
-          class: "dep-layout-btn", title: "Switch graph layout (force / tree)",
-          style: "margin-left:auto",
-        }, panelState.deps.layout === "tree" ? "Tree" : "Force");
         const body = makeEl("div", { class: "dep-body" });
-        layoutBtn.addEventListener("click", () => {
-          panelState.deps.layout = panelState.deps.layout === "tree" ? "force" : "tree";
-          savePanels();
-          layoutBtn.textContent = panelState.deps.layout === "tree" ? "Tree" : "Force";
-          body.textContent = "";
-          renderDeps(body, currentDependencyGraph());
-        });
         const header = makeEl("div", { class: "tw-header" }, [
           makeEl("div", { class: "tw-title" }, [makeEl("span", { class: "tw-pill" }), "Dependencies"]),
-          layoutBtn,
           close,
         ]);
         panel.append(header, body);
@@ -2947,75 +2930,11 @@
         return { pos, w, h };
       }
 
-      // A neato-style (Fruchterman-Reingold) force-directed layout: nodes repel,
-      // edges pull, gravity keeps the graph centred. Deterministic (circle seed,
-      // no RNG) so it's stable across re-renders. Returns id -> center {x, y} in a
-      // virtual W*H canvas the SVG viewBox scales to its container.
-      function forceLayout(deps, width, height) {
-        const ids = deps.nodes.map((n) => n.id);
-        const n = ids.length;
-        const cx = width / 2, cy = height / 2;
-        const pos = new Map();
-        const R = Math.min(width, height) * 0.36;
-        ids.forEach((id, i) => {
-          const a = (2 * Math.PI * i) / Math.max(1, n);
-          pos.set(id, { x: cx + R * Math.cos(a) + (i % 2 ? 7 : -7), y: cy + R * Math.sin(a) });
-        });
-        if (n <= 1) return pos;
-
-        const links = deps.edges.filter((e) => !e.missing && pos.has(e.from) && pos.has(e.to));
-        const k = 0.75 * Math.sqrt((width * height) / n);
-        let temp = Math.min(width, height) * 0.16;
-        for (let it = 0; it < 280; it++) {
-          const disp = new Map(ids.map((id) => [id, { x: 0, y: 0 }]));
-          for (let i = 0; i < n; i++) {
-            for (let j = i + 1; j < n; j++) {
-              const a = pos.get(ids[i]), b = pos.get(ids[j]);
-              const dx = a.x - b.x, dy = a.y - b.y, d = Math.hypot(dx, dy) || 0.01;
-              const f = (k * k) / d, ux = dx / d, uy = dy / d;
-              disp.get(ids[i]).x += ux * f; disp.get(ids[i]).y += uy * f;
-              disp.get(ids[j]).x -= ux * f; disp.get(ids[j]).y -= uy * f;
-            }
-          }
-          for (const e of links) {
-            const a = pos.get(e.from), b = pos.get(e.to);
-            const dx = a.x - b.x, dy = a.y - b.y, d = Math.hypot(dx, dy) || 0.01;
-            const f = (d * d) / k, ux = dx / d, uy = dy / d;
-            disp.get(e.from).x -= ux * f; disp.get(e.from).y -= uy * f;
-            disp.get(e.to).x += ux * f; disp.get(e.to).y += uy * f;
-          }
-          for (const id of ids) {
-            const p = pos.get(id), dd = disp.get(id);
-            dd.x += (cx - p.x) * 0.025; dd.y += (cy - p.y) * 0.025;
-            const len = Math.hypot(dd.x, dd.y) || 0.01;
-            p.x += (dd.x / len) * Math.min(len, temp);
-            p.y += (dd.y / len) * Math.min(len, temp);
-          }
-          temp *= 0.975;
-        }
-
-        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-        for (const p of pos.values()) {
-          minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
-          maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
-        }
-        const m = 46, sx = (width - 2 * m) / ((maxX - minX) || 1), sy = (height - 2 * m) / ((maxY - minY) || 1);
-        const s = Math.min(sx, sy);
-        for (const p of pos.values()) { p.x = m + (p.x - minX) * s; p.y = m + (p.y - minY) * s; }
-        return pos;
-      }
-
       function renderDeps(body, deps) {
         const boxW = 104, boxH = 32;
-        let W, H, pos;
-        if (panelState.deps.layout === "tree") {
-          // The tidy tree sizes its own canvas to the content (natural pitches);
-          // the viewBox then scales to fit, so there is no stretched empty space.
-          ({ pos, w: W, h: H } = layeredLayout(deps));
-        } else {
-          W = 520; H = Math.max(340, deps.nodes.length * 64);
-          pos = forceLayout(deps, W, H);
-        }
+        // The tidy tree sizes its own canvas to the content (natural pitches);
+        // the viewBox then scales to fit, so there is no stretched empty space.
+        const { pos, w: W, h: H } = layeredLayout(deps);
 
         const cyclePairs = new Set();
         for (const c of deps.cycles) {
