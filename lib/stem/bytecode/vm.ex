@@ -64,6 +64,122 @@ defmodule Stem.Bytecode.VM do
     render_instructions(instructions, context)
   end
 
+  @doc """
+  Captures the render context at a source position — the Context Inspector
+  primitive, the BEAM analogue of the native `inspect_at` export.
+
+  Re-walks a program compiled with `Stem.Bytecode.compile(ast, spans: true)`
+  against `bindings`, returning one snapshot per execution of an `:emit`
+  instruction whose source `meta` matches `target` (a `%{line, column}` map) —
+  so a loop body yields one snapshot per iteration, in execution order. Each
+  snapshot is `%{this, parent, root, index, index1, key, first, last, locals}`,
+  mirroring the native engine's `@this`/`@parent`/… projection. Empty when the
+  position is never reached (or the program was compiled without `:spans`).
+
+  `target` provenance is line/column here and byte spans in the Rust engine
+  (conceptual parity, not byte-identical targets).
+  """
+  @spec inspect_at(Program.t(), bindings(), %{line: pos_integer(), column: pos_integer()}) ::
+          [map()]
+  def inspect_at(%Program{instructions: instructions}, bindings, target) do
+    assigns = Keyword.get(bindings, :assigns, [])
+
+    context = %{
+      assigns: assigns,
+      transformers: Keyword.get(bindings, :transformers, %{}),
+      warn: Keyword.get(bindings, :warn_on_missing_assigns, false),
+      this: assigns,
+      root: assigns,
+      parent: nil,
+      index: nil,
+      key: nil,
+      first: nil,
+      last: nil,
+      in_each: false,
+      locals: %{}
+    }
+
+    instructions |> inspect_instructions(context, target, []) |> Enum.reverse()
+  end
+
+  defp inspect_instructions(instructions, context, target, acc) do
+    Enum.reduce(instructions, acc, &inspect_exec(&1, context, target, &2))
+  end
+
+  # Snapshot when an `:emit` carries source meta matching the target.
+  defp inspect_exec({:emit, _op, _escape, meta}, context, target, acc) do
+    if meta.line == target.line and meta.column == target.column do
+      [snapshot(context) | acc]
+    else
+      acc
+    end
+  end
+
+  defp inspect_exec({:emit, _op, _escape}, _context, _target, acc), do: acc
+  defp inspect_exec({:text, _text}, _context, _target, acc), do: acc
+
+  defp inspect_exec({:if, cond_op, then_branch, else_branch}, context, target, acc) do
+    branch = if Stem.Runtime.truthy?(eval(cond_op, context)), do: then_branch, else: else_branch
+    inspect_instructions(branch, context, target, acc)
+  end
+
+  defp inspect_exec({:each, collection_op, params, body, else_branch}, context, target, acc) do
+    entries = Stem.Builtins.each_entries(eval(collection_op, context))
+
+    case entries do
+      [] ->
+        inspect_instructions(else_branch, %{context | in_each: false}, target, acc)
+
+      _ ->
+        last_index = length(entries) - 1
+
+        entries
+        |> Enum.with_index()
+        |> Enum.reduce(acc, fn {{current, key}, index}, acc ->
+          inner =
+            each_context(context, params, current, key, index, index == 0, index == last_index)
+
+          inspect_instructions(body, inner, target, acc)
+        end)
+    end
+  end
+
+  defp inspect_exec({:with, subject_op, params, body, else_branch}, context, target, acc) do
+    subject = eval(subject_op, context)
+
+    if Stem.Runtime.truthy?(subject) do
+      inspect_instructions(body, with_context(context, params, subject), target, acc)
+    else
+      inspect_instructions(else_branch, context, target, acc)
+    end
+  end
+
+  defp inspect_exec({:scope, base_op, hash, body}, context, target, acc) do
+    base = eval(base_op, context)
+    hash_map = Map.new(hash, fn {key, value_op} -> {key, eval(value_op, context)} end)
+
+    inspect_instructions(
+      body,
+      scope_context(context, Stem.Runtime.partial_scope(base, hash_map)),
+      target,
+      acc
+    )
+  end
+
+  defp snapshot(context) do
+    %{
+      this: context.this,
+      parent: context.parent,
+      root: context.root,
+      index: context.index,
+      index1: if(context.in_each, do: context.index + 1, else: nil),
+      key: context.key,
+      first: context.first,
+      last: context.last,
+      locals: context.locals
+    }
+  end
+
   defp render_instructions(instructions, context) do
     instructions
     |> Enum.map(&exec(&1, context))

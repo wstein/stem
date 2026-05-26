@@ -130,11 +130,25 @@ defmodule Stem.Bytecode do
 
   Raises `Stem.Bytecode.UnsupportedError` for constructs outside the bytecode
   scope (e.g. an iteration variable or `@parent` used outside its block).
+
+  ## Options
+
+    * `:escape` — the default escape mode (see above).
+    * `:spans` — when `true`, each `:emit` instruction carries its source `meta`
+      (`{:emit, op, escape, meta}`) for `Stem.Bytecode.VM.inspect_at/3`. Off by
+      default, so the wire form and the compiled backend are unaffected.
   """
   @spec compile(Stem.AST.t(), keyword()) :: Program.t()
   def compile(nodes, opts \\ []) when is_list(nodes) and is_list(opts) do
     escape_default = Keyword.get(opts, :escape, :html)
-    scope = %{in_each: false, has_parent: false, locals: MapSet.new()}
+
+    scope = %{
+      in_each: false,
+      has_parent: false,
+      locals: MapSet.new(),
+      spans: Keyword.get(opts, :spans, false)
+    }
+
     instructions = compile_nodes(nodes, scope, %{}, [], escape_default)
     names = transformer_names(instructions)
 
@@ -248,13 +262,21 @@ defmodule Stem.Bytecode do
   defp compile_node({:text, text}, _scope, _regions, _stack, _escape_default), do: [{:text, text}]
 
   defp compile_node(
-         {:expr, expr_ast, escape_mode, _meta},
+         {:expr, expr_ast, escape_mode, meta},
          scope,
          _regions,
          _stack,
          escape_default
        ) do
-    [{:emit, compile_value(expr_ast, scope), resolve_escape(escape_mode, escape_default)}]
+    op = compile_value(expr_ast, scope)
+    escape = resolve_escape(escape_mode, escape_default)
+    # With `:spans`, carry the source meta for the Context Inspector; otherwise
+    # the bare instruction the wire form and compiled backend expect.
+    if scope.spans do
+      [{:emit, op, escape, meta}]
+    else
+      [{:emit, op, escape}]
+    end
   end
 
   defp compile_node({:if, expr, body, else_body, _meta}, scope, regions, stack, escape_default) do
@@ -342,7 +364,7 @@ defmodule Stem.Bytecode do
       end
 
     hash = Enum.map(hash_kw, fn {key, value} -> {key, compile_value(value, scope)} end)
-    body_scope = %{in_each: false, has_parent: false, locals: MapSet.new()}
+    body_scope = %{in_each: false, has_parent: false, locals: MapSet.new(), spans: scope.spans}
 
     [{:scope, base, hash, compile_nodes(body, body_scope, regions, stack, escape_default)}]
   end
@@ -515,6 +537,8 @@ defmodule Stem.Bytecode do
   end
 
   defp instruction_calls({:emit, value_op, _escape}), do: value_calls(value_op)
+  # The span-carrying emit (compiled with `:spans` for the Context Inspector).
+  defp instruction_calls({:emit, value_op, _escape, _meta}), do: value_calls(value_op)
 
   defp instruction_calls({:if, cond_op, then_branch, else_branch}) do
     value_calls(cond_op) ++ branch_calls(then_branch) ++ branch_calls(else_branch)
