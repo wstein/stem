@@ -176,6 +176,18 @@
         font: 12px var(--font-ui); color: var(--fg-secondary);
       }
       .dropdown-item:hover, .dropdown-item.active { background: var(--accent-soft); color: var(--accent-2); }
+      .dropdown-item[hidden] { display: none; }
+
+      /* Highlight-language combobox: a filter field pinned above a scrolling list. */
+      .lang-dropdown[hidden] { display: none; }
+      .lang-dropdown .dropdown-trigger { min-width: 150px; height: 26px; }
+      .lang-menu { padding: 0; overflow: hidden; display: flex; flex-direction: column; min-width: 200px; }
+      .lang-filter {
+        flex: 0 0 auto; border: 0; border-bottom: 1px solid var(--border);
+        padding: 7px 10px; background: var(--bg-pane); color: var(--fg);
+        font: 12px var(--font-mono); outline: none;
+      }
+      .lang-menu ul { flex: 1 1 auto; list-style: none; margin: 0; padding: 4px; max-height: 280px; overflow-y: auto; }
 
       .spacer { flex: 1 1 auto; }
       .hint { font-size: 12px; color: var(--fg-muted); display: flex; align-items: center; gap: 6px; }
@@ -930,8 +942,19 @@
           <!-- Contextual controls for the active view; toggled by setOutputView. -->
           <div id="view-controls" class="view-controls" hidden>
             <span class="field-label" id="out-lang-label" style="font-size:11px" hidden>Highlight</span>
-            <input id="out-lang-input" class="select" style="width:130px" list="out-lang-list" aria-label="Plain Text highlight language" title="Type to search ~140 languages" placeholder="Plain text" autocomplete="off" hidden />
-            <datalist id="out-lang-list"></datalist>
+            <!-- Custom filterable combobox (not a datalist input) so the caret and
+                 clear affordances are under our control and the list opens
+                 downward. ~140 languages, type to filter. -->
+            <div id="out-lang" class="dropdown lang-dropdown" hidden>
+              <button id="out-lang-trigger" class="select dropdown-trigger" type="button" aria-haspopup="listbox" aria-expanded="false" aria-label="Highlight language">
+                <span id="out-lang-val">Auto</span>
+                <svg class="dropdown-caret" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 4l4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              </button>
+              <div id="out-lang-menu" class="dropdown-menu lang-menu" hidden>
+                <input id="out-lang-filter" class="lang-filter" type="text" placeholder="Filter languages…" autocomplete="off" spellcheck="false" />
+                <ul id="out-lang-list" role="listbox"></ul>
+              </div>
+            </div>
             <span class="field-label" id="escape-label" style="font-size:11px">Escape</span>
             <select id="escape-select" class="select" aria-label="Escape mode">
               <option value="">(as compiled)</option>
@@ -1635,22 +1658,13 @@
       function exViewLangName(view) {
         return view === "markdown" ? "Markdown" : view === "rendered" ? "HTML" : "Plain text";
       }
+      // Reflect the current choice on the combobox trigger. "Auto" also hints the
+      // format it resolves to from the active example.
       function updateLangPlaceholder() {
-        byId("out-lang-input").placeholder = exViewLangName(lastExView);
+        byId("out-lang-val").textContent =
+          outLangChoice === "Auto" ? `Auto · ${exViewLangName(lastExView)}` : outLangChoice;
       }
       const langCache = new Map(); // language name -> resolved Extension
-
-      // Canonicalize a typed/picked value to "Auto", "Plain text", or a registry
-      // language name (case-insensitive, also matching aliases). null = unknown.
-      function normalizeLangChoice(v) {
-        const s = (v || "").trim().toLowerCase();
-        if (s === "" || s === "auto") return "Auto";
-        if (s === "plain text" || s === "none" || s === "plain") return "Plain text";
-        const byName = cmLanguages.find((l) => l.name.toLowerCase() === s);
-        if (byName) return byName.name;
-        const byAlias = cmLanguages.find((l) => l.alias.some((a) => a.toLowerCase() === s));
-        return byAlias ? byAlias.name : null;
-      }
 
       async function resolveLangByName(name) {
         if (name === "Plain text") return [];
@@ -1965,7 +1979,7 @@
         const showLang = view === "source";
         const showEscape = view === "source" || view === "rendered" || view === "markdown";
         const isPreview = view === "rendered" || view === "markdown";
-        byId("out-lang-input").hidden = !showLang;
+        byId("out-lang").hidden = !showLang;
         byId("out-lang-label").hidden = !showLang;
         byId("escape-select").hidden = !showEscape;
         byId("escape-label").hidden = !showEscape;
@@ -2318,7 +2332,6 @@
         outLangChoice = "Auto";
         persistOutLang();
         lastExView = ex.view;
-        byId("out-lang-input").value = "";
         updateLangPlaceholder();
         setOutputView(validView(ex.view));
         showActiveTab(); run();
@@ -3590,29 +3603,69 @@
         renderPreview();
       });
 
-      // Fill the searchable highlight picker: Plain text, then every language in
-      // the CodeMirror registry (alphabetical) as <datalist> options. Empty input
-      // means "use the example's required language" (shown grayed as placeholder).
+      // The highlight picker is a filterable combobox: "Auto" (use the example's
+      // format), "Plain text" (no highlight), then every CodeMirror language
+      // (alphabetical). Type in the filter to narrow; click or Enter to pick.
       {
-        const dl = byId("out-lang-list");
-        const names = ["Plain text",
+        const ul = byId("out-lang-list");
+        const names = ["Auto", "Plain text",
           ...cmLanguages.map((l) => l.name).sort((a, b) => a.localeCompare(b))];
         for (const name of names) {
-          const opt = document.createElement("option");
-          opt.value = name;
-          dl.append(opt);
+          const li = document.createElement("li");
+          li.className = "dropdown-item";
+          li.setAttribute("role", "option");
+          li.dataset.name = name;
+          li.textContent = name;
+          li.addEventListener("click", () => selectLang(name));
+          ul.append(li);
         }
-        const input = byId("out-lang-input");
-        input.value = "";
-        addClear(input);
         updateLangPlaceholder();
-        // Commit on change/Enter: snap to a known language; empty reverts to example default.
-        input.addEventListener("change", () => {
-          const norm = normalizeLangChoice(input.value);
-          if (norm === "Auto") { outLangChoice = "Auto"; input.value = ""; updateOutLang(); persistOutLang(); }
-          else if (norm) { outLangChoice = norm; input.value = norm; updateOutLang(); persistOutLang(); }
-          else { input.value = outLangChoice === "Auto" ? "" : outLangChoice; }
+
+        const trigger = byId("out-lang-trigger");
+        const filter = byId("out-lang-filter");
+        trigger.addEventListener("click", () => {
+          byId("out-lang-menu").hidden ? openLangMenu() : closeLangMenu();
         });
+        filter.addEventListener("input", () => filterLang(filter.value));
+        filter.addEventListener("keydown", (e) => {
+          if (e.key === "Escape") { closeLangMenu(); trigger.focus(); }
+          else if (e.key === "Enter") {
+            const first = [...ul.children].find((li) => !li.hidden);
+            if (first) selectLang(first.dataset.name);
+          }
+        });
+        document.addEventListener("pointerdown", (e) => {
+          if (!byId("out-lang-menu").hidden && !byId("out-lang").contains(e.target)) closeLangMenu();
+        });
+      }
+
+      function selectLang(name) {
+        outLangChoice = name;
+        updateOutLang(); persistOutLang(); updateLangPlaceholder();
+        closeLangMenu();
+      }
+      function openLangMenu() {
+        byId("out-lang-menu").hidden = false;
+        byId("out-lang").dataset.open = "true";
+        byId("out-lang-trigger").setAttribute("aria-expanded", "true");
+        const filter = byId("out-lang-filter");
+        filter.value = ""; filterLang("");
+        for (const li of byId("out-lang-list").children) {
+          li.classList.toggle("active", li.dataset.name === outLangChoice);
+        }
+        byId("out-lang-list").querySelector(".active")?.scrollIntoView({ block: "nearest" });
+        filter.focus();
+      }
+      function closeLangMenu() {
+        byId("out-lang-menu").hidden = true;
+        byId("out-lang").dataset.open = "false";
+        byId("out-lang-trigger").setAttribute("aria-expanded", "false");
+      }
+      function filterLang(q) {
+        const s = q.trim().toLowerCase();
+        for (const li of byId("out-lang-list").children) {
+          li.hidden = !!s && !li.dataset.name.toLowerCase().includes(s);
+        }
       }
 
       for (const b of document.querySelectorAll(".focus-toggle")) {
@@ -3661,7 +3714,6 @@
       }
       if (savedOutLang && savedOutLang !== "Auto") {
         outLangChoice = savedOutLang;
-        byId("out-lang-input").value = savedOutLang;
         updateLangPlaceholder();
         updateOutLang();
       }
