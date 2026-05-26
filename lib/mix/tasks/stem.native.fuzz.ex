@@ -22,7 +22,7 @@ defmodule Mix.Tasks.Stem.Native.Fuzz do
       mix stem.native.fuzz                 # 200 cases, random seed
       mix stem.native.fuzz --count 1000
       mix stem.native.fuzz --seed 42       # reproduce a run
-      mix stem.native.fuzz --engine "native/stem_native/target/release/stem_native"
+      mix stem.native.fuzz --engine "native/target/release/stem_native"
   """
 
   alias Stem.Native.Engine

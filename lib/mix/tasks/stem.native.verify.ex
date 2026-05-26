@@ -19,7 +19,7 @@ defmodule Mix.Tasks.Stem.Native.Verify do
       mix stem.native.verify
 
       # run the host binary instead
-      mix stem.native.verify --engine "native/stem_native/target/release/stem_native"
+      mix stem.native.verify --engine "native/target/release/stem_native"
 
       # point at a specific wasm module
       mix stem.native.verify --wasm path/to/stem_native.wasm

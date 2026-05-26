@@ -26,7 +26,7 @@ defmodule Mix.Tasks.Stem.Native.CompileDiff do
   *mismatch* must never appear. Run it after every grammar increment.
 
       mix stem.native.compile_diff
-      mix stem.native.compile_diff --engine "native/stem_native/target/release/stem_native"
+      mix stem.native.compile_diff --engine "native/target/release/stem_native"
   """
 
   alias Stem.Native.Engine

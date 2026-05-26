@@ -7,7 +7,9 @@ defmodule Stem.Native.Engine do
   # `mix stem.native.fuzz`): resolve the engine command and run a batch of
   # `{program, data}` requests through it in a single process.
 
-  @default_wasm "native/stem_native/target/wasm32-wasip1/release/stem_native.wasm"
+  # stem_native is a member of the `native/` cargo workspace, so build artifacts
+  # land in the workspace target dir, not a per-crate one.
+  @default_wasm "native/target/wasm32-wasip1/release/stem_native.wasm"
 
   @doc "Resolves the engine command from `--engine`/`--wasm` options (default: the wasm via Node WASI)."
   @spec resolve(keyword()) :: String.t()
