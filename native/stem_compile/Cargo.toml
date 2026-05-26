@@ -6,6 +6,9 @@ edition = "2021"
 description = "Stem template compiler: lowers template source to portable bytecode (stem-bc/v1). Shared by the native engine and the compile-time macros."
 
 [dependencies]
+# Werner's Rust port of Elixir NimbleParsec — the combinator lexer mirrors the
+# `Stem.Parser` reference grammar (`do_lex`) so the two backends share one model.
+nimble_parsec_rs = { git = "https://github.com/wstein/nimble_parsec_rs", branch = "develop" }
 # `float_roundtrip` keeps float literals in templates byte-exact, matching the
 # engine's parser.
 serde_json = { version = "1", features = ["float_roundtrip"] }
