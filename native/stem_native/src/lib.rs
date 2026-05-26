@@ -442,22 +442,24 @@ mod wasm {
 
     /// Compiles template source (plus an optional `{name: source}` partials map)
     /// to a wire program, returned as a JS value. With `map`, the program carries
-    /// `src` provenance for the source-map view. Throws `{message, start, end}`
-    /// on a compile error so the editor can underline the span.
+    /// `src` provenance for the source-map view. Throws `{ errors: [{message,
+    /// start, end}, ...] }` on failure — every recoverable parse error in source
+    /// order — so the editor can underline each span and list them all.
     #[wasm_bindgen]
     pub fn compile(source: &str, partials: JsValue, map: bool) -> Result<JsValue, JsValue> {
         let partials: HashMap<String, String> =
             serde_wasm_bindgen::from_value(partials).unwrap_or_default();
-        let compiled = if map {
-            crate::compile::compile_to_wire_with_spans(source, &partials)
-        } else {
-            crate::compile::compile_to_wire(source, &partials)
-        };
-        match compiled {
+        match crate::compile::compile_to_wire_all(source, &partials, map) {
             Ok(wire) => to_js(&wire),
-            Err(err) => Err(to_js(&serde_json::json!({
-                "message": err.message, "start": err.start, "end": err.end,
-            }))?),
+            Err(errors) => {
+                let errors: Vec<_> = errors
+                    .into_iter()
+                    .map(|err| {
+                        serde_json::json!({ "message": err.message, "start": err.start, "end": err.end })
+                    })
+                    .collect();
+                Err(to_js(&serde_json::json!({ "errors": errors }))?)
+            }
         }
     }
 

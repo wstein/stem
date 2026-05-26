@@ -70,6 +70,10 @@ struct Asm<'a> {
     // nodes instead of being expanded inline, so a single file's pre-expansion
     // structure (and its partial dependency edges) stays visible.
     expand: bool,
+    // Recoverable parse errors gathered during assembly. Collection continues
+    // past each (substituting a placeholder node) so one compile reports them
+    // all; a non-empty sink means the program is discarded.
+    errors: Vec<CompileError>,
 }
 
 // A parse/compile failure carrying a byte span into the source, so the editor
@@ -90,9 +94,25 @@ impl std::fmt::Display for CompileError {
 impl std::error::Error for CompileError {}
 
 // Compiles template source to the wire program `{"version", "instructions"}`,
-// expanding any `{{> name}}` partials from the given map.
+// expanding any `{{> name}}` partials from the given map. Surfaces only the
+// first error; `compile_to_wire_all` collects every recoverable one.
 pub fn compile_to_wire(source: &str, partials: &Partials) -> Result<Value, CompileError> {
-    compile_inner(source, partials, false)
+    compile_all(source, partials, false).map_err(first_error)
+}
+
+/// Like [`compile_to_wire_with_spans`], but accumulates **every** recoverable
+/// parse error (invalid expressions, unknown/recursive partials, bad block or
+/// partial arguments) instead of stopping at the first, so the playground can
+/// list them all at once. A structural error that desynchronises the token
+/// stream (an unclosed or mismatched block) still ends collection — it is
+/// returned last, after whatever recoverable errors preceded it. On success the
+/// wire program is byte-identical to `compile_to_wire_with_spans`.
+pub fn compile_to_wire_all(
+    source: &str,
+    partials: &Partials,
+    with_spans: bool,
+) -> Result<Value, Vec<CompileError>> {
+    compile_all(source, partials, with_spans)
 }
 
 /// Compiles template source to its wire bytecode as a JSON string — the
@@ -115,8 +135,12 @@ pub fn parse_ast_to_wire(source: &str) -> Result<Value, CompileError> {
         partials: &empty,
         stack: Vec::new(),
         expand: false,
+        errors: Vec::new(),
     };
     let nodes = assemble(tokens, &mut asm)?;
+    if let Some(err) = asm.errors.into_iter().next() {
+        return Err(err);
+    }
     Ok(json!({ "version": AST_VERSION, "nodes": ast_nodes_to_json(&nodes) }))
 }
 
@@ -129,23 +153,44 @@ pub fn compile_to_wire_with_spans(
     source: &str,
     partials: &Partials,
 ) -> Result<Value, CompileError> {
-    compile_inner(source, partials, true)
+    compile_all(source, partials, true).map_err(first_error)
 }
 
-fn compile_inner(
+// Assemble and lower, accumulating every recoverable error encountered along
+// the way (the `Asm::errors` sink). The wire program is produced only when no
+// error — recoverable or structural — was seen.
+fn compile_all(
     source: &str,
     partials: &Partials,
     with_spans: bool,
-) -> Result<Value, CompileError> {
-    let tokens = np_lexer::tokenize(source)?;
+) -> Result<Value, Vec<CompileError>> {
+    let tokens = np_lexer::tokenize(source).map_err(|err| vec![err])?;
     let mut asm = Asm {
         partials,
         stack: Vec::new(),
         expand: true,
+        errors: Vec::new(),
     };
-    let nodes = assemble(tokens, &mut asm)?;
-    let instructions = lower_nodes(&nodes, &Scope::root(), &Regions::new(), &[], with_spans)?;
+    let nodes = match assemble(tokens, &mut asm) {
+        Ok(nodes) => nodes,
+        // A structural error stops collection; report it after whatever
+        // recoverable errors were already gathered.
+        Err(structural) => {
+            asm.errors.push(structural);
+            return Err(asm.errors);
+        }
+    };
+    if !asm.errors.is_empty() {
+        return Err(asm.errors);
+    }
+    let instructions = lower_nodes(&nodes, &Scope::root(), &Regions::new(), &[], with_spans)
+        .map_err(|err| vec![err])?;
     Ok(json!({ "version": VERSION, "instructions": instructions }))
+}
+
+// There is always at least one error in a compile failure.
+fn first_error(mut errors: Vec<CompileError>) -> CompileError {
+    errors.remove(0)
 }
 
 // ── Tokenizer ────────────────────────────────────────────────────────────────
@@ -435,6 +480,30 @@ fn current_file(asm: &Asm) -> String {
         .unwrap_or_else(|| "main".to_string())
 }
 
+// Record a recoverable expression error and continue with a null placeholder.
+// The placeholder is never lowered: a non-empty error sink discards the program.
+fn recover(asm: &mut Asm, result: Result<Expr, CompileError>) -> Expr {
+    match result {
+        Ok(expr) => expr,
+        Err(err) => {
+            asm.errors.push(err);
+            Expr::Lit(Value::Null)
+        }
+    }
+}
+
+// Record a recoverable error and yield `None`, so the caller can skip the
+// offending node and keep assembling.
+fn recover_opt<T>(asm: &mut Asm, result: Result<T, CompileError>) -> Option<T> {
+    match result {
+        Ok(value) => Some(value),
+        Err(err) => {
+            asm.errors.push(err);
+            None
+        }
+    }
+}
+
 fn collect(
     it: &mut std::vec::IntoIter<Token>,
     asm: &mut Asm,
@@ -450,7 +519,7 @@ fn collect(
             }),
             Some(Token::Expr { raw, escape, span }) => {
                 nodes.push(Node::Emit {
-                    expr: parse_expr(&raw, span)?,
+                    expr: recover(asm, parse_expr(&raw, span)),
                     escape,
                     span,
                     file: current_file(asm),
@@ -464,9 +533,14 @@ fn collect(
             Some(Token::Yield { name, span }) => nodes.push(Node::Yield { name, span }),
             Some(Token::Partial { name, args, span }) => {
                 if asm.expand {
-                    expand_partial(&name, &args, span, asm, &mut nodes)?
-                } else {
-                    let (context, hash) = parse_partial_args(&args, span)?;
+                    // Unknown/recursive partials and bad args are recoverable:
+                    // record and skip the tag, keep assembling the rest.
+                    if let Err(err) = expand_partial(&name, &args, span, asm, &mut nodes) {
+                        asm.errors.push(err);
+                    }
+                } else if let Some((context, hash)) =
+                    recover_opt(asm, parse_partial_args(&args, span))
+                {
                     nodes.push(Node::Partial {
                         name: name.trim().to_string(),
                         context,
@@ -506,8 +580,12 @@ fn expand_partial(
             let (context, hash) = parse_partial_args(args, span)?;
             let tokens = np_lexer::tokenize(&source)?;
             asm.stack.push(name.to_string());
-            let nodes = assemble(tokens, asm)?;
+            // Pop the guard even on error, so recovering from a fault inside
+            // this partial doesn't leak its name and trip a false recursion
+            // error on a later sibling use.
+            let assembled = assemble(tokens, asm);
             asm.stack.pop();
+            let nodes = assembled?;
 
             if context.is_none() && hash.is_empty() {
                 out.extend(nodes);
@@ -564,7 +642,16 @@ fn parse_block(
         return parse_region(it, args, span, asm);
     }
 
-    let (subject, params) = parse_block_head(kind, args, span)?;
+    // A bad block head (invalid subject expression or block params) is
+    // recoverable: record it and keep collecting the body so its tags are still
+    // checked and the matching `{{/..}}` close stays in sync.
+    let (subject, params) = match parse_block_head(kind, args, span) {
+        Ok(head) => head,
+        Err(err) => {
+            asm.errors.push(err);
+            (Expr::Lit(Value::Null), Vec::new())
+        }
+    };
     let (body, stop) = collect(it, asm)?;
 
     let (body, otherwise) = match stop {
@@ -629,7 +716,8 @@ fn parse_region(
 ) -> Result<Node, CompileError> {
     let name = args.trim();
     if name.is_empty() || name.split_whitespace().count() != 1 {
-        return Err(unsupported("`{{#region}}` requires a single name", span));
+        asm.errors
+            .push(unsupported("`{{#region}}` requires a single name", span));
     }
 
     let (body, stop) = collect(it, asm)?;
@@ -2184,6 +2272,50 @@ mod tests {
         }
         // A single `|` remains the pipe separator.
         assert!(wire("{{ name | upcase }}").is_ok());
+    }
+
+    #[test]
+    fn collects_every_recoverable_error_in_one_pass() {
+        // Two bad expressions, an unknown partial, and a bad block subject, in
+        // source order. `compile_to_wire` stops at the first; `_all` reports all.
+        let src = "{{ a + b }} {{> missing}} {{#if c && d}}x{{/if}} {{ e || f }}";
+        let errors = compile_to_wire_all(src, &Partials::new(), false).unwrap_err();
+        let messages: Vec<&str> = errors.iter().map(|e| e.message.as_str()).collect();
+        assert_eq!(
+            messages,
+            [
+                "expression \"+\" is not yet supported by the native compiler",
+                "unknown partial 'missing'",
+                "the '&&' operator is not supported",
+                "the '||' operator is not supported",
+            ]
+        );
+        // Each error keeps a non-empty span, and the single-error entry returns
+        // the first of them.
+        assert!(errors.iter().all(|e| e.end > e.start));
+        assert_eq!(wire(src).unwrap_err(), errors.into_iter().next().unwrap());
+    }
+
+    #[test]
+    fn a_recovered_partial_fault_does_not_leak_the_recursion_guard() {
+        // `a` is used twice; the first use faults inside its body (unknown
+        // nested partial), but that must not leave `a` on the guard stack and
+        // trip a false "recursion" error on the second use.
+        let mut partials = Partials::new();
+        partials.insert("a".into(), "{{> nope}}".into());
+        let errors = compile_to_wire_all("{{> a}}{{> a}}", &partials, false).unwrap_err();
+        assert_eq!(errors.len(), 2);
+        assert!(errors.iter().all(|e| e.message == "unknown partial 'nope'"));
+    }
+
+    #[test]
+    fn a_valid_template_still_compiles_with_all_collecting() {
+        // No errors: the accumulating path yields the same wire as the strict one.
+        let src = "Hi {{ name | upcase }}!";
+        assert_eq!(
+            compile_to_wire_all(src, &Partials::new(), false).unwrap(),
+            wire(src).unwrap()
+        );
     }
 
     #[test]

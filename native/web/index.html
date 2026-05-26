@@ -1617,24 +1617,23 @@
         // to its source files/tags in the Source view.
         const compiled = renderer.compile(mainSource, partialsMap(), { map: true });
 
-        if (compiled.error) {
+        if (compiled.errors) {
           lastProgram = null;
-          let problems;
-          if (activeTabIdx === 0) {
-            const [from, to] = byteRangeToCharRange(mainSource, compiled.error.start, compiled.error.end);
-            updateDiagnostics([{ from, to, severity: "error", message: compiled.error.message }]);
+          // The compiler reports every recoverable parse error in one pass, in
+          // source order. Spans are byte offsets into the main template; map
+          // each to a char range for the gutter mark and a line/column.
+          const onMain = activeTabIdx === 0;
+          const diags = [];
+          const problems = compiled.errors.map((e) => {
+            const [from, to] = byteRangeToCharRange(mainSource, e.start, e.end);
+            diags.push({ from, to, severity: "error", message: e.message });
             const pos = charToLineColumn(mainSource, from);
-            setError(`compile error: ${compiled.error.message} (Ln ${pos.line}, Col ${pos.column})`);
-            problems = [{ severity: "error", file: tabs[0].name, line: pos.line, col: pos.column, message: compiled.error.message }];
-          } else {
-            clearDiagnostics();
-            setError("compile error: " + compiled.error.message);
-            problems = [{ severity: "error", file: "main", line: 1, col: 1, message: compiled.error.message }];
-          }
-          // The compiler stops at the first error; the dependency scan (parse_ast,
-          // which doesn't fail on unknown partials) finds the rest, so every
-          // `{{> unknown}}` shows up in Problems, not just the first.
-          dockProblems = mergeMissingPartials(problems);
+            return { severity: "error", file: tabs[0].name, line: pos.line, col: pos.column, message: e.message };
+          });
+          if (onMain) updateDiagnostics(diags); else clearDiagnostics();
+          const more = problems.length > 1 ? ` (+${problems.length - 1} more)` : "";
+          setError(`compile error: ${problems[0].message} (Ln ${problems[0].line}, Col ${problems[0].col})${more}`);
+          dockProblems = problems;
           setOutput(""); saveHash(); return;
         }
 
@@ -2627,30 +2626,6 @@
           asts[name] = p.ast ? p.ast.nodes : [];
         }
         return buildDependencyGraph(asts);
-      }
-
-      // Append a problem for every unknown partial the dependency scan finds that
-      // the (fail-fast) compile error didn't already report, so Problems lists all
-      // of them. Deduped by message; line/col from each `{{> name}}` tag's span.
-      function mergeMissingPartials(problems) {
-        const seen = new Set(problems.map((p) => p.message));
-        for (const edge of currentDependencyGraph().edges) {
-          if (!edge.missing) continue;
-          const message = `unknown partial '${edge.to}'`;
-          if (seen.has(message)) continue;
-          seen.add(message);
-          let line = 1;
-          let col = 1;
-          const src = fileSource(edge.from);
-          if (edge.span && src) {
-            const [from] = byteRangeToCharRange(src, edge.span.start, edge.span.end);
-            const pos = charToLineColumn(src, from);
-            line = pos.line;
-            col = pos.column;
-          }
-          problems.push({ severity: "error", file: edge.from, line, col, message });
-        }
-        return problems;
       }
 
       function renderDock() {

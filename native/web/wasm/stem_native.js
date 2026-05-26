@@ -1,8 +1,9 @@
 /**
  * Compiles template source (plus an optional `{name: source}` partials map)
  * to a wire program, returned as a JS value. With `map`, the program carries
- * `src` provenance for the source-map view. Throws `{message, start, end}`
- * on a compile error so the editor can underline the span.
+ * `src` provenance for the source-map view. Throws `{ errors: [{message,
+ * start, end}, ...] }` on failure — every recoverable parse error in source
+ * order — so the editor can underline each span and list them all.
  * @param {string} source
  * @param {any} partials
  * @param {boolean} map

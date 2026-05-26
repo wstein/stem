@@ -28,18 +28,19 @@ export async function createRenderer(wasmInput) {
 
   // Compile template source to a wire program with no backend. `partials` is an
   // optional `{ name: source }` map expanded inline at `{{> name}}` sites.
-  // Returns `{ program }` on success, or `{ error: { message, start, end } }`
-  // when the source uses an unsupported construct (or an unknown/recursive
-  // partial) — the span lets the editor underline the offending tag. With
-  // `{ map: true }` the program carries `src` provenance for a source map; the
-  // unmapped wire stays byte-identical to the BEAM reference.
+  // Returns `{ program }` on success, or `{ errors: [{ message, start, end }] }`
+  // listing every recoverable parse error (unsupported constructs, unknown or
+  // recursive partials, bad arguments) in source order — the spans let the
+  // editor underline each offending tag. With `{ map: true }` the program
+  // carries `src` provenance for a source map; the unmapped wire stays
+  // byte-identical to the BEAM reference.
   function compile(source, partials = {}, { map = false } = {}) {
     try {
       return { program: wasmCompile(source, partials, map) };
-    } catch (error) {
-      // The Rust side throws the `{ message, start, end }` object on a compile
-      // error.
-      return { error };
+    } catch (thrown) {
+      // The Rust side throws `{ errors: [{ message, start, end }, ...] }`.
+      const errors = thrown && Array.isArray(thrown.errors) ? thrown.errors : [thrown];
+      return { errors };
     }
   }
 
