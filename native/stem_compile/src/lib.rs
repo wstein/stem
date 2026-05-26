@@ -76,13 +76,27 @@ struct Asm<'a> {
     errors: Vec<CompileError>,
 }
 
-// A parse/compile failure carrying a byte span into the source, so the editor
-// can underline the offending tag (Phase C surfaces this to JS).
+// A parse/compile failure carrying the source file it occurred in ("main" or a
+// partial name) plus a byte span into that file, so the editor can attribute
+// the error to the right tab and underline the offending tag.
 #[derive(Debug, PartialEq)]
 pub struct CompileError {
     pub message: String,
+    pub file: String,
     pub start: usize,
     pub end: usize,
+}
+
+impl CompileError {
+    // Stamp the originating file if one hasn't been recorded yet. Errors are
+    // created deep in the parser without that context; the file is filled in at
+    // the assembly boundary (or where a partial is expanded) that does know it.
+    fn in_file(mut self, file: &str) -> Self {
+        if self.file.is_empty() {
+            self.file = file.to_string();
+        }
+        self
+    }
 }
 
 impl std::fmt::Display for CompileError {
@@ -129,7 +143,7 @@ pub fn compile_to_wire_string(source: &str) -> Result<String, CompileError> {
 /// partial dependency edges stay visible; every node carries its byte `src`
 /// span for bidirectional editor highlighting. Mirrors `Stem.parse_ast/1`.
 pub fn parse_ast_to_wire(source: &str) -> Result<Value, CompileError> {
-    let tokens = np_lexer::tokenize(source)?;
+    let tokens = np_lexer::tokenize(source).map_err(|err| err.in_file("main"))?;
     let empty = Partials::new();
     let mut asm = Asm {
         partials: &empty,
@@ -164,7 +178,7 @@ fn compile_all(
     partials: &Partials,
     with_spans: bool,
 ) -> Result<Value, Vec<CompileError>> {
-    let tokens = np_lexer::tokenize(source).map_err(|err| vec![err])?;
+    let tokens = np_lexer::tokenize(source).map_err(|err| vec![err.in_file("main")])?;
     let mut asm = Asm {
         partials,
         stack: Vec::new(),
@@ -184,7 +198,7 @@ fn compile_all(
         return Err(asm.errors);
     }
     let instructions = lower_nodes(&nodes, &Scope::root(), &Regions::new(), &[], with_spans)
-        .map_err(|err| vec![err])?;
+        .map_err(|err| vec![err.in_file("main")])?;
     Ok(json!({ "version": VERSION, "instructions": instructions }))
 }
 
@@ -456,18 +470,21 @@ enum Node {
 }
 
 fn assemble(tokens: Vec<Token>, asm: &mut Asm) -> Result<Vec<Node>, CompileError> {
+    // All tokens here belong to one file (a partial expands via its own
+    // assemble), so a structural error from this pass is stamped with it.
+    let file = current_file(asm);
     let mut it = tokens.into_iter();
-    let (nodes, stop) = collect(&mut it, asm)?;
+    let (nodes, stop) = collect(&mut it, asm).map_err(|err| err.in_file(&file))?;
     match stop {
         Stop::Eof => Ok(nodes),
-        Stop::Else(span) => Err(unsupported(
-            "unexpected `{{else}}` outside of a block",
-            span,
-        )),
+        Stop::Else(span) => {
+            Err(unsupported("unexpected `{{else}}` outside of a block", span).in_file(&file))
+        }
         Stop::Close(kind, span) => Err(unsupported(
             format!("unexpected closing tag `{{/{}}}`", kind.tag()),
             span,
-        )),
+        )
+        .in_file(&file)),
     }
 }
 
@@ -486,7 +503,8 @@ fn recover(asm: &mut Asm, result: Result<Expr, CompileError>) -> Expr {
     match result {
         Ok(expr) => expr,
         Err(err) => {
-            asm.errors.push(err);
+            let file = current_file(asm);
+            asm.errors.push(err.in_file(&file));
             Expr::Lit(Value::Null)
         }
     }
@@ -498,7 +516,8 @@ fn recover_opt<T>(asm: &mut Asm, result: Result<T, CompileError>) -> Option<T> {
     match result {
         Ok(value) => Some(value),
         Err(err) => {
-            asm.errors.push(err);
+            let file = current_file(asm);
+            asm.errors.push(err.in_file(&file));
             None
         }
     }
@@ -536,7 +555,8 @@ fn collect(
                     // Unknown/recursive partials and bad args are recoverable:
                     // record and skip the tag, keep assembling the rest.
                     if let Err(err) = expand_partial(&name, &args, span, asm, &mut nodes) {
-                        asm.errors.push(err);
+                        let file = current_file(asm);
+                        asm.errors.push(err.in_file(&file));
                     }
                 } else if let Some((context, hash)) =
                     recover_opt(asm, parse_partial_args(&args, span))
@@ -578,7 +598,7 @@ fn expand_partial(
     match asm.partials.get(name).cloned() {
         Some(source) => {
             let (context, hash) = parse_partial_args(args, span)?;
-            let tokens = np_lexer::tokenize(&source)?;
+            let tokens = np_lexer::tokenize(&source).map_err(|err| err.in_file(name))?;
             asm.stack.push(name.to_string());
             // Pop the guard even on error, so recovering from a fault inside
             // this partial doesn't leak its name and trip a false recursion
@@ -648,7 +668,8 @@ fn parse_block(
     let (subject, params) = match parse_block_head(kind, args, span) {
         Ok(head) => head,
         Err(err) => {
-            asm.errors.push(err);
+            let file = current_file(asm);
+            asm.errors.push(err.in_file(&file));
             (Expr::Lit(Value::Null), Vec::new())
         }
     };
@@ -716,8 +737,9 @@ fn parse_region(
 ) -> Result<Node, CompileError> {
     let name = args.trim();
     if name.is_empty() || name.split_whitespace().count() != 1 {
+        let file = current_file(asm);
         asm.errors
-            .push(unsupported("`{{#region}}` requires a single name", span));
+            .push(unsupported("`{{#region}}` requires a single name", span).in_file(&file));
     }
 
     let (body, stop) = collect(it, asm)?;
@@ -1819,6 +1841,7 @@ fn has_duplicates(params: &[String]) -> bool {
 fn unsupported(message: impl Into<String>, span: Span) -> CompileError {
     CompileError {
         message: message.into(),
+        file: String::new(),
         start: span.0,
         end: span.1,
     }
@@ -2306,6 +2329,24 @@ mod tests {
         let errors = compile_to_wire_all("{{> a}}{{> a}}", &partials, false).unwrap_err();
         assert_eq!(errors.len(), 2);
         assert!(errors.iter().all(|e| e.message == "unknown partial 'nope'"));
+        // The fault is inside partial `a`, so it is attributed there, not to main.
+        assert!(errors.iter().all(|e| e.file == "a"));
+    }
+
+    #[test]
+    fn errors_are_attributed_to_the_file_they_occur_in() {
+        // A bad expression in main and an unsupported block inside a partial:
+        // each error names the file it came from, so the editor can open the
+        // right tab (mirrors the playground's Problems navigation).
+        let mut partials = Partials::new();
+        partials.insert("inner".into(), "ok {{#nope}}x{{/nope}}".into());
+        let errors = compile_to_wire_all("{{ a + b }} {{> inner}}", &partials, false).unwrap_err();
+        let by_file: Vec<(&str, &str)> = errors
+            .iter()
+            .map(|e| (e.file.as_str(), e.message.as_str()))
+            .collect();
+        assert_eq!(by_file[0].0, "main");
+        assert_eq!(by_file[1].0, "inner");
     }
 
     #[test]

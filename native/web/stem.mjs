@@ -28,10 +28,11 @@ export async function createRenderer(wasmInput) {
 
   // Compile template source to a wire program with no backend. `partials` is an
   // optional `{ name: source }` map expanded inline at `{{> name}}` sites.
-  // Returns `{ program }` on success, or `{ errors: [{ message, start, end }] }`
-  // listing every recoverable parse error (unsupported constructs, unknown or
-  // recursive partials, bad arguments) in source order — the spans let the
-  // editor underline each offending tag. With `{ map: true }` the program
+  // Returns `{ program }` on success, or `{ errors: [{ message, file, start,
+  // end }] }` listing every recoverable parse error (unsupported constructs,
+  // unknown or recursive partials, bad arguments) in source order — `file`
+  // ("main" or a partial name) and the byte span let the editor open the right
+  // tab and underline each offending tag. With `{ map: true }` the program
   // carries `src` provenance for a source map; the unmapped wire stays
   // byte-identical to the BEAM reference.
   function compile(source, partials = {}, { map = false } = {}) {

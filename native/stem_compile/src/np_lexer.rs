@@ -176,11 +176,13 @@ fn raw_lex(source: &str) -> Result<Vec<Lexeme>, CompileError> {
         // report the offset, matching the hand-written tokenizer's error span.
         Ok(success) => Err(CompileError {
             message: "unterminated tag while lexing template".to_string(),
+            file: String::new(),
             start: success.cursor.byte_offset,
             end: source.len(),
         }),
         Err(failure) => Err(CompileError {
             message: failure.reason,
+            file: String::new(),
             start: failure.cursor.byte_offset,
             end: source.len(),
         }),
@@ -190,6 +192,7 @@ fn raw_lex(source: &str) -> Result<Vec<Lexeme>, CompileError> {
 fn lexeme_from_value(value: Value) -> Result<Lexeme, CompileError> {
     let internal = |message: &str| CompileError {
         message: format!("internal lexer error: {message}"),
+        file: String::new(),
         start: 0,
         end: 0,
     };

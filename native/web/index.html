@@ -1620,19 +1620,29 @@
         if (compiled.errors) {
           lastProgram = null;
           // The compiler reports every recoverable parse error in one pass, in
-          // source order. Spans are byte offsets into the main template; map
-          // each to a char range for the gutter mark and a line/column.
-          const onMain = activeTabIdx === 0;
+          // source order. Each names the file ("main" or a partial) it occurred
+          // in; map its byte span into that file's source for line/column, and
+          // underline only the errors in the tab currently shown.
+          const activeFile = tabs[activeTabIdx]?.name;
           const diags = [];
-          const problems = compiled.errors.map((e) => {
-            const [from, to] = byteRangeToCharRange(mainSource, e.start, e.end);
-            diags.push({ from, to, severity: "error", message: e.message });
-            const pos = charToLineColumn(mainSource, from);
-            return { severity: "error", file: tabs[0].name, line: pos.line, col: pos.column, message: e.message };
-          });
-          if (onMain) updateDiagnostics(diags); else clearDiagnostics();
+          const seen = new Set();
+          const problems = [];
+          for (const e of compiled.errors) {
+            const file = e.file || "main";
+            const src = fileSource(file);
+            const [from, to] = byteRangeToCharRange(src, e.start, e.end);
+            const pos = charToLineColumn(src, from);
+            // Dedupe identical errors (e.g. a partial expanded at several sites).
+            const key = `${file}:${pos.line}:${pos.column}:${e.message}`;
+            if (seen.has(key)) continue;
+            seen.add(key);
+            if (file === activeFile) diags.push({ from, to, severity: "error", message: e.message });
+            problems.push({ severity: "error", file, line: pos.line, col: pos.column, message: e.message });
+          }
+          updateDiagnostics(diags);
           const more = problems.length > 1 ? ` (+${problems.length - 1} more)` : "";
-          setError(`compile error: ${problems[0].message} (Ln ${problems[0].line}, Col ${problems[0].col})${more}`);
+          const first = problems[0];
+          setError(`compile error: ${first.file} · ${first.message} (Ln ${first.line}, Col ${first.col})${more}`);
           dockProblems = problems;
           setOutput(""); saveHash(); return;
         }
