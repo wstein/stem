@@ -44,7 +44,7 @@ const expected = {
 
 const EXAMPLES_DIR = "native/web/examples";
 
-const { render, compile, parseAst } = await createRenderer(await readFile(WASM));
+const { render, compile, parseAst, inspectAt } = await createRenderer(await readFile(WASM));
 const manifest = JSON.parse(await readFile(`${EXAMPLES_DIR}.json`, "utf8"));
 
 // Load an example's individual files: main.stem, one .stem per partial, and
@@ -255,3 +255,28 @@ if (shape === "0:each items | 1:emit @this.name" && outline.every((r) => typeof 
   process.exit(1);
 }
 console.log(`ast outline: 1/1 flattens parse_ast with spans`);
+
+// Context Inspector pass: inspect_at re-runs the VM and snapshots the context at
+// a source span. Compile with spans, find the emit segment for `{{name}}`, then
+// assert one snapshot per loop iteration with the right @this / @index.
+{
+  const source = "{{#each items}}{{name}}{{/each}}";
+  const data = { items: [{ name: "a" }, { name: "b" }] };
+  const compiled = compile(source, {}, { map: true });
+  const { segments } = render(compiled.program, data, { map: true });
+  const emit = segments.find((s) => s.start != null);
+  const snaps = inspectAt(compiled.program, data, { file: emit.file, start: emit.start, end: emit.end });
+  const ok =
+    snaps.length === 2 &&
+    snaps[0].this.name === "a" &&
+    snaps[0].index === 0 &&
+    snaps[0].index1 === 1 &&
+    snaps[1].this.name === "b" &&
+    snaps[1].last === true;
+  if (ok) {
+    console.log(`context inspector: 1/1 inspect_at snapshots each iteration`);
+  } else {
+    console.error(`  FAIL context inspector: ${JSON.stringify(snaps)}`);
+    process.exit(1);
+  }
+}

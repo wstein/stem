@@ -461,6 +461,30 @@ mod wasm {
         }
     }
 
+    /// Captures the render context at a source span for the Context Inspector.
+    /// Re-runs `program` against `data` with the named `groups` and snapshots the
+    /// active context (`@this`/`@parent`/`@root`/iteration vars/locals) each time
+    /// a `text`/`emit` instruction whose `src` equals `target` (`{file, start,
+    /// end}`) executes — one snapshot per loop iteration. Returns a JS array of
+    /// snapshots (empty when the span is never reached). `program` must be
+    /// compiled with spans (`compile(.., true)`).
+    #[wasm_bindgen]
+    pub fn inspect_at(
+        program: JsValue,
+        data: JsValue,
+        groups: JsValue,
+        target: JsValue,
+    ) -> Result<JsValue, JsValue> {
+        let program: Program = serde_wasm_bindgen::from_value(program)
+            .map_err(|err| JsValue::from_str(&format!("invalid program: {err}")))?;
+        let data: Value = serde_wasm_bindgen::from_value(data).unwrap_or(Value::Null);
+        let groups: Vec<String> = serde_wasm_bindgen::from_value(groups).unwrap_or_default();
+        let target: crate::SrcTarget = serde_wasm_bindgen::from_value(target)
+            .map_err(|err| JsValue::from_str(&format!("invalid target: {err}")))?;
+        let snaps = crate::inspect_program(&program, &data, parse_groups(&groups), &target);
+        to_js(&snaps)
+    }
+
     /// Parses one template's `source` to its pre-expansion AST (`stem-ast/v1`),
     /// returned as a JS object `{ version, nodes }`. `{{> name}}` tags stay as
     /// `partial` nodes (the dependency-graph edges) and every node carries its
@@ -933,6 +957,133 @@ fn exec(instr: &Instr, ctx: &Ctx, out: &mut String, segs: &mut Vec<Segment>) {
             exec_all(body, &scope_context(ctx, base, hash), out, segs);
         }
     }
+}
+
+// The source span a Context Inspector click resolves to: a `text`/`emit`
+// instruction's provenance (`{file, start, end}`), the same key the render
+// segment map carries.
+#[derive(Debug, Deserialize)]
+pub struct SrcTarget {
+    pub file: String,
+    pub start: usize,
+    pub end: usize,
+}
+
+fn src_matches(src: &Option<Src>, target: &SrcTarget) -> bool {
+    matches!(src, Some(s) if s.file == target.file && s.start == Some(target.start) && s.end == Some(target.end))
+}
+
+// Project the render context into the `@`-prefixed view the playground shows.
+// Iteration vars are null outside an `{{#each}}`; locals are block params.
+fn ctx_snapshot(ctx: &Ctx) -> Value {
+    let iter = |v: Value| if ctx.in_each { v } else { Value::Null };
+    serde_json::json!({
+        "this": ctx.this,
+        "parent": ctx.parent,
+        "root": ctx.root,
+        "index": iter(Value::from(ctx.index)),
+        "index1": iter(Value::from(ctx.index + 1)),
+        "key": ctx.key,
+        "first": ctx.first,
+        "last": ctx.last,
+        "locals": Value::Object(ctx.locals.clone().into_iter().collect()),
+    })
+}
+
+// Re-walk the program like `exec`, but instead of producing output, capture a
+// context snapshot every time a `text`/`emit` instruction whose `src` matches
+// `target` is reached. A loop body matching the target yields one snapshot per
+// iteration, in execution order. Re-execute-on-demand, no continuous trace.
+fn inspect_all(instructions: &[Instr], ctx: &Ctx, target: &SrcTarget, snaps: &mut Vec<Value>) {
+    for instr in instructions {
+        inspect_one(instr, ctx, target, snaps);
+    }
+}
+
+fn inspect_one(instr: &Instr, ctx: &Ctx, target: &SrcTarget, snaps: &mut Vec<Value>) {
+    match instr {
+        Instr::Text { src, .. } | Instr::Emit { src, .. } => {
+            if src_matches(src, target) {
+                snaps.push(ctx_snapshot(ctx));
+            }
+        }
+        Instr::If {
+            cond,
+            then,
+            otherwise,
+        } => {
+            let branch = if truthy(&eval(cond, ctx)) {
+                then
+            } else {
+                otherwise
+            };
+            inspect_all(branch, ctx, target, snaps);
+        }
+        Instr::Each {
+            subject,
+            params,
+            body,
+            otherwise,
+        } => {
+            let entries = each_entries(&eval(subject, ctx));
+            if entries.is_empty() {
+                let else_ctx = Ctx {
+                    in_each: false,
+                    ..clone_ctx(ctx)
+                };
+                inspect_all(otherwise, &else_ctx, target, snaps);
+            } else {
+                let last_index = entries.len() - 1;
+                for (index, (current, key)) in entries.into_iter().enumerate() {
+                    let inner = each_context(
+                        ctx,
+                        params,
+                        current,
+                        key,
+                        index as i64,
+                        index == 0,
+                        index == last_index,
+                    );
+                    inspect_all(body, &inner, target, snaps);
+                }
+            }
+        }
+        Instr::With {
+            subject,
+            params,
+            body,
+            otherwise,
+        } => {
+            let value = eval(subject, ctx);
+            if truthy(&value) {
+                inspect_all(body, &with_context(ctx, params, value), target, snaps);
+            } else {
+                inspect_all(otherwise, ctx, target, snaps);
+            }
+        }
+        Instr::Scope { base, hash, body } => {
+            inspect_all(body, &scope_context(ctx, base, hash), target, snaps);
+        }
+    }
+}
+
+/// Capture render-context snapshots at a source span — the Context Inspector
+/// primitive. Re-runs `program` against `data` with the enabled `groups` and
+/// returns one JSON snapshot (`@this`/`@parent`/`@root`/iteration vars/locals)
+/// per execution of a `text`/`emit` instruction whose `src` matches `target`,
+/// in execution order (empty when the span is never reached). `program` must be
+/// compiled with spans for `target` to match anything.
+pub fn inspect_program(
+    program: &Program,
+    data: &Value,
+    groups: u8,
+    target: &SrcTarget,
+) -> Vec<Value> {
+    let host = Host::default();
+    let ctx = root_ctx(data, &host, groups);
+    let mut snaps = Vec::new();
+    inspect_all(&program.instructions, &ctx, target, &mut snaps);
+    snaps
 }
 
 // Build a partial's render context: the base (context arg, or the caller's
@@ -2648,5 +2799,72 @@ mod source_map_tests {
         let segments = assert_tiles(&result);
         assert_eq!(segments.len(), 3);
         assert!(segments.iter().all(|s| s["file"] == "main"));
+    }
+}
+
+#[cfg(test)]
+mod inspect_tests {
+    use super::*;
+    use serde_json::json;
+    use std::collections::HashMap;
+
+    fn program_with_spans(source: &str) -> Program {
+        let wire = compile::compile_to_wire_with_spans(source, &HashMap::new()).expect("compiles");
+        serde_json::from_value(wire).expect("valid wire program")
+    }
+
+    // The source span of the first `emit` segment, derived from the render map so
+    // the tests don't hardcode byte offsets.
+    fn emit_target(program: &Program, data: &Value) -> SrcTarget {
+        let (_out, segs) =
+            render_mapped(&program.instructions, &root_ctx(data, &Host::default(), 0));
+        let seg = segs
+            .iter()
+            .find(|s| s.kind == "emit")
+            .expect("an emit segment");
+        SrcTarget {
+            file: seg.file.clone(),
+            start: seg.start.expect("emit segment carries a start"),
+            end: seg.end.expect("emit segment carries an end"),
+        }
+    }
+
+    #[test]
+    fn captures_one_snapshot_per_loop_iteration() {
+        let program = program_with_spans("{{#each items}}{{name}}{{/each}}");
+        let data = json!({ "items": [{ "name": "a" }, { "name": "b" }] });
+        let target = emit_target(&program, &data);
+        let snaps = inspect_program(&program, &data, 0, &target);
+
+        assert_eq!(snaps.len(), 2);
+        assert_eq!(snaps[0]["this"], json!({ "name": "a" }));
+        assert_eq!(snaps[0]["index"], json!(0));
+        assert_eq!(snaps[0]["index1"], json!(1));
+        assert_eq!(snaps[0]["first"], json!(true));
+        assert_eq!(snaps[0]["parent"], data);
+        assert_eq!(snaps[1]["this"], json!({ "name": "b" }));
+        assert_eq!(snaps[1]["last"], json!(true));
+    }
+
+    #[test]
+    fn top_level_snapshot_has_null_iteration_vars() {
+        let program = program_with_spans("Hi {{user.name}}!");
+        let data = json!({ "user": { "name": "Nina" } });
+        let target = emit_target(&program, &data);
+        let snaps = inspect_program(&program, &data, 0, &target);
+
+        assert_eq!(snaps.len(), 1);
+        assert_eq!(snaps[0]["this"], data);
+        assert_eq!(snaps[0]["root"], data);
+        assert_eq!(snaps[0]["index"], json!(null));
+        assert_eq!(snaps[0]["first"], json!(null));
+    }
+
+    #[test]
+    fn unreached_span_yields_no_snapshots() {
+        let program = program_with_spans("{{#if shown}}{{name}}{{/if}}");
+        let data = json!({ "shown": false, "name": "hidden" });
+        let target = emit_target(&program, &json!({ "shown": true, "name": "x" }));
+        assert!(inspect_program(&program, &data, 0, &target).is_empty());
     }
 }

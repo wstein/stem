@@ -19,6 +19,28 @@ export function compile(source, partials, map) {
 }
 
 /**
+ * Captures the render context at a source span for the Context Inspector.
+ * Re-runs `program` against `data` with the named `groups` and snapshots the
+ * active context (`@this`/`@parent`/`@root`/iteration vars/locals) each time
+ * a `text`/`emit` instruction whose `src` equals `target` (`{file, start,
+ * end}`) executes — one snapshot per loop iteration. Returns a JS array of
+ * snapshots (empty when the span is never reached). `program` must be
+ * compiled with spans (`compile(.., true)`).
+ * @param {any} program
+ * @param {any} data
+ * @param {any} groups
+ * @param {any} target
+ * @returns {any}
+ */
+export function inspect_at(program, data, groups, target) {
+    const ret = wasm.inspect_at(program, data, groups, target);
+    if (ret[2]) {
+        throw takeFromExternrefTable0(ret[1]);
+    }
+    return takeFromExternrefTable0(ret[0]);
+}
+
+/**
  * Parses one template's `source` to its pre-expansion AST (`stem-ast/v1`),
  * returned as a JS object `{ version, nodes }`. `{{> name}}` tags stay as
  * `partial` nodes (the dependency-graph edges) and every node carries its
@@ -59,6 +81,10 @@ function __wbg_get_imports() {
         __proto__: null,
         __wbg_Error_ef53bc310eb298a0: function(arg0, arg1) {
             const ret = Error(getStringFromWasm0(arg0, arg1));
+            return ret;
+        },
+        __wbg_Number_6b506e6536831eaa: function(arg0) {
+            const ret = Number(arg0);
             return ret;
         },
         __wbg_String_8564e559799eccda: function(arg0, arg1) {

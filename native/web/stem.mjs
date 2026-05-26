@@ -14,6 +14,7 @@ import init, {
   compile as wasmCompile,
   render as wasmRender,
   parse_ast as wasmParseAst,
+  inspect_at as wasmInspectAt,
 } from "./wasm/stem_native.js";
 
 // The capability groups the playground loads. The playground author is trusted,
@@ -65,5 +66,16 @@ export async function createRenderer(wasmInput) {
     }
   }
 
-  return { render, compile, parseAst };
+  // Capture render-context snapshots at a source span, for the Context
+  // Inspector. `target` is `{ file, start, end }` (an output segment's source
+  // provenance). Returns an array of snapshots — `{ this, parent, root, index,
+  // index1, key, first, last, locals }` (the UI renders them `@`-prefixed) — one
+  // per execution of the matching instruction (so a loop body yields one per
+  // iteration), empty when the span is never reached. Needs a program compiled
+  // with `{ map: true }`.
+  function inspectAt(program, data, target, { transformers = PLAYGROUND_GROUPS } = {}) {
+    return wasmInspectAt(program, data, transformers, target);
+  }
+
+  return { render, compile, parseAst, inspectAt };
 }
