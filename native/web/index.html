@@ -122,18 +122,32 @@
       .topbar-group { display: flex; align-items: center; gap: 6px; }
       .field-label { color: var(--fg-muted); font-size: 12px; padding-right: 2px; }
 
-      select.select, button.btn {
+      select.select {
         height: 26px; padding: 0 8px;
         border: 1px solid var(--border-strong); border-radius: var(--radius);
         background: var(--bg); color: var(--fg); font-size: 12px; cursor: pointer;
         transition: background 80ms ease, border-color 80ms ease;
       }
-      select.select:hover, button.btn:hover { background: var(--bg-2); }
-      button.btn.active { color: var(--accent-2); border-color: var(--accent-soft); background: var(--accent-softer); }
-      select.select:focus, button.btn:focus {
-        outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft);
+      select.select:hover { background: var(--bg-2); }
+      select.select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+
+      /* Topbar tool buttons — flat and light (the diagnostics-toggle look the
+         user preferred), with a leading icon, grouped into a tool bar. */
+      button.btn {
+        display: inline-flex; align-items: center; gap: 5px;
+        height: 26px; padding: 0 9px;
+        border: 1px solid var(--border); border-radius: var(--radius);
+        background: transparent; color: var(--fg-secondary);
+        font: 11px var(--font-ui); cursor: pointer;
+        transition: background 80ms ease, border-color 80ms ease, color 80ms ease;
       }
-      button.btn .kbd-inline { color: var(--fg-faint); margin-left: 6px; font: 11px/1 var(--font-mono); }
+      button.btn:hover { background: var(--bg-2); color: var(--fg); }
+      button.btn.active { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-softer); }
+      button.btn:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+      button.btn svg { width: 13px; height: 13px; flex: 0 0 auto; opacity: .85; }
+      button.btn .kbd-inline { color: var(--fg-faint); margin-left: 4px; font: 11px/1 var(--font-mono); }
+      /* The action buttons sit together as one bar with hairline separators. */
+      .toolbar { display: inline-flex; align-items: center; gap: 4px; }
 
       /* Custom example dropdown — always opens downward (top: 100%). */
       .dropdown { position: relative; }
@@ -830,12 +844,17 @@
             <ul id="example-menu" class="dropdown-menu" role="listbox" hidden></ul>
           </div>
         </div>
-        <div class="topbar-group">
-          <button id="share-btn" class="btn" title="Copy a link that restores this template and data">Copy link</button>
-          <button id="cmd-btn" class="btn" title="Open command palette">Commands <span class="kbd-inline">⌘⇧P</span></button>
-          <button id="search-btn" class="btn" title="Find in all files (⌘⇧F)">Search <span class="kbd-inline">⌘⇧F</span></button>
-          <button id="deps-btn" class="btn" title="Partial dependency graph">Dependencies</button>
-          <button id="tweaks-btn" class="btn" title="Appearance settings (theme, layout)">Appearance</button>
+        <div class="topbar-group toolbar">
+          <button id="share-btn" class="btn" title="Copy a link that restores this template and data">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M6.5 9.5a2.4 2.4 0 0 0 3.5 0l2-2a2.4 2.4 0 0 0-3.4-3.4l-1 1"/><path d="M9.5 6.5a2.4 2.4 0 0 0-3.5 0l-2 2a2.4 2.4 0 0 0 3.4 3.4l1-1"/></svg>Copy link</button>
+          <button id="cmd-btn" class="btn" title="Open command palette">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M4 5.5L7 8l-3 2.5"/><path d="M8.5 11H12"/></svg>Commands <span class="kbd-inline">⌘⇧P</span></button>
+          <button id="search-btn" class="btn" title="Find in all files (⌘⇧F)">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14"/></svg>Search <span class="kbd-inline">⌘⇧F</span></button>
+          <button id="deps-btn" class="btn" title="Partial dependency graph">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="3.4" r="1.8"/><circle cx="4" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><path d="M7 5L5 10.4M9 5l2 5.4"/></svg>Dependencies</button>
+          <button id="tweaks-btn" class="btn" title="Appearance settings (theme, layout)">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 5h6M13 5h-2M3 11h2M9 11h4"/><circle cx="10" cy="5" r="1.7"/><circle cx="6" cy="11" r="1.7"/></svg>Appearance</button>
         </div>
         <div class="spacer"></div>
       </header>
