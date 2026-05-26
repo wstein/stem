@@ -104,8 +104,8 @@
         background: var(--bg-toolbar); border-bottom: 1px solid var(--border);
         user-select: none;
       }
-      /* Icon optically centred with the wordmark; the version rides as a small
-         superscript tag at the top-right of the name. */
+      /* Icon optically centred with the wordmark. The build version lives in the
+         status bar (conventional home for it), keeping the brand uncluttered. */
       .brand {
         display: flex; align-items: center; gap: 10px;
         letter-spacing: -.01em; padding-right: 10px;
@@ -115,11 +115,6 @@
       }
       .brand .brand-name { font-size: 27px; line-height: 1; font-weight: 400; color: var(--fg-secondary); }
       .brand .brand-name b { font-weight: 700; color: var(--fg); }
-      .brand .brand-ver {
-        font: 500 10px/1 var(--font-mono); letter-spacing: .02em; color: var(--fg-faint);
-        vertical-align: super; margin-left: 5px;
-      }
-      .brand .brand-ver:empty { display: none; }
       .topbar .divider { width: 1px; height: 18px; background: var(--border); }
       .topbar-group { display: flex; align-items: center; gap: 6px; }
       .field-label { color: var(--fg-muted); font-size: 12px; padding-right: 2px; }
@@ -578,6 +573,8 @@
       .statusbar .meta { color: var(--fg-muted); font-family: var(--font-mono); font-size: 11px; }
       .statusbar .status-sub { color: var(--fg-faint); font-family: var(--font-mono); font-size: 11px; }
       .statusbar .status-sub:empty { display: none; }
+      .statusbar .status-ver { color: var(--fg-faint); font-family: var(--font-mono); font-size: 11px; }
+      .statusbar .status-ver:empty { display: none; }
       .statusbar .meta b { color: var(--fg-secondary); font-weight: 600; }
 
       /* ── Command palette ─────────────────────────────────────────── */
@@ -842,7 +839,7 @@
             <path class="stem-line" d="M24 29 C27 27 29 27 31 28" stroke="var(--stem-green)" stroke-width="2" stroke-linecap="round"/>
             <circle class="stem-dot" cx="24" cy="13" r="2" fill="var(--stem-green)"/>
           </svg>
-          <span class="brand-name"><b>Stem</b> Playground<sup class="brand-ver" id="brand-ver" title="Compiled engine version (from the wasm build)"></sup></span>
+          <span class="brand-name"><b>Stem</b> Playground</span>
         </div>
         <div class="divider"></div>
         <div class="topbar-group">
@@ -1006,6 +1003,7 @@
         <span id="sources-sub" class="status-sub"></span>
         <span class="spacer"></span>
         <span id="status-meta" class="meta"></span>
+        <span id="brand-ver" class="status-ver" title="Compiled engine version (from the wasm build)"></span>
       </footer>
     </div>
 
@@ -2762,12 +2760,15 @@
 
       function buildDepsPanel() {
         const panel = makeEl("div", { class: "dep-panel", role: "dialog", "aria-label": "Dependencies" });
+        // Always seed a default position; applyPanelPos() overrides it only when a
+        // dragged position was saved. (The resize observer saves a width on first
+        // open, which used to make later opens skip positioning — panel pinned at
+        // 0,0 behind the topbar, invisible, while the button showed active.)
+        panel.style.right = "18px";
+        panel.style.bottom = "42px";
         if (typeof panelState.deps.width === "number") {
           panel.style.width = panelState.deps.width + "px";
           panel.style.height = panelState.deps.height + "px";
-        } else {
-          panel.style.right = "18px";
-          panel.style.bottom = "42px";
         }
         const close = makeEl("button", { class: "tw-close", title: "Close" }, "×");
         close.addEventListener("click", hideDeps);
