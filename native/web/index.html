@@ -434,12 +434,7 @@
       /* While dragging the dock grip, let the iframe not swallow the pointer. */
       body.dragging-dock { cursor: row-resize; user-select: none; }
       body.dragging-dock #output-preview { pointer-events: none; }
-      .dock-header {
-        flex: 0 0 30px; display: flex; align-items: stretch;
-        border-bottom: 1px solid var(--border); background: var(--bg-1);
-      }
-      /* Problem-count badge — lives on the status-bar Diagnostics button (the
-         dock itself needs no title, it's the only view). */
+      /* Problem-count badge — lives on the toolbar Diagnostics button. */
       .badge {
         font: 10px var(--font-mono); padding: 0 5px; border-radius: 8px;
         background: var(--bg-3); color: var(--fg-muted);
@@ -447,13 +442,15 @@
       .badge.danger  { background: var(--danger-faint); color: var(--danger); }
       .badge.warn    { background: var(--warn-faint); color: var(--warn); }
       .badge.success { background: var(--success-faint); color: var(--success); }
-      .dock-actions { margin-left: auto; display: flex; align-items: center; padding: 0 8px; }
-      .dock-actions button {
+      /* The dock has no title bar (Problems is its only view); a single close
+         button floats top-right over the content. */
+      .dock-close {
+        position: absolute; top: 6px; right: 8px; z-index: 2;
         appearance: none; border: 0; background: transparent; cursor: pointer;
         color: var(--fg-muted); padding: 4px; border-radius: 4px; display: flex;
       }
-      .dock-actions button:hover { background: var(--bg-2); color: var(--fg); }
-      .dock-actions svg { width: 12px; height: 12px; }
+      .dock-close:hover { background: var(--bg-2); color: var(--fg); }
+      .dock-close svg { width: 12px; height: 12px; }
       .dock-body { flex: 1 1 auto; overflow: auto; min-height: 0; }
       .dock.collapsed .dock-body { display: none; }
 
@@ -541,14 +538,6 @@
       }
       .ast-content { flex: 1 1 auto; min-width: 0; white-space: pre; }
       .ast-kw { color: var(--tok-key); }
-
-      .dock-toggle {
-        appearance: none; border: 1px solid var(--border); background: var(--bg);
-        color: var(--fg-muted); cursor: pointer; font: 11px var(--font-ui);
-        display: flex; align-items: center; gap: 5px; padding: 1px 8px; border-radius: 4px;
-      }
-      .dock-toggle:hover { background: var(--bg-2); color: var(--fg); }
-      .dock-toggle.active { color: var(--accent); border-color: var(--accent-soft); background: var(--accent-softer); }
 
       /* ── Status bar ──────────────────────────────────────────────── */
       .statusbar {
@@ -867,6 +856,8 @@
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><circle cx="8" cy="3.4" r="1.8"/><circle cx="4" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><path d="M7 5L5 10.4M9 5l2 5.4"/></svg>Dependencies</button>
           <button id="tweaks-btn" class="btn" title="Appearance settings (theme, layout)">
             <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M3 5h6M13 5h-2M3 11h2M9 11h4"/><circle cx="10" cy="5" r="1.7"/><circle cx="6" cy="11" r="1.7"/></svg>Appearance</button>
+          <button id="dock-toggle" class="btn" title="Show/hide diagnostics" aria-pressed="false">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><path d="M2.5 10.5h11"/></svg>Diagnostics <span class="badge" id="dock-badge-problems">0</span></button>
         </div>
         <div class="spacer"></div>
       </header>
@@ -972,13 +963,9 @@
       <!-- ── Diagnostics dock ──────────────────────────────────────── -->
       <aside id="dock" class="dock" aria-label="Diagnostics" hidden>
         <div id="dock-grip" class="dock-grip" title="Drag to resize"></div>
-        <header class="dock-header">
-          <div class="dock-actions">
-            <button id="dock-collapse" title="Close" aria-label="Close diagnostics">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg>
-            </button>
-          </div>
-        </header>
+        <button id="dock-collapse" class="dock-close" title="Close" aria-label="Close diagnostics">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 4l8 8M12 4l-8 8"/></svg>
+        </button>
         <div id="dock-body" class="dock-body"></div>
       </aside>
 
@@ -992,10 +979,6 @@
              as {{> styles}}"); empty for main. Lives here now that the panes have
              no title header. -->
         <span id="sources-sub" class="status-sub"></span>
-        <button id="dock-toggle" class="dock-toggle" title="Show/hide diagnostics dock" aria-pressed="false">
-          <svg width="11" height="11" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2.5" y="2.5" width="11" height="11" rx="1"/><path d="M2.5 10.5h11"/></svg>
-          Diagnostics <span class="badge" id="dock-badge-problems">0</span>
-        </button>
         <span class="spacer"></span>
         <span id="status-meta" class="meta"></span>
       </footer>
@@ -2700,10 +2683,11 @@
       // survives reloads. localStorage is the playground's persistence mechanism
       // (same as the splitters and Appearance settings).
       const LS_PANELS = "stem-playground:panels.v1";
-      let panelState = { appearance: {}, deps: {}, search: {} };
+      let panelState = { appearance: {}, deps: {}, search: {}, dock: {} };
       try {
-        panelState = { appearance: {}, deps: {}, search: {}, ...JSON.parse(localStorage.getItem(LS_PANELS) || "{}") };
+        panelState = { appearance: {}, deps: {}, search: {}, dock: {}, ...JSON.parse(localStorage.getItem(LS_PANELS) || "{}") };
         panelState.search = panelState.search || {};
+        panelState.dock = panelState.dock || {};
       } catch {}
       function savePanels() {
         try { localStorage.setItem(LS_PANELS, JSON.stringify(panelState)); } catch {}
@@ -3070,6 +3054,7 @@
         if (panelState.appearance.open !== false) showTweaks();
         if (panelState.deps.open) showDeps();
         if (panelState.search.open) showSearch();
+        if (panelState.dock.open) setDockVisible(true);
       }
 
       // ── Wire events ───────────────────────────────────────────────────
@@ -3559,6 +3544,8 @@
         toggle.classList.toggle("active", visible);
         toggle.setAttribute("aria-pressed", String(visible));
         if (visible) renderDock();
+        panelState.dock = { open: visible };
+        savePanels();
       }
 
       byId("dock-toggle").addEventListener("click", () => setDockVisible(byId("dock").hidden));
