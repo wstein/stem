@@ -21,15 +21,16 @@ See `papers/00004-native-compiler-minutes.adoc` for the full record.
 
 === ADR-0002: Runtime compile/eval APIs alongside compile-time macros
 
-Accepted (2026-03-05, revised 2026-05-21).
+Accepted (2026-03-05, revised 2026-05-26).
 
 *Context.* Some consumers need dynamic template evaluation at runtime, similar to EEx workflows.
 
-*Decision.* Stem keeps compile-time macros and also provides runtime `compile_string/2`, `compile_file/2`, `eval_string/3`, and `eval_file/3` APIs.
-Output rendering remains unescaped by default and transformations are explicit via helpers.
+*Decision.* Stem keeps compile-time macros and also provides runtime `compile_string/2` and `compile_file/2`.
+Runtime *evaluation* of not-yet-compiled source (`eval_string/3`, `eval_file/3`) is quarantined under the explicit `Stem.Unsafe` namespace (see ADR-0004), marking the trust boundary at the call site.
+Output is HTML-escaped by default (`{{ }}`); raw, unescaped output is opt-in via triple braces (`{{{ }}}`).
 
-*Consequences.* Runtime evaluation is supported directly, so callers must enforce trust boundaries around template input.
-Escaping and sanitization are explicit responsibilities of helper functions and calling code.
+*Consequences.* Runtime evaluation is supported, but the caller's responsibility is the trust boundary around the template *source* — hence the `Stem.Unsafe.` prefix.
+Escaping is the engine's default, not the caller's burden; a helper that returns raw HTML re-introduces XSS risk (see xref:architecture:08-cross-cutting-concepts.adoc[Cross-cutting Concepts]).
 
 === ADR-0003: Explicit Data Boundaries and CLI Contract
 
@@ -50,3 +51,53 @@ Accepted (2026-05-25). Supersedes the original `allow_elixir_expressions` boolea
 *Decision.* Remove the escape hatch entirely. Templates accept only structured Stem syntax — assigns, dotted paths, literals, and transformer calls. An unrecognised expression raises `Stem.SyntaxError` at parse time. The `allow_elixir_expressions` flag, the `{:elixir, …}` AST node, and the `mix stem.audit` task are removed.
 
 *Consequences.* The language is identical across backends (BEAM and native) and SSTI via arbitrary expressions is impossible by construction — there is no flag to misconfigure and no CI gate to maintain. The remaining trust boundary is the *template source* itself, which is why runtime evaluation stays under `Stem.Unsafe`. Logic that previously reached for arbitrary expressions belongs in a registered helper or a backend service.
+
+=== ADR-0005: Parser/tokenizer fusion
+
+Accepted (2026-05). See note _Parser-Tokenizer Fusion Decision_ for the full record.
+
+*Context.* A separate `Stem.Tokenizer` pass produced a token list the parser immediately re-walked, duplicating position tracking and trim-marker handling.
+
+*Decision.* Fuse tokenization into the parser; there is no standalone `Stem.Tokenizer` module.
+
+*Consequences.* One source of truth for spans and trim markers, fewer intermediate allocations. ADR-0001's pipeline list is historical (it predates the fusion).
+
+=== ADR-0006: Portable bytecode as a second lowering backend
+
+Accepted (2026-05-22). See notes _Portable Stem Bytecode_ and _Native Backend Strategy_.
+
+*Context.* The quoted-Elixir backend is BEAM-only; a portable target is needed to render the same templates off the BEAM with identical output.
+
+*Decision.* Add `Stem.Bytecode`, which lowers the shared AST to a versioned, capability-aware program (`stem-bc/v1`) rendered by `Stem.Bytecode.VM`. The Elixir reference is the spec oracle; output is byte-identical to the compiled backend.
+
+*Consequences.* Templates ship as portable bytecode, not transpiled source, enabling cross-language engines. A conformance suite (xref:architecture:10-quality-requirements.adoc[quality requirements]) guards byte parity.
+
+=== ADR-0007: Rust/WASM native engine with a typed host API
+
+Accepted (2026-05-22, extended 2026-05-26). See notes _Native Backend Strategy_, _Rust Host API for Native Backend_, _Native Backend Phase 2 Gate_.
+
+*Context.* The portable bytecode needs at least one non-BEAM renderer to prove the architecture and serve the browser playground.
+
+*Decision.* Implement the engine in Rust (`native/`), validated byte-for-byte against the conformance corpus. Trusted in-process callers use a typed API (`compile`/`Program::render`); the browser uses wasm-bindgen exports (`compile`/`render`/`parse_ast`/`inspect_at`/`version`); the JSON boundary remains the Elixir oracle seam.
+
+*Consequences.* Production use stays gated on a BEAM-perf basis, but the architecture is de-risked and the playground compiles fully in-browser. Custom transformers enter as host function pointers — acceptable for trusted embedding, not the untrusted path.
+
+=== ADR-0008: Rust front end ported to nimble_parsec_rs
+
+Accepted (2026-05-26). See notes _Rust nimble_parsec_rs Parser Port_ and _NimbleParsec Migration Strategy_.
+
+*Context.* The Rust lexer/expression tokenizer was hand-written byte scanning, conceptually divergent from the Elixir reference's `nimble_parsec` grammar.
+
+*Decision.* Port the Rust lexer (`np_lexer.rs`) and expression tokenizer (`np_expr.rs`) to `nimble_parsec_rs` for *conceptual* parity (not byte-identical ASTs). The structural recursive-descent block assembler stays hand-written, mirroring Elixir's `collect`/`parse_block`.
+
+*Consequences.* One conceptual model across backends; each migration phase was gated by the BEAM-vs-Rust differential staying green.
+
+=== ADR-0009: Recoverable parse-error accumulation
+
+Accepted (2026-05-26). See note _Recoverable Parse Error Accumulation_.
+
+*Context.* Stopping at the first parse error forces edit-compile churn and hides later mistakes; the playground wants a full problem list.
+
+*Decision.* Both backends collect every recoverable error in one pass — `Stem.Parser.parse_all/2` and the native `compile_to_wire_all` — each attributed to the file it occurred in; structural (stream-desyncing) errors still end the pass and are reported last. The fail-fast `parse/2` is unchanged (it surfaces the first).
+
+*Consequences.* The playground lists all errors; `mix stem.native.compile_diff` gains a parity check that both backends report the same error set (count + file order).

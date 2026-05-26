@@ -1,7 +1,7 @@
 = Introduction And Goals
 :page-layout: default
 
-Describe why `myproject` exists, who it serves, and what success looks
+Describe why `Stem` exists, who it serves, and what success looks
 like.
 
 == Business Or Product Goals

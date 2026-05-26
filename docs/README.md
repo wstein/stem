@@ -1,6 +1,6 @@
 # Documentation Scaffold
 
-`cx init` created a minimal Antora documentation site for `myproject`.
+`cx init` created a minimal Antora documentation site for `Stem`.
 
 ## Structure
 

@@ -17,8 +17,8 @@ It outlines how the Stem team works so that the model’s suggestions stay on tr
 1. **Semantic Versioning** – follow MAJOR.MINOR.PATCH.
 2. **Conventional commits** – `type(scope): description`.
 3. **Documentation formats**:
-   - Documentation lives primarily in source files (`src`/code comments and module docs) and is generated from those sources.
-   - `docs/` is generated output, not a hand-written source of truth.
+   - API/reference documentation lives in source (`@moduledoc`/`@doc`) and is generated from there.
+   - `docs/**/*.adoc` are **hand-written AsciiDoc source** (arc42 architecture set, manual, onboarding); keep them current by hand. Antora builds them into an HTML site — that built site is the generated artifact, not the `.adoc` sources.
    - Prefer AsciiDoc (`.adoc`) for detailed documentation (minutes, ADRs, manuals, deep dives).
    - Never duplicate documentation text across files.
    - Reuse content via AsciiDoc include/import functions and shared common/snippet files.
@@ -68,8 +68,9 @@ steps:
 - CI/CD regenerates docs and fails when generated output drifts from the
   committed state.
 - Relationship model:
-  - Source docs (`lib/` + `.adoc`) are authoritative.
-  - Generated output (`docs/`) is a build artifact to review and publish.
+  - Source docs are authoritative: `@moduledoc`/`@doc` in `lib/` for the API
+    reference, and the hand-written `docs/**/*.adoc` (arc42, manual, onboarding).
+  - The built Antora HTML site is the generated artifact to review and publish.
 
 ## Workflow Checklist
 

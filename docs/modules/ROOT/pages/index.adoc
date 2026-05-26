@@ -1,7 +1,7 @@
 = Documentation Index
 :page-layout: default
 
-This is the shared front door for the `myproject` documentation set.
+This is the shared front door for the `Stem` documentation set.
 
 Use the three curated surfaces intentionally:
 

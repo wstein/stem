@@ -16,7 +16,7 @@ the host, escaping done natively.
 
 - **Is:** a working `wasm32-wasip1` module that renders the whole structured Stem
   language (text, expressions, paths, `if`/`unless`/`each`/`with`, regions/yields
-  via inlining, `@index`/`@index1`/`@key`/`this`, block params), the full built-in
+  via inlining, `@index`/`@index1`/`@key`/`@this`, block params), the full built-in
   transformer stdlib gated by capability group, and a host hook for custom
   transformers — validated against every vector in
   [`conformance/vectors.json`](../conformance/vectors.json).
@@ -31,11 +31,16 @@ the host, escaping done natively.
   factored into its own crate so the macros can use it without the renderer.
 - `stem_native/` — the engine crate. `src/lib.rs` is the renderer: the typed
   Rust API ([`compile`/`Program::render`](#idiomatic-rust-api)), the JSON
-  `handle*` Elixir seam, and the wasm-bindgen `compile`/`render`/`parse_ast`
-  browser exports; `src/main.rs` is a thin WASI bin reading stdin / writing
-  stdout. `parse_ast` returns a template's pre-expansion AST (`stem-ast/v1`) with
-  `{{> name}}` kept as `partial` nodes and a byte `src` span on every node, for
-  the playground's dependency-graph and AST views.
+  `handle*` Elixir seam, and the wasm-bindgen browser exports
+  `compile`/`render`/`parse_ast`/`inspect_at`/`version`; `src/main.rs` is a thin
+  WASI bin reading stdin / writing stdout. `parse_ast` returns a template's
+  pre-expansion AST (`stem-ast/v1`) with `{{> name}}` kept as `partial` nodes and
+  a byte `src` span on every node (for the dependency-graph and Syntax Tree
+  views); `inspect_at` re-runs the VM and snapshots the render context at a
+  clicked output span (for the Context Inspector); `version` reports the build
+  version baked in from the repo-root `/VERSION`. `compile` collects **every**
+  recoverable parse error (`compile_to_wire_all`), each tagged with the file it
+  occurred in, and throws `{ errors: [...] }`.
 - `stem_macros/` — the `stem!` compile-time macro: compiles a template literal to
   bytecode at Rust build time (syntax errors become compile errors).
 - `stem_examples/` — runnable embedder examples written against the typed API.
@@ -60,36 +65,44 @@ Playground workflow highlights:
   on narrow screens.
 - Inline compile diagnostics in the template editor gutter, plus a status lane
   with line/column locations.
-- A **Problems** dock at the bottom (status-bar "Diagnostics" button) listing
-  compile / capability / render errors, badged by severity; it auto-opens when an
-  error first appears. Every unknown partial is listed (found via the `parse_ast`
-  dependency scan), not just the first the fail-fast compiler reports.
+- A **Problems** dock at the bottom (toolbar "Diagnostics" button, whose badge
+  shows the live problem count) listing compile / capability / render errors,
+  badged by severity; it auto-opens when an error first appears. The compiler
+  accumulates **every** recoverable parse error in one pass (invalid expressions,
+  reserved operators, unknown/recursive partials, bad args), each attributed to
+  its file, so they are all listed and clickable — not just the first. The dock's
+  open state and height persist.
 - Two read-only inspectors live in the Sources data sub-pane, alongside the
   `data` / `transform` editors: **Context Inspector** snapshots the render
   context (`@this`/`@parent`/`@root`/iteration vars/locals) at a clicked output
   expression via the engine's `inspect_at` (one card per loop iteration), and
-  **Parse Tree** renders the active template's pre-expansion `parse_ast` as an
-  indented outline (hover/click a row to highlight its source span).
-- A floating, draggable, resizable **Dependencies** popup (toolbar button, like
-  Appearance) draws the `{{> name}}` partial graph from `parse_ast` with a
-  force-directed (neato-style) layout: cyclic inclusions as red edges (the
-  compile-time `partial recursion detected` error), unknown partials as dashed
-  amber nodes. Floating-panel layout (open state, position, size) persists.
-- A capability-group selector (Strings / Collections / Predicates checkboxes;
-  Minimum is always on) in the output header. Unchecking a group makes the
-  engine refuse a template that uses one of its transformers, surfacing the
-  group-naming message in the status bar — the secure-by-default model, made
-  interactive. The selection persists in the shareable URL state.
-- Output as "Plain Text" (the output as text, mapped to its source), "HTML
-  Preview" (output HTML in a locked-down iframe), "Markdown Preview" (the output
-  interpreted as Markdown in the same iframe), "View Model" (the post-transform
-  data as YAML), or "Bytecode" (the compiled `stem-bc/v1` program disassembled,
-  matching `Stem.Bytecode.disasm/1`). In the Plain Text view the source link is
-  bidirectional: hovering a run names its source file/tag and highlights the
-  originating span in the editor (or tints its tab), clicking jumps the caret
-  there, and moving the editor caret highlights the output run(s) it produced.
+  **Syntax Tree** renders the active template's pre-expansion `parse_ast` as an
+  indented, line-numbered outline (hover/click a row to highlight its source span).
+- A floating, draggable, resizable **Dependencies** popup (toolbar button) draws
+  the `{{> name}}` partial graph from `parse_ast` as a tidy top-down tree: cyclic
+  inclusions as red edges (the compile-time `partial recursion detected` error),
+  unknown partials as dashed nodes. Floating-panel layout (open state, position,
+  size) persists.
+- A floating **Search** panel (toolbar button or `Cmd/Ctrl+Shift+F`) finds across
+  all sources at once (main, partials, `data.yaml`, transform) with
+  case / whole-word / regex toggles, click-to-jump results, and find-and-replace
+  (Replace All + per-occurrence).
+- A capability-group selector (`format` / `transform` / `eval` checkboxes;
+  `default` is always on) in a contextual controls row. Unchecking a group makes
+  the engine refuse a template that uses one of its transformers, surfacing the
+  group-naming message — the secure-by-default model, made interactive. The
+  selection persists in the shareable URL state.
+- The Output view is a tab strip: **Plain Text** (output as text, mapped to its
+  source), **HTML Preview** (in a locked-down iframe), **Markdown Preview** (same
+  iframe), **Render Data** (the post-transform data as YAML), or **Bytecode** (the
+  compiled `stem-bc/v1` program disassembled, matching `Stem.Bytecode.disasm/1`).
+  In Plain Text the source link is bidirectional: hovering a run names its source
+  file/tag and highlights the originating span in the editor (or tints its tab),
+  clicking jumps the caret there, and moving the editor caret highlights the
+  output run(s) it produced.
 - Command palette and shortcuts:
   - `Cmd/Ctrl+Shift+P` opens the palette.
+  - `Cmd/Ctrl+Shift+F` opens find-in-files Search.
   - `Cmd/Ctrl+Enter` renders immediately.
   - `Cmd/Ctrl+1` / `Cmd/Ctrl+2` focus template/data editor.
   - `Cmd/Ctrl+Alt+N` adds a partial tab.
@@ -114,14 +127,17 @@ From the repository root:
 ```sh
 mix stem.native.verify
 # or against the host binary:
-mix stem.native.verify --engine "native/stem_native/target/release/stem_native"
+mix stem.native.verify --engine "native/target/release/stem_native"
 ```
+
+The crates form a Cargo workspace, so build artifacts land in the shared
+`native/target/` (not a per-crate `native/stem_native/target/`).
 
 The task compiles each conformance vector to bytecode, feeds it to the engine,
 and asserts the output matches `Stem.compile_string/2`. Expected result:
 
 ```text
-Conformance: 28/28 vectors match the BEAM reference byte-for-byte.
+Conformance: 58/58 vectors match the BEAM reference byte-for-byte.
 ```
 
 ## Differential fuzz (BEAM = oracle)

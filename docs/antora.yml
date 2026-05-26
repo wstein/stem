@@ -1,6 +1,6 @@
-name: myproject
-title: myproject Documentation
-version: "0.1"
+name: stem
+title: Stem Documentation
+version: "0.3.0"
 nav:
   - modules/ROOT/nav.adoc
   - modules/onboarding/nav.adoc

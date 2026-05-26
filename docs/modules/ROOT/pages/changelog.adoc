@@ -7,9 +7,30 @@ change bumps the minor version.
 
 For step-by-step upgrade instructions, see xref:manual:migration.adoc[Migration Guide].
 
-== Unreleased
+== 0.3.0
 
-Breaking changes since `0.2.0`. There is no compatibility shim for any of these.
+_2026-05-26._ Additive engine and tooling work, plus the breaking changes
+since `0.2.0` (no compatibility shim for any of the breaking items).
+
+=== Added
+
+* *Native engine introspection* — two new primitives, implemented in Rust and
+  mirrored in the Elixir reference: `parse_ast` returns a template's
+  pre-expansion AST (`stem-ast/v1`, with `{{> name}}` kept as `partial` nodes),
+  and `inspect_at` re-runs the VM to snapshot the render context at a given
+  source span. Elixir counterparts: `Stem.Parser.parse_ast/2` and
+  `Stem.Bytecode.VM.inspect_at/3`.
+* *Recoverable-error accumulation* — `Stem.Parser.parse_all/2` (and the native
+  `compile_to_wire_all`) collect every recoverable parse error in one pass,
+  each attributed to the file it occurred in, instead of stopping at the first.
+  The fail-fast `parse/2` is unchanged.
+* *Native browser surface* — the Rust/WASM engine is exposed via wasm-bindgen
+  (`compile`/`render`/`parse_ast`/`inspect_at`/`version`), replacing the
+  hand-rolled linear-memory marshalling. A `stem!` compile-time macro compiles
+  template literals to bytecode at Rust build time.
+* *Web playground* — a CodeMirror-based IDE in `native/web/` with an inspector
+  suite (diagnostics dock, bytecode disassembly, context inspector, partial
+  dependency graph + Syntax Tree) and find-in-files search & replace.
 
 === Changed
 
