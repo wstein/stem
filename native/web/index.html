@@ -3565,11 +3565,16 @@
 
       function setDockVisible(visible) {
         byId("dock").hidden = !visible;
+        // Restore the persisted height when reopening.
+        if (visible && typeof panelState.dock.height === "number") {
+          byId("dock").style.height = panelState.dock.height + "px";
+        }
         const toggle = byId("dock-toggle");
         toggle.classList.toggle("active", visible);
         toggle.setAttribute("aria-pressed", String(visible));
         if (visible) renderDock();
-        panelState.dock = { open: visible };
+        // Mutate (don't replace) so the saved height survives a visibility change.
+        panelState.dock.open = visible;
         savePanels();
       }
 
@@ -3598,6 +3603,8 @@
           grip.removeEventListener("pointermove", onMove);
           grip.removeEventListener("pointerup", onUp);
           renderDock();
+          panelState.dock.height = dock.offsetHeight;
+          savePanels();
         };
         grip.addEventListener("pointermove", onMove);
         grip.addEventListener("pointerup", onUp);
